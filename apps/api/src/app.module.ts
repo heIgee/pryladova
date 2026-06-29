@@ -1,7 +1,8 @@
 import { Module } from "@nestjs/common";
+import { SettingsModule } from "./settings/settings.module.js";
 import { TelemetryModule } from "./telemetry/telemetry.module.js";
 
 @Module({
-  imports: [TelemetryModule],
+  imports: [SettingsModule, TelemetryModule],
 })
 export class AppModule {}

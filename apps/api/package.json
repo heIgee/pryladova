@@ -10,10 +10,12 @@
     "start": "node dist/main.js"
   },
   "dependencies": {
+    "@ai-sdk/google": "^4.0.2",
     "@nestjs/common": "12.0.0-alpha.5",
     "@nestjs/core": "12.0.0-alpha.5",
     "@nestjs/platform-express": "12.0.0-alpha.5",
     "@pryladova/shared": "workspace:*",
+    "ai": "^7.0.4",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2"
   },

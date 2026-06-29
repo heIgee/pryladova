@@ -32,6 +32,17 @@ Or three terminals:
 pnpm dev:api
 ```
 
+Optional env — copy `apps/api/.env.example` to `apps/api/.env`:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `GEMINI_API_KEY` | — | Google AI Studio key; without it classification is disabled |
+| `GEMINI_MODEL` | `gemini-3.1-flash-lite` | Gemini model id for window classification |
+
+When `GEMINI_API_KEY` is missing or the LLM call fails, telemetry is still stored with `classificationStatus: "failed"`.
+
+Classification runs asynchronously after POST — the agent gets `204` immediately; the web panel may show a pending spinner verb until the result arrives.
+
 **2. Agent** — polls active window, POSTs to API on change
 
 ```powershell
@@ -44,6 +55,12 @@ Optional env — copy `apps/agent/.env.example` to `apps/agent/.env` (not commit
 |----------|---------|-------------|
 | `API_URL` | `http://localhost:3000` | API base URL |
 | `POLL_INTERVAL_MS` | `2000` | Poll interval (ms) |
+| `BLOCKED_APPS` | — | Comma-separated app names merged with the default blocklist |
+
+**Agent privacy** (local, before POST):
+
+- Blocked apps (password managers, SSH/RDP, crypto wallets, etc.) send `Secure` / `Redacted` instead of raw titles.
+- Window titles keep tab names; emails and file paths are redacted to `[email]` and `[path]`.
 
 **3. Web** — `http://localhost:5173` (proxies `/telemetry` to API)
 

@@ -13,6 +13,9 @@ out/
 # Turborepo
 .turbo/
 
+# Local tooling
+.firecrawl/
+
 # Environment and secrets
 .env
 .env.*

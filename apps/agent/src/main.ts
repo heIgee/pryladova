@@ -4,30 +4,36 @@ import {
   type TelemetryPayload,
 } from "@pryladova/shared";
 import { loadConfig } from "./config.js";
+import {
+  createBlockedAppsSet,
+  sanitizeSnapshot,
+  type RawWindowSnapshot,
+} from "./privacy.js";
 
-type WindowSnapshot = {
-  title: string;
-  owner: {
-    name: string;
-  };
-};
-
-const readActiveWindow = async (): Promise<WindowSnapshot | undefined> => {
+const readActiveWindow = async (): Promise<RawWindowSnapshot | undefined> => {
   const result = await activeWin();
   if (!result?.title || !result.owner?.name) {
     return undefined;
   }
   return {
     title: result.title,
-    owner: { name: result.owner.name },
+    owner: {
+      name: result.owner.name,
+      path: result.owner.path,
+    },
   };
 };
 
-const buildPayload = (window: WindowSnapshot): TelemetryPayload => ({
-  appName: window.owner.name,
-  windowTitle: window.title,
-  capturedAt: new Date().toISOString(),
-});
+const buildPayload = (
+  window: RawWindowSnapshot,
+  blockedApps: Set<string>,
+): TelemetryPayload => {
+  const sanitized = sanitizeSnapshot(window, blockedApps);
+  return {
+    ...sanitized,
+    capturedAt: new Date().toISOString(),
+  };
+};
 
 const postTelemetry = async (apiUrl: string, payload: TelemetryPayload): Promise<void> => {
   const response = await fetch(`${apiUrl}${TELEMETRY_ROUTE}`, {
@@ -47,6 +53,7 @@ const snapshotKey = (payload: TelemetryPayload): string =>
 
 const run = async (): Promise<void> => {
   const config = loadConfig();
+  const blockedApps = createBlockedAppsSet(config.blockedApps);
   let lastKey = "";
 
   const tick = async (): Promise<void> => {
@@ -55,7 +62,7 @@ const run = async (): Promise<void> => {
       return;
     }
 
-    const payload = buildPayload(window);
+    const payload = buildPayload(window, blockedApps);
     const key = snapshotKey(payload);
     if (key === lastKey) {
       return;
