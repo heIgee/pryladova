@@ -1,0 +1,20 @@
+{
+  "name": "pryladova",
+  "private": true,
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "packageManager": "pnpm@10.12.4",
+  "scripts": {
+    "typecheck": "pnpm -r typecheck",
+    "build": "pnpm --filter @pryladova/shared build && pnpm -r --filter !@pryladova/shared build",
+    "dev": "pnpm --filter @pryladova/shared build && concurrently -k \"pnpm --filter api dev\" \"wait-on tcp:127.0.0.1:3000 && pnpm --filter agent dev\" \"wait-on tcp:127.0.0.1:3000 && pnpm --filter web dev\"",
+    "dev:api": "pnpm --filter @pryladova/shared build && pnpm --filter api dev",
+    "dev:agent": "pnpm --filter @pryladova/shared build && pnpm --filter agent dev",
+    "dev:web": "pnpm --filter @pryladova/shared build && pnpm --filter web dev"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.3",
+    "wait-on": "^9.0.10"
+  }
+}

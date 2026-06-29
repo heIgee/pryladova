@@ -6,7 +6,7 @@ Real-time telemetry and presence system. A local agent reports desktop activity 
 
 - Distributed architecture suitable for portfolio and production extension
 - Type-safe contracts shared across agent, API, and web
-- Privacy-aware telemetry collection on the client
+- Privacy-aware telemetry collection on the client (deferred — see below)
 - Stateless, event-driven backend once persistence is introduced
 
 ## Architecture (current scope)
@@ -22,7 +22,7 @@ Real-time telemetry and presence system. A local agent reports desktop activity 
 
 | Component | Role |
 |-----------|------|
-| `apps/agent` | Polls active window on Windows; applies privacy filter; sends telemetry to API |
+| `apps/agent` | Polls active window on Windows; sends telemetry to API |
 | `apps/api` | Validates payloads; holds current telemetry in memory; exposes read endpoint for web |
 | `apps/web` | Minimal panel: a few lines showing latest telemetry |
 | `packages/shared` | Shared TypeScript types and constants (status shapes, API contract) |
@@ -30,10 +30,9 @@ Real-time telemetry and presence system. A local agent reports desktop activity 
 ### Data flow
 
 1. Agent reads the active window title (and related metadata as needed).
-2. Agent runs a local privacy blocklist (regex). Matches are replaced with a generic status (e.g. `Browsing` / `Secure`) without sending the raw title.
-3. Agent POSTs the payload to the API.
-4. API validates against shared types and updates in-memory state.
-5. Web polls the API (or uses an equivalent simple read path) and renders the latest values.
+2. Agent POSTs the payload to the API.
+3. API validates against shared types and updates in-memory state.
+4. Web polls the API (or uses an equivalent simple read path) and renders the latest values.
 
 No database, LLM, or real-time subscription layer in the current scope.
 
@@ -79,7 +78,6 @@ The API container does not include the web app or agent. Vercel does not build o
 - **Platform:** Windows (development machine)
 - **Window detection:** Native module (e.g. `active-win`)
 - **Runtime:** Node.js process (background via `pm2` or equivalent — no standalone executable in current scope)
-- **Privacy:** Local blocklist before any network send. Default patterns include sensitive keywords (`bank`, `password`, `incognito`, etc.); list is configurable and extensible.
 - **Resilience:** Direct HTTP to API. Retry and offline queue are deferred.
 
 ## API (`apps/api`)
@@ -92,7 +90,7 @@ The API container does not include the web app or agent. Vercel does not build o
 ## Web (`apps/web`)
 
 - **Stack:** React, Vite
-- **UI:** Minimal — a few lines of live telemetry (window/app context as allowed by privacy rules, timestamps, connection health as needed)
+- **UI:** Minimal — a few lines of live telemetry (window/app context, timestamps, connection health as needed)
 - **Data access:** Poll API for current state
 - **Hosting:** Local dev first; Vercel when deployment is added
 
@@ -136,6 +134,13 @@ Items below are part of the target architecture but out of scope until explicitl
 - In-memory cache on the API to deduplicate similar inputs and reduce cost/latency
 - Fixed status taxonomy (enum) vs free-form labels — to be decided at implementation
 
+### Agent privacy filter
+
+- Local blocklist before any network send (regex)
+- Default patterns: sensitive keywords (`bank`, `password`, `incognito`, etc.)
+- Matches replaced with generic status (e.g. `Browsing` / `Secure`) without sending raw titles
+- Configurable and extensible; locale-specific and user-defined rules later
+
 ### Agent hardening
 
 - **Circuit breaker** (`opossum`) around API calls
@@ -158,7 +163,6 @@ Items below are part of the target architecture but out of scope until explicitl
 - Rich dashboard: history, timeline, aggregates
 - Multi-machine / multi-agent identity in payloads
 - Authentication and access control (public vs private panel)
-- Extended privacy blocklist (locale-specific keywords, user-defined rules)
 
 ### Internationalization
 

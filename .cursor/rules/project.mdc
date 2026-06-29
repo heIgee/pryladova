@@ -5,6 +5,12 @@ alwaysApply: true
 
 # Pryladova Monorepo
 
+## This file
+
+- `.cursor/rules/project.mdc` — always-on Cursor project rule (`alwaysApply: true`).
+- Injected into every agent request in this repo; follow it over generic model habits.
+- When editing this file, match its existing format. Do not be overly descriptive.
+
 ## Agent Communication
 
 - Terse, technical, no-fluff responses (Caveman-lite).
@@ -16,12 +22,28 @@ alwaysApply: true
 - OS: Windows. Terminal: PowerShell.
 - Output PowerShell-compatible commands. No Bash-specific syntax.
 
+## Runtime versions
+
+- Never pin or cite Node, pnpm, or dependency versions from memory.
+- Repo wins: `package.json` (`engines`, `packageManager`), lockfile.
+- Local: `node -v`, `pnpm -v` when tooling targets this machine.
+- Upstream: `npm view <pkg> version` before greenfield defaults or version advice.
+- After verify: new production work uses Active LTS; not EOL majors (18, 20, …) unless a dependency forces it.
+- If not verified, say so — do not invent a version.
+
 ## Before changing code
 
 - Read sibling files in app/package; match naming, layout, patterns.
 - Smallest correct diff. No refactor/reformat outside scope.
 - Stay inside requested app/package.
 - Packages disagree → follow local package. Don't "standardize" unasked.
+
+## Docs and comments
+
+- No session-specific fixes, version pins, workarounds, or chat context in repo files.
+- Docs state what to run and where config lives — not how we debugged it once.
+- Comments: why non-obvious, not what the code already says.
+- If a fact belongs in package.json, lockfile, or .env.example — put it there, not in prose.
 
 ## Monorepo discipline
 
@@ -35,6 +57,7 @@ alwaysApply: true
 
 - Never commit, stage, or push. User runs all git ops.
 - Active task on X — don't touch unrelated Y (other apps, packages, or files) for commit separation.
+- Commit plans should not be overly precise and small.
 
 ## TypeScript (.ts/.tsx)
 
