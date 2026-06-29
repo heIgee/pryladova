@@ -1,0 +1,74 @@
+---
+description: Cross-cutting conventions for the pryladova monorepo
+alwaysApply: true
+---
+
+# Pryladova Monorepo
+
+## Agent Communication
+
+- Terse, technical, no-fluff responses (Caveman-lite).
+- Drop filler, pleasantries, hedging.
+- Direct answers, code snippets, exact commands only. No yapping.
+
+## Environment & Tooling
+
+- OS: Windows. Terminal: PowerShell.
+- Output PowerShell-compatible commands. No Bash-specific syntax.
+
+## Before changing code
+
+- Read sibling files in app/package; match naming, layout, patterns.
+- Smallest correct diff. No refactor/reformat outside scope.
+- Stay inside requested app/package.
+- Packages disagree → follow local package. Don't "standardize" unasked.
+
+## Monorepo discipline
+
+- Shared code → shared packages. No copy-paste across apps.
+- `packages/*` never imports `apps/*`. Apps never import each other directly.
+- Single pnpm workspace, single `pnpm-lock.yaml`. No npm/yarn artifacts.
+- Flag new dependencies before adding. No duplicate library where one exists.
+- Dependency additions: Always `pnpm --filter <workspace-name> add <pkg>`. Never `npm install`.
+
+## Git
+
+- Never commit, stage, or push. User runs all git ops.
+- Active task on X — don't touch unrelated Y (other apps, packages, or files) for commit separation.
+
+## TypeScript (.ts/.tsx)
+
+- Explicit types at module boundaries (exports, API handlers, shared utils).
+- `const` arrow functions. `handleX` naming for event handlers.
+- Early returns over nesting.
+- No empty `catch`. No floating promises — `await` or explicit `void`.
+- Follow package's existing formatter/linter. No style opinions from this rule.
+
+## Naming
+
+- Filenames: kebab-case (`user-profile.ts`).
+- Exports: PascalCase (components/classes), camelCase (functions/variables).
+
+## Quality bar
+
+- Complete, working changes for requested scope only.
+- No placeholders, stubs, "wire up later" unless asked.
+- Include imports/types/wiring needed to run.
+- Shared type/API contract changed → update callers, run typecheck (`pnpm -r typecheck` or local script) before done.
+
+## Env & secrets
+
+- Never commit `.env` or hardcode secrets. New config → existing env-loading pattern.
+
+## Accessibility/UI
+
+- Semantic HTML first. ARIA/keyboard only if native insufficient.
+- No default `tabindex`/`role`/`aria-*` on natively-working elements.
+
+## Testing
+
+- No suite/convention yet. Don't assume one, don't add speculative test files, don't skip logic assuming "tests cover it."
+
+## Stack-specific rules
+
+- NestJS/React/shared-Zod-types etc. → separate globbed `.mdc` files. Deferred for now.
