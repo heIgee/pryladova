@@ -78,8 +78,11 @@ Open the web URL. Telemetry appears after the agent sends the first POST.
 | `pnpm dev:api` | NestJS API with watch |
 | `pnpm dev:agent` | Telemetry agent |
 | `pnpm dev:web` | Vite dev server |
-| `pnpm build` | Build shared, then all apps |
-| `pnpm typecheck` | Typecheck all packages |
+| `pnpm check` | Typecheck + lint + build (turbo) |
+| `pnpm build` | Build all packages (turbo) |
+| `pnpm typecheck` | Typecheck all packages (turbo) |
+| `pnpm lint` / `pnpm lint:fix` | Biome check / fix |
+| `pnpm knip` | Unused exports and dependencies |
 
 ## Manual API check
 

@@ -1,0 +1,16 @@
+colors: false
+
+output:
+  - failure
+  - execution_out
+
+pre-commit:
+  parallel: false
+  commands:
+    biome:
+      glob: "*.{ts,tsx,json}"
+      run: pnpm biome check --write --staged --no-errors-on-unmatched --files-ignore-unknown=true --colors=off
+      skip_output: true
+    typecheck:
+      run: pnpm --filter @pryladova/shared build && pnpm -r typecheck
+      skip_output: true

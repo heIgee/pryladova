@@ -37,12 +37,7 @@ export const settingsSchema = z.object({
   classificationEnabled: z.boolean(),
 });
 
-export const classificationStatusSchema = z.enum([
-  "pending",
-  "ready",
-  "failed",
-  "disabled",
-]);
+export const classificationStatusSchema = z.enum(["pending", "ready", "failed", "disabled"]);
 
 export const telemetryPayloadSchema = z.object({
   appName: z.string().min(1),

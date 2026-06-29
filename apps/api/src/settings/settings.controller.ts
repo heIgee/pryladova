@@ -1,5 +1,5 @@
 import { BadRequestException, Body, Controller, Get, Put } from "@nestjs/common";
-import { SETTINGS_ROUTE, settingsSchema, type Settings } from "@pryladova/shared";
+import { SETTINGS_ROUTE, type Settings, settingsSchema } from "@pryladova/shared";
 import { SettingsService } from "./settings.service.js";
 
 @Controller()

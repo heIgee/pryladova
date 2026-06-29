@@ -1,14 +1,7 @@
+import { TELEMETRY_ROUTE, type TelemetryPayload } from "@pryladova/shared";
 import activeWin from "active-win";
-import {
-  TELEMETRY_ROUTE,
-  type TelemetryPayload,
-} from "@pryladova/shared";
 import { loadConfig } from "./config.js";
-import {
-  createBlockedAppsSet,
-  sanitizeSnapshot,
-  type RawWindowSnapshot,
-} from "./privacy.js";
+import { createBlockedAppsSet, type RawWindowSnapshot, sanitizeSnapshot } from "./privacy.js";
 
 const readActiveWindow = async (): Promise<RawWindowSnapshot | undefined> => {
   const result = await activeWin();
@@ -24,10 +17,7 @@ const readActiveWindow = async (): Promise<RawWindowSnapshot | undefined> => {
   };
 };
 
-const buildPayload = (
-  window: RawWindowSnapshot,
-  blockedApps: Set<string>,
-): TelemetryPayload => {
+const buildPayload = (window: RawWindowSnapshot, blockedApps: Set<string>): TelemetryPayload => {
   const sanitized = sanitizeSnapshot(window, blockedApps);
   return {
     ...sanitized,

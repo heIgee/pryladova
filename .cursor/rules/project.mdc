@@ -66,6 +66,9 @@ alwaysApply: true
 - Early returns over nesting.
 - No empty `catch`. No floating promises — `await` or explicit `void`.
 - Follow package's existing formatter/linter. No style opinions from this rule.
+- **`as any` forbidden.** No exceptions.
+- Avoid `as` assertions — prefer inference, narrowing, type guards, `satisfies`, generics, schema parse (Zod). Touching existing `as` → remove if feasible.
+- Unavoidable `as` only at untyped external boundary: single line, narrow immediately, comment why.
 
 ## Naming
 
@@ -78,6 +81,9 @@ alwaysApply: true
 - No placeholders, stubs, "wire up later" unless asked.
 - Include imports/types/wiring needed to run.
 - Shared type/API contract changed → update callers, run typecheck (`pnpm -r typecheck` or local script) before done.
+- Passing build/lint/typecheck is necessary, not sufficient. Fix root cause — not symptom.
+- Forbidden to greenwash checks: `@ts-ignore` / `@ts-expect-error`, blanket `eslint-disable` / `biome-ignore`, commented-out logic, deleted validation, stub/`null as` returns, config loosening (`strict: false`, `skipLibCheck` hacks), unrelated `// @ts-nocheck`.
+- If proper fix is out of scope or blocked, stop and report — do not land a workaround in repo.
 
 ## Env & secrets
 

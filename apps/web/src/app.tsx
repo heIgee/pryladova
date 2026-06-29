@@ -1,13 +1,13 @@
-import { useEffect, useState, type ReactNode } from "react";
 import {
-  SETTINGS_ROUTE,
-  TELEMETRY_ROUTE,
   pickSpinnerVerb,
+  SETTINGS_ROUTE,
   settingsSchema,
-  telemetryStateSchema,
+  TELEMETRY_ROUTE,
   type TelemetryState,
+  telemetryStateSchema,
   type WorkRelated,
 } from "@pryladova/shared";
+import { type ReactNode, useEffect, useState } from "react";
 
 const POLL_INTERVAL_MS = 2000;
 const CLASSIFICATION_ENABLED_KEY = "pryladova.classificationEnabled";
@@ -56,8 +56,7 @@ const fetchTelemetry = async (): Promise<PanelState> => {
 };
 
 const shellClassName = "min-h-screen bg-neutral-950";
-const contentClassName =
-  "mx-auto max-w-lg px-4 py-10 font-sans leading-relaxed";
+const contentClassName = "mx-auto max-w-lg px-4 py-10 font-sans leading-relaxed";
 
 const formatWorkRelated = (workRelated: WorkRelated): string => {
   if (workRelated === "yes") return "Yes";
@@ -78,9 +77,7 @@ const renderClassificationBody = (
 
   if (telemetry.classificationStatus === "pending") {
     return (
-      <p className="text-sm text-neutral-400">
-        {pickSpinnerVerb(classificationSeed(telemetry))}…
-      </p>
+      <p className="text-sm text-neutral-400">{pickSpinnerVerb(classificationSeed(telemetry))}…</p>
     );
   }
 
@@ -173,9 +170,7 @@ export const App = () => {
   if (panel.status === "loading") {
     return (
       <main className={shellClassName}>
-        <div className={`${contentClassName} text-neutral-400`}>
-          {pickSpinnerVerb("loading")}…
-        </div>
+        <div className={`${contentClassName} text-neutral-400`}>{pickSpinnerVerb("loading")}…</div>
       </main>
     );
   }
@@ -202,9 +197,7 @@ export const App = () => {
             <h1 className="text-xl font-medium tracking-tight">Pryladova</h1>
             {classificationToggle}
           </div>
-          <div className="text-neutral-400">
-            {pickSpinnerVerb("waiting-for-telemetry")}…
-          </div>
+          <div className="text-neutral-400">{pickSpinnerVerb("waiting-for-telemetry")}…</div>
         </div>
       </main>
     );

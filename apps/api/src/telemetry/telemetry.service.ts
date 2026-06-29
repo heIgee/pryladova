@@ -1,9 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import {
-  isRedactedTelemetry,
-  type TelemetryPayload,
-  type TelemetryState,
-} from "@pryladova/shared";
+import { isRedactedTelemetry, type TelemetryPayload, type TelemetryState } from "@pryladova/shared";
 import { ClassificationService } from "../classification/classification.service.js";
 import { SettingsService } from "../settings/settings.service.js";
 
@@ -26,11 +22,7 @@ export class TelemetryService {
       ...payload,
       receivedAt: new Date().toISOString(),
       classification: null,
-      classificationStatus: !classificationEnabled
-        ? "disabled"
-        : redacted
-          ? "ready"
-          : "pending",
+      classificationStatus: !classificationEnabled ? "disabled" : redacted ? "ready" : "pending",
     };
 
     if (!classificationEnabled || redacted) {
@@ -44,10 +36,7 @@ export class TelemetryService {
     return this.state;
   }
 
-  private async runClassification(
-    payload: TelemetryPayload,
-    generation: number,
-  ): Promise<void> {
+  private async runClassification(payload: TelemetryPayload, generation: number): Promise<void> {
     const classification = await this.classificationService.classify(
       payload.appName,
       payload.windowTitle,

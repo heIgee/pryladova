@@ -6,15 +6,25 @@
   },
   "packageManager": "pnpm@10.12.4",
   "scripts": {
-    "typecheck": "pnpm -r typecheck",
-    "build": "pnpm --filter @pryladova/shared build && pnpm -r --filter !@pryladova/shared build",
+    "prepare": "lefthook install",
+    "typecheck": "turbo run typecheck",
+    "build": "turbo run build",
+    "check": "turbo run typecheck lint build",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "knip": "knip",
     "dev": "pnpm --filter @pryladova/shared build && concurrently -k \"pnpm --filter api dev\" \"wait-on tcp:127.0.0.1:3000 && pnpm --filter agent dev\" \"wait-on tcp:127.0.0.1:3000 && pnpm --filter web dev\"",
     "dev:api": "pnpm --filter @pryladova/shared build && pnpm --filter api dev",
     "dev:agent": "pnpm --filter @pryladova/shared build && pnpm --filter agent dev",
     "dev:web": "pnpm --filter @pryladova/shared build && pnpm --filter web dev"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.1",
     "concurrently": "^10.0.3",
+    "knip": "^6.23.0",
+    "lefthook": "^2.1.9",
+    "turbo": "^2.10.0",
     "wait-on": "^9.0.10"
   }
 }

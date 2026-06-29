@@ -1,11 +1,11 @@
-import { Injectable } from "@nestjs/common";
-import { generateObject } from "ai";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
+import { Injectable } from "@nestjs/common";
 import {
   isRedactedTelemetry,
-  windowClassificationSchema,
   type WindowClassification,
+  windowClassificationSchema,
 } from "@pryladova/shared";
+import { generateObject } from "ai";
 import { loadConfig } from "../config.js";
 import { SettingsService } from "../settings/settings.service.js";
 
@@ -18,10 +18,7 @@ export class ClassificationService {
 
   constructor(private readonly settingsService: SettingsService) {}
 
-  async classify(
-    appName: string,
-    windowTitle: string,
-  ): Promise<WindowClassification | null> {
+  async classify(appName: string, windowTitle: string): Promise<WindowClassification | null> {
     if (!this.settingsService.isClassificationEnabled()) {
       return null;
     }

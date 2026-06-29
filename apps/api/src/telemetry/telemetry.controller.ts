@@ -7,11 +7,7 @@ import {
   NotFoundException,
   Post,
 } from "@nestjs/common";
-import {
-  TELEMETRY_ROUTE,
-  parseTelemetryPayload,
-  type TelemetryState,
-} from "@pryladova/shared";
+import { parseTelemetryPayload, TELEMETRY_ROUTE, type TelemetryState } from "@pryladova/shared";
 import { TelemetryService } from "./telemetry.service.js";
 
 @Controller()

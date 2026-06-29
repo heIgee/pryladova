@@ -1,9 +1,5 @@
 import { basename } from "node:path";
-import {
-  SECURE_APP_NAME,
-  SECURE_WINDOW_TITLE,
-  type TelemetryPayload,
-} from "@pryladova/shared";
+import { SECURE_APP_NAME, SECURE_WINDOW_TITLE, type TelemetryPayload } from "@pryladova/shared";
 
 export type RawWindowSnapshot = {
   title: string;
@@ -52,7 +48,10 @@ const WINDOWS_PATH_PATTERN = /[A-Za-z]:\\[^\s"<>|*?]+/g;
 const UNC_PATH_PATTERN = /\\\\[^\s"<>|*?]+/g;
 
 const normalizeAppToken = (value: string): string =>
-  value.trim().toLowerCase().replace(/\.exe$/i, "");
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/\.exe$/i, "");
 
 const buildBlockedApps = (extraApps: string[]): Set<string> => {
   const blocked = new Set<string>();
@@ -79,7 +78,7 @@ const collectAppTokens = (snapshot: RawWindowSnapshot): string[] => {
 const isBlockedApp = (snapshot: RawWindowSnapshot, blockedApps: Set<string>): boolean =>
   collectAppTokens(snapshot).some((token) => blockedApps.has(token));
 
-export const redactWindowTitle = (title: string): string =>
+const redactWindowTitle = (title: string): string =>
   title
     .replace(EMAIL_PATTERN, "[email]")
     .replace(WINDOWS_PATH_PATTERN, "[path]")
