@@ -9,7 +9,9 @@
       "ignoreDependencies": ["@types/express", "@nestjs/schematics"]
     },
     "apps/web": {
-      "project": "src/**/*.{ts,tsx}"
+      "project": "src/**/*.{ts,tsx}",
+      "ignoreExportsUsedInFile": true,
+      "ignore": ["src/components/ui/**"]
     },
     "apps/agent": {
       "project": "src/**/*.ts",
