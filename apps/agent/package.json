@@ -11,7 +11,8 @@
   },
   "dependencies": {
     "@pryladova/shared": "workspace:*",
-    "active-win": "^8.2.1"
+    "active-win": "^8.2.1",
+    "koffi": "^3.1.2"
   },
   "devDependencies": {
     "@types/node": "^22.20.0",

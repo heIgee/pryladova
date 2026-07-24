@@ -1,4 +1,5 @@
 import {
+  type HostPayload,
   pickSpinnerVerb,
   SETTINGS_ROUTE,
   settingsSchema,
@@ -11,6 +12,44 @@ import { type ReactNode, useEffect, useState } from "react";
 
 const POLL_INTERVAL_MS = 2000;
 const CLASSIFICATION_ENABLED_KEY = "pryladova.classificationEnabled";
+/** Below this, treat the machine as actively in use — avoid flashing "0s". */
+const IDLE_ACTIVE_THRESHOLD_MS = 30_000;
+
+const formatDuration = (totalSeconds: number): string => {
+  const seconds = Math.max(0, Math.floor(totalSeconds));
+  if (seconds < 60) {
+    return `${seconds}s`;
+  }
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) {
+    const rem = seconds % 60;
+    return rem === 0 ? `${minutes}m` : `${minutes}m ${rem}s`;
+  }
+  const hours = Math.floor(minutes / 60);
+  const remMinutes = minutes % 60;
+  return remMinutes === 0 ? `${hours}h` : `${hours}h ${remMinutes}m`;
+};
+
+const formatPresence = (idleMs: number): string => {
+  if (idleMs < IDLE_ACTIVE_THRESHOLD_MS) {
+    return "Active";
+  }
+  return `Away ${formatDuration(idleMs / 1000)}`;
+};
+
+const formatPercent = (value: number): string => `${Math.round(value)}%`;
+
+const formatNowPlaying = (host: HostPayload): string => {
+  if (!host.media) {
+    return "Nothing playing";
+  }
+  const { title, artist, playbackStatus } = host.media;
+  const track = artist ? `${artist} — ${title}` : title;
+  if (playbackStatus === "playing") {
+    return track;
+  }
+  return `${track} (${playbackStatus})`;
+};
 
 type PanelState =
   | { status: "loading" }
@@ -236,6 +275,36 @@ export const App = () => {
         <section className="mt-4 rounded-lg border border-neutral-800 bg-neutral-900/50 p-4">
           <h2 className="mb-3 text-sm font-medium text-neutral-300">Classification</h2>
           {renderClassificationBody(telemetry, classificationEnabled)}
+        </section>
+
+        <section className="mt-4 rounded-lg border border-neutral-800 bg-neutral-900/50 p-4">
+          <h2 className="mb-3 text-sm font-medium text-neutral-300">Host</h2>
+          {telemetry.host ? (
+            <dl className="space-y-3 text-sm">
+              <div className="grid grid-cols-[5rem_1fr] gap-x-3 gap-y-1">
+                <dt className="text-neutral-500">Presence</dt>
+                <dd>{formatPresence(telemetry.host.idleMs)}</dd>
+              </div>
+              <div className="grid grid-cols-[5rem_1fr] gap-x-3 gap-y-1">
+                <dt className="text-neutral-500">CPU</dt>
+                <dd>{formatPercent(telemetry.host.cpuPercent)}</dd>
+              </div>
+              <div className="grid grid-cols-[5rem_1fr] gap-x-3 gap-y-1">
+                <dt className="text-neutral-500">RAM</dt>
+                <dd>{formatPercent(telemetry.host.ramPercent)}</dd>
+              </div>
+              <div className="grid grid-cols-[5rem_1fr] gap-x-3 gap-y-1">
+                <dt className="text-neutral-500">Uptime</dt>
+                <dd>{formatDuration(telemetry.host.uptimeSec)}</dd>
+              </div>
+              <div className="grid grid-cols-[5rem_1fr] gap-x-3 gap-y-1">
+                <dt className="text-neutral-500">Playing</dt>
+                <dd className="break-words">{formatNowPlaying(telemetry.host)}</dd>
+              </div>
+            </dl>
+          ) : (
+            <p className="text-sm text-neutral-500">Waiting for host metrics…</p>
+          )}
         </section>
       </div>
     </main>

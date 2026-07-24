@@ -7,7 +7,13 @@ import {
   NotFoundException,
   Post,
 } from "@nestjs/common";
-import { parseTelemetryPayload, TELEMETRY_ROUTE, type TelemetryState } from "@pryladova/shared";
+import {
+  HOST_ROUTE,
+  parseHostPayload,
+  parseTelemetryPayload,
+  TELEMETRY_ROUTE,
+  type TelemetryState,
+} from "@pryladova/shared";
 import { TelemetryService } from "./telemetry.service.js";
 
 @Controller()
@@ -22,6 +28,16 @@ export class TelemetryController {
       throw new BadRequestException(parsed.issues);
     }
     this.telemetryService.setState(parsed.data);
+  }
+
+  @Post(HOST_ROUTE)
+  @HttpCode(204)
+  ingestHost(@Body() body: unknown): void {
+    const parsed = parseHostPayload(body);
+    if (!parsed.success) {
+      throw new BadRequestException(parsed.issues);
+    }
+    this.telemetryService.setHost(parsed.data);
   }
 
   @Get(TELEMETRY_ROUTE)

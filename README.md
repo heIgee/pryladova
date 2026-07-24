@@ -43,7 +43,7 @@ When `GEMINI_API_KEY` is missing or the LLM call fails, telemetry is still store
 
 Classification runs asynchronously after POST — the agent gets `204` immediately; the web panel may show a pending spinner verb until the result arrives.
 
-**2. Agent** — polls active window, POSTs to API on change
+**2. Agent** — polls active window (POST `/telemetry` on change) and host metrics (POST `/host` every poll)
 
 ```powershell
 pnpm dev:agent
@@ -56,6 +56,8 @@ Optional env — copy `apps/agent/.env.example` to `apps/agent/.env` (not commit
 | `API_URL` | `http://localhost:3000` | API base URL |
 | `POLL_INTERVAL_MS` | `2000` | Poll interval (ms) |
 | `BLOCKED_APPS` | — | Comma-separated app names merged with the default blocklist |
+
+**Host metrics** (local Win32 / SMTC, every poll): idle time, CPU%, RAM%, uptime, now playing.
 
 **Agent privacy** (local, before POST):
 

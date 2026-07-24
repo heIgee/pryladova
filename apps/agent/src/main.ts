@@ -1,6 +1,13 @@
-import { TELEMETRY_ROUTE, type TelemetryPayload } from "@pryladova/shared";
+import {
+  HOST_ROUTE,
+  type HostPayload,
+  TELEMETRY_ROUTE,
+  type TelemetryPayload,
+} from "@pryladova/shared";
 import activeWin from "active-win";
 import { loadConfig } from "./config.js";
+import { readHostMetrics } from "./host-metrics.js";
+import { readNowPlaying } from "./now-playing.js";
 import { createBlockedAppsSet, type RawWindowSnapshot, sanitizeSnapshot } from "./privacy.js";
 
 const readActiveWindow = async (): Promise<RawWindowSnapshot | undefined> => {
@@ -17,7 +24,10 @@ const readActiveWindow = async (): Promise<RawWindowSnapshot | undefined> => {
   };
 };
 
-const buildPayload = (window: RawWindowSnapshot, blockedApps: Set<string>): TelemetryPayload => {
+const buildTelemetryPayload = (
+  window: RawWindowSnapshot,
+  blockedApps: Set<string>,
+): TelemetryPayload => {
   const sanitized = sanitizeSnapshot(window, blockedApps);
   return {
     ...sanitized,
@@ -25,16 +35,26 @@ const buildPayload = (window: RawWindowSnapshot, blockedApps: Set<string>): Tele
   };
 };
 
-const postTelemetry = async (apiUrl: string, payload: TelemetryPayload): Promise<void> => {
-  const response = await fetch(`${apiUrl}${TELEMETRY_ROUTE}`, {
+const buildHostPayload = async (): Promise<HostPayload> => {
+  const metrics = readHostMetrics();
+  const media = await readNowPlaying();
+  return {
+    ...metrics,
+    media,
+    capturedAt: new Date().toISOString(),
+  };
+};
+
+const postJson = async (url: string, body: unknown): Promise<void> => {
+  const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(body),
   });
 
   if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`Telemetry POST failed (${response.status}): ${body}`);
+    const text = await response.text();
+    throw new Error(`POST ${url} failed (${response.status}): ${text}`);
   }
 };
 
@@ -47,18 +67,21 @@ const run = async (): Promise<void> => {
   let lastKey = "";
 
   const tick = async (): Promise<void> => {
+    const host = await buildHostPayload();
+    await postJson(`${config.apiUrl}${HOST_ROUTE}`, host);
+
     const window = await readActiveWindow();
     if (!window) {
       return;
     }
 
-    const payload = buildPayload(window, blockedApps);
+    const payload = buildTelemetryPayload(window, blockedApps);
     const key = snapshotKey(payload);
     if (key === lastKey) {
       return;
     }
 
-    await postTelemetry(config.apiUrl, payload);
+    await postJson(`${config.apiUrl}${TELEMETRY_ROUTE}`, payload);
     lastKey = key;
     console.log(`[agent] ${payload.appName} — ${payload.windowTitle}`);
   };

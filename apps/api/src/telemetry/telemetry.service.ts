@@ -1,11 +1,17 @@
 import { Injectable } from "@nestjs/common";
-import { isRedactedTelemetry, type TelemetryPayload, type TelemetryState } from "@pryladova/shared";
+import {
+  type HostPayload,
+  isRedactedTelemetry,
+  type TelemetryPayload,
+  type TelemetryState,
+} from "@pryladova/shared";
 import { ClassificationService } from "../classification/classification.service.js";
 import { SettingsService } from "../settings/settings.service.js";
 
 @Injectable()
 export class TelemetryService {
   private state: TelemetryState | null = null;
+  private pendingHost: HostPayload | null = null;
   private ingestGeneration = 0;
 
   constructor(
@@ -17,12 +23,15 @@ export class TelemetryService {
     const generation = ++this.ingestGeneration;
     const classificationEnabled = this.settingsService.isClassificationEnabled();
     const redacted = isRedactedTelemetry(payload.appName, payload.windowTitle);
+    const host = this.state?.host ?? this.pendingHost;
+    this.pendingHost = null;
 
     this.state = {
       ...payload,
       receivedAt: new Date().toISOString(),
       classification: null,
       classificationStatus: !classificationEnabled ? "disabled" : redacted ? "ready" : "pending",
+      host,
     };
 
     if (!classificationEnabled || redacted) {
@@ -30,6 +39,18 @@ export class TelemetryService {
     }
 
     void this.runClassification(payload, generation);
+  }
+
+  setHost(payload: HostPayload): void {
+    if (!this.state) {
+      this.pendingHost = payload;
+      return;
+    }
+
+    this.state = {
+      ...this.state,
+      host: payload,
+    };
   }
 
   getState(): TelemetryState | null {
