@@ -45,6 +45,13 @@ alwaysApply: true
 - Comments: why non-obvious, not what the code already says.
 - If a fact belongs in package.json, lockfile, or .env.example — put it there, not in prose.
 
+## Docs maintenance
+
+- Living docs: behavior, deploy, env, or CI changes → update relevant doc in the same change. Do not wait to be asked.
+- Map: `deploy/*` → `deploy/README.md`; local dev → `README.md`; product shape → `MVP.md`.
+- Single source of truth: env vars in `.env.example`, scripts in `package.json` — docs reference, don't duplicate.
+- Notice stale or wrong docs while working → fix in that change or call it out before finishing.
+
 ## Monorepo discipline
 
 - Shared code → shared packages. No copy-paste across apps.

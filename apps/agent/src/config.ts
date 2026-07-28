@@ -14,6 +14,7 @@ export type AgentConfig = {
   apiUrl: string;
   pollIntervalMs: number;
   blockedApps: string[];
+  ingestSecret: string | undefined;
 };
 
 const parseBlockedApps = (value: string | undefined): string[] => {
@@ -30,10 +31,11 @@ export const loadConfig = (): AgentConfig => {
   const apiUrl = process.env.API_URL ?? DEFAULT_API_URL;
   const pollIntervalMs = Number(process.env.POLL_INTERVAL_MS ?? DEFAULT_POLL_INTERVAL_MS);
   const blockedApps = parseBlockedApps(process.env.BLOCKED_APPS);
+  const ingestSecret = process.env.INGEST_SECRET?.trim() || undefined;
 
   if (!Number.isFinite(pollIntervalMs) || pollIntervalMs < 500) {
     throw new Error("POLL_INTERVAL_MS must be a number >= 500");
   }
 
-  return { apiUrl, pollIntervalMs, blockedApps };
+  return { apiUrl, pollIntervalMs, blockedApps, ingestSecret };
 };

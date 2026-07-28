@@ -15,11 +15,7 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      "/telemetry": {
-        target: "http://localhost:3000",
-        changeOrigin: true,
-      },
-      "/settings": {
+      "/api": {
         target: "http://localhost:3000",
         changeOrigin: true,
       },

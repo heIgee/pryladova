@@ -1,0 +1,83 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy-main
+  cancel-in-progress: true
+
+env:
+  IMAGE_NAME: ghcr.io/heigee/pryladova-api
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile --filter "!agent"
+
+      - run: pnpm exec turbo run build --filter=@pryladova/shared --filter=web
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ${{ env.IMAGE_NAME }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Deploy to VPS
+        env:
+          SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KNOWN_HOST: ${{ secrets.VPS_SSH_KNOWN_HOST }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SSH_KEY}" ] || [ -z "${VPS_HOST}" ]; then
+            echo "VPS_SSH_KEY and VPS_HOST secrets are required"
+            exit 1
+          fi
+          USER_NAME="${VPS_USER:-ubuntu}"
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/vps_key
+          chmod 600 ~/.ssh/vps_key
+          printf '%s\n' "$VPS_SSH_KNOWN_HOST" >> ~/.ssh/known_hosts
+          SSH=(ssh -i ~/.ssh/vps_key -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes)
+          SCP=(scp -i ~/.ssh/vps_key -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes)
+
+          "${SSH[@]}" "${USER_NAME}@${VPS_HOST}" "mkdir -p ~/pryladova/web"
+          "${SCP[@]}" docker-compose.yml "${USER_NAME}@${VPS_HOST}:~/pryladova/docker-compose.yml"
+          "${SCP[@]}" -r apps/web/dist/. "${USER_NAME}@${VPS_HOST}:~/pryladova/web/"
+
+          echo "$GHCR_TOKEN" | "${SSH[@]}" "${USER_NAME}@${VPS_HOST}" \
+            "docker login ghcr.io -u ${GHCR_USER} --password-stdin \
+              && cd ~/pryladova \
+              && docker compose pull \
+              && docker compose up -d \
+              && docker image prune -f"

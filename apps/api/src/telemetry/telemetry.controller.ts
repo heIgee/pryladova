@@ -6,6 +6,7 @@ import {
   HttpCode,
   NotFoundException,
   Post,
+  UseGuards,
 } from "@nestjs/common";
 import {
   HOST_ROUTE,
@@ -14,6 +15,7 @@ import {
   TELEMETRY_ROUTE,
   type TelemetryState,
 } from "@pryladova/shared";
+import { IngestAuthGuard } from "../auth/ingest-auth.guard.js";
 import { TelemetryService } from "./telemetry.service.js";
 
 @Controller()
@@ -22,6 +24,7 @@ export class TelemetryController {
 
   @Post(TELEMETRY_ROUTE)
   @HttpCode(204)
+  @UseGuards(IngestAuthGuard)
   ingest(@Body() body: unknown): void {
     const parsed = parseTelemetryPayload(body);
     if (!parsed.success) {
@@ -32,6 +35,7 @@ export class TelemetryController {
 
   @Post(HOST_ROUTE)
   @HttpCode(204)
+  @UseGuards(IngestAuthGuard)
   ingestHost(@Body() body: unknown): void {
     const parsed = parseHostPayload(body);
     if (!parsed.success) {

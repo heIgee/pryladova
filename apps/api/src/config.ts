@@ -12,11 +12,22 @@ const DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-lite";
 export type ApiConfig = {
   geminiApiKey: string | undefined;
   geminiModel: string;
+  ingestSecret: string | undefined;
 };
 
 export const loadConfig = (): ApiConfig => {
   const geminiApiKey = process.env.GEMINI_API_KEY?.trim() || undefined;
   const geminiModel = process.env.GEMINI_MODEL?.trim() || DEFAULT_GEMINI_MODEL;
+  const ingestSecret = process.env.INGEST_SECRET?.trim() || undefined;
 
-  return { geminiApiKey, geminiModel };
+  return { geminiApiKey, geminiModel, ingestSecret };
+};
+
+export const assertProductionIngestSecret = (config: ApiConfig): void => {
+  if (process.env.NODE_ENV === "production" && !config.ingestSecret) {
+    throw new Error("INGEST_SECRET is required when NODE_ENV=production");
+  }
+  if (!config.ingestSecret) {
+    console.warn("[api] INGEST_SECRET unset — ingest routes are open");
+  }
 };

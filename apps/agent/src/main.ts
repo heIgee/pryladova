@@ -45,10 +45,19 @@ const buildHostPayload = async (): Promise<HostPayload> => {
   };
 };
 
-const postJson = async (url: string, body: unknown): Promise<void> => {
+const postJson = async (
+  url: string,
+  body: unknown,
+  ingestSecret: string | undefined,
+): Promise<void> => {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (ingestSecret) {
+    headers.Authorization = `Bearer ${ingestSecret}`;
+  }
+
   const response = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify(body),
   });
 
@@ -68,7 +77,7 @@ const run = async (): Promise<void> => {
 
   const tick = async (): Promise<void> => {
     const host = await buildHostPayload();
-    await postJson(`${config.apiUrl}${HOST_ROUTE}`, host);
+    await postJson(`${config.apiUrl}${HOST_ROUTE}`, host, config.ingestSecret);
 
     const window = await readActiveWindow();
     if (!window) {
@@ -81,7 +90,7 @@ const run = async (): Promise<void> => {
       return;
     }
 
-    await postJson(`${config.apiUrl}${TELEMETRY_ROUTE}`, payload);
+    await postJson(`${config.apiUrl}${TELEMETRY_ROUTE}`, payload, config.ingestSecret);
     lastKey = key;
     console.log(`[agent] ${payload.appName} — ${payload.windowTitle}`);
   };

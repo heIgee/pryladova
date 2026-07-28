@@ -2,9 +2,10 @@ import { z } from "zod";
 
 export { pickSpinnerVerb, SPINNER_VERBS, type SpinnerVerb } from "./spinner-verbs.js";
 
-export const TELEMETRY_ROUTE = "/telemetry";
-export const HOST_ROUTE = "/host";
-export const SETTINGS_ROUTE = "/settings";
+export const TELEMETRY_ROUTE = "/api/telemetry";
+export const HOST_ROUTE = "/api/host";
+export const SETTINGS_ROUTE = "/api/settings";
+export const HEALTH_ROUTE = "/api/health";
 
 export const SECURE_APP_NAME = "Secure";
 export const SECURE_WINDOW_TITLE = "Redacted";
