@@ -1,22 +1,18 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
+  "ignoreWorkspaces": ["apps/agent"],
   "workspaces": {
     "packages/shared": {
       "project": "src/**/*.ts"
     },
     "apps/api": {
       "project": "src/**/*.ts",
-      "ignoreDependencies": ["@types/express", "@nestjs/schematics"]
+      "ignoreDependencies": ["@nestjs/schematics"]
     },
     "apps/web": {
       "project": "src/**/*.{ts,tsx}",
       "ignoreExportsUsedInFile": true,
       "ignore": ["src/components/ui/**"]
-    },
-    "apps/agent": {
-      "project": "src/**/*.ts",
-      "ignoreDependencies": ["tsx"],
-      "ignoreBinaries": ["tsx", "tsc"]
     }
   }
 }

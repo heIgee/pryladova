@@ -1,4 +1,4 @@
-import { timingSafeEqual } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import {
   type CanActivate,
   type ExecutionContext,
@@ -6,17 +6,14 @@ import {
   UnauthorizedException,
 } from "@nestjs/common";
 import type { Request } from "express";
-import { loadConfig } from "../config.js";
+import { ConfigService } from "../config.service.js";
 
 const bearerPrefix = "Bearer ";
 
+// HMAC digests are fixed-length, so timingSafeEqual never observes input length.
 const secretsEqual = (provided: string, expected: string): boolean => {
-  const providedBuf = Buffer.from(provided);
-  const expectedBuf = Buffer.from(expected);
-  if (providedBuf.length !== expectedBuf.length) {
-    return false;
-  }
-  return timingSafeEqual(providedBuf, expectedBuf);
+  const digest = (value: string) => createHmac("sha256", expected).update(value).digest();
+  return timingSafeEqual(digest(provided), digest(expected));
 };
 
 const readBearerToken = (authorization: string | undefined): string | undefined => {
@@ -29,8 +26,10 @@ const readBearerToken = (authorization: string | undefined): string | undefined 
 
 @Injectable()
 export class IngestAuthGuard implements CanActivate {
+  constructor(private readonly configService: ConfigService) {}
+
   canActivate(context: ExecutionContext): boolean {
-    const { ingestSecret } = loadConfig();
+    const { ingestSecret } = this.configService.config;
     if (!ingestSecret) {
       return true;
     }

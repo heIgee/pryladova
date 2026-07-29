@@ -3,7 +3,7 @@ import type { Settings } from "@pryladova/shared";
 
 @Injectable()
 export class SettingsService {
-  private classificationEnabled = true;
+  private classificationEnabled = false;
 
   getSettings(): Settings {
     return { classificationEnabled: this.classificationEnabled };

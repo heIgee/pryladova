@@ -72,6 +72,7 @@ const snapshotKey = (payload: TelemetryPayload): string =>
 
 const run = async (): Promise<void> => {
   const config = loadConfig();
+  console.log(`[agent] pid=${process.pid} profile=${config.profile} api=${config.apiUrl}`);
   const blockedApps = createBlockedAppsSet(config.blockedApps);
   let lastKey = "";
 

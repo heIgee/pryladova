@@ -5,9 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/main.ts",
+    "dev:remote": "tsx watch src/main.ts --remote",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "biome check .",
-    "start": "tsx src/main.ts"
+    "start": "tsx src/main.ts",
+    "start:remote": "tsx src/main.ts --remote"
   },
   "dependencies": {
     "@pryladova/shared": "workspace:*",

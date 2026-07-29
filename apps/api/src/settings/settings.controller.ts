@@ -1,10 +1,23 @@
-import { BadRequestException, Body, Controller, Get, Put } from "@nestjs/common";
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  forwardRef,
+  Get,
+  Inject,
+  Put,
+} from "@nestjs/common";
 import { SETTINGS_ROUTE, type Settings, settingsSchema } from "@pryladova/shared";
+import { TelemetryService } from "../telemetry/telemetry.service.js";
 import { SettingsService } from "./settings.service.js";
 
 @Controller()
 export class SettingsController {
-  constructor(private readonly settingsService: SettingsService) {}
+  constructor(
+    private readonly settingsService: SettingsService,
+    @Inject(forwardRef(() => TelemetryService))
+    private readonly telemetryService: TelemetryService,
+  ) {}
 
   @Get(SETTINGS_ROUTE)
   getSettings(): Settings {
@@ -17,6 +30,13 @@ export class SettingsController {
     if (!parsed.success) {
       throw new BadRequestException(parsed.error.format());
     }
-    return this.settingsService.setSettings(parsed.data);
+    const previous = this.settingsService.getSettings();
+    const next = this.settingsService.setSettings(parsed.data);
+
+    if (!previous.classificationEnabled && next.classificationEnabled) {
+      this.telemetryService.reclassifyCurrentWindow();
+    }
+
+    return next;
   }
 }

@@ -20,7 +20,7 @@ Production = one Linux host. Caddy on the host; API in Docker; web as static fil
 └──────────────────────────────────────────────────────────────┘
 
 ┌─ Your Windows PC ────────────────────────────────────────────┐
-│  apps/agent/.env           API_URL + INGEST_SECRET           │
+│  apps/agent/.env           API_URL + INGEST_SECRET (pnpm dev:agent:remote) │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -135,7 +135,7 @@ sudo usermod -aG docker <USER>
 
 Merge to `main`. Workflow builds image, uploads web + compose, restarts API container.
 
-### 6. Windows agent (production)
+### 6. Windows agent (remote API)
 
 `apps/agent/.env` on your PC:
 
@@ -144,7 +144,11 @@ API_URL=https://<PRYLADOVA_DOMAIN>
 INGEST_SECRET=<same value as ~/pryladova/.env>
 ```
 
-Run agent as you do locally (`pnpm dev:agent` or a built binary/service).
+```powershell
+pnpm dev:agent:remote
+```
+
+Startup logs `profile=remote api=https://...`. Local API stays `pnpm dev:agent` (`DEV_API_URL`).
 
 ## What each deploy does
 

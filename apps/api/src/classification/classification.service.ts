@@ -6,7 +6,7 @@ import {
   windowClassificationSchema,
 } from "@pryladova/shared";
 import { generateObject } from "ai";
-import { loadConfig } from "../config.js";
+import { ConfigService } from "../config.service.js";
 import { SettingsService } from "../settings/settings.service.js";
 
 const CACHE_MAX_ENTRIES = 256;
@@ -16,7 +16,10 @@ export class ClassificationService {
   private readonly cache = new Map<string, WindowClassification>();
   private warnedMissingKey = false;
 
-  constructor(private readonly settingsService: SettingsService) {}
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly settingsService: SettingsService,
+  ) {}
 
   async classify(appName: string, windowTitle: string): Promise<WindowClassification | null> {
     if (!this.settingsService.isClassificationEnabled()) {
@@ -31,12 +34,12 @@ export class ClassificationService {
     const cached = this.readCache(cacheKey);
     if (cached) {
       console.log(
-        `[api] classification cache hit 0ms key=${JSON.stringify(cacheKey)} ${JSON.stringify(cached)}`,
+        `[api] classification cache hit 0ms category=${cached.category} workRelated=${cached.workRelated}`,
       );
       return cached;
     }
 
-    const config = loadConfig();
+    const { config } = this.configService;
     if (!config.geminiApiKey) {
       if (!this.warnedMissingKey) {
         console.warn("[api] GEMINI_API_KEY not set — classification disabled");
@@ -64,7 +67,7 @@ For workRelated: use "yes" only when clearly work/dev; "no" when clearly persona
       const elapsedMs = Math.round(performance.now() - started);
       this.writeCache(cacheKey, object);
       console.log(
-        `[api] classification gemini ${elapsedMs}ms model=${config.geminiModel} key=${JSON.stringify(cacheKey)} ${JSON.stringify(object)}`,
+        `[api] classification gemini ${elapsedMs}ms model=${config.geminiModel} category=${object.category} workRelated=${object.workRelated}`,
       );
       return object;
     } catch (error: unknown) {

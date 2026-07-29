@@ -57,6 +57,37 @@ export class TelemetryService {
     return this.state;
   }
 
+  reclassifyCurrentWindow(): void {
+    if (!this.state) {
+      return;
+    }
+
+    if (!this.settingsService.isClassificationEnabled()) {
+      return;
+    }
+
+    const { appName, windowTitle, capturedAt } = this.state;
+    const redacted = isRedactedTelemetry(appName, windowTitle);
+
+    if (redacted) {
+      this.state = {
+        ...this.state,
+        classification: null,
+        classificationStatus: "ready",
+      };
+      return;
+    }
+
+    const generation = ++this.ingestGeneration;
+    this.state = {
+      ...this.state,
+      classification: null,
+      classificationStatus: "pending",
+    };
+
+    void this.runClassification({ appName, windowTitle, capturedAt }, generation);
+  }
+
   private async runClassification(payload: TelemetryPayload, generation: number): Promise<void> {
     const classification = await this.classificationService.classify(
       payload.appName,

@@ -44,7 +44,7 @@ export const classificationStatusSchema = z.enum(["pending", "ready", "failed", 
 export const telemetryPayloadSchema = z.object({
   appName: z.string().min(1),
   windowTitle: z.string().min(1),
-  capturedAt: z.string().datetime(),
+  capturedAt: z.iso.datetime(),
 });
 
 export const playbackStatusSchema = z.enum(["playing", "paused", "stopped", "unknown"]);
@@ -63,11 +63,11 @@ export const hostPayloadSchema = z.object({
   ramPercent: z.number().min(0).max(100),
   uptimeSec: z.number().nonnegative(),
   media: hostMediaSchema.nullable(),
-  capturedAt: z.string().datetime(),
+  capturedAt: z.iso.datetime(),
 });
 
 export const telemetryStateSchema = telemetryPayloadSchema.extend({
-  receivedAt: z.string().datetime(),
+  receivedAt: z.iso.datetime(),
   classification: windowClassificationSchema.nullable(),
   classificationStatus: classificationStatusSchema,
   host: hostPayloadSchema.nullable(),
@@ -86,18 +86,18 @@ export type TelemetryState = z.infer<typeof telemetryStateSchema>;
 
 export type ParseTelemetryPayloadResult =
   | { success: true; data: TelemetryPayload }
-  | { success: false; issues: z.ZodFormattedError<unknown> };
+  | { success: false; issues: z.core.$ZodFormattedError<unknown> };
 
 export type ParseHostPayloadResult =
   | { success: true; data: HostPayload }
-  | { success: false; issues: z.ZodFormattedError<unknown> };
+  | { success: false; issues: z.core.$ZodFormattedError<unknown> };
 
 export const parseTelemetryPayload = (body: unknown): ParseTelemetryPayloadResult => {
   const result = telemetryPayloadSchema.safeParse(body);
   if (result.success) {
     return { success: true, data: result.data };
   }
-  return { success: false, issues: result.error.format() };
+  return { success: false, issues: z.formatError(result.error) };
 };
 
 export const parseHostPayload = (body: unknown): ParseHostPayloadResult => {
@@ -105,5 +105,5 @@ export const parseHostPayload = (body: unknown): ParseHostPayloadResult => {
   if (result.success) {
     return { success: true, data: result.data };
   }
-  return { success: false, issues: result.error.format() };
+  return { success: false, issues: z.formatError(result.error) };
 };

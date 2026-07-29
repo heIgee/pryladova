@@ -7,14 +7,41 @@ if (existsSync(envPath)) {
   process.loadEnvFile(envPath);
 }
 
-const DEFAULT_API_URL = "http://localhost:3000";
+const DEFAULT_DEV_API_URL = "http://localhost:3000";
 const DEFAULT_POLL_INTERVAL_MS = 2000;
 
+type AgentProfile = "local" | "remote";
+
 export type AgentConfig = {
+  profile: AgentProfile;
   apiUrl: string;
   pollIntervalMs: number;
   blockedApps: string[];
   ingestSecret: string | undefined;
+};
+
+const parseProfile = (): AgentProfile => {
+  if (process.argv.includes("--remote")) {
+    return "remote";
+  }
+  const raw = process.env.AGENT_PROFILE?.trim().toLowerCase();
+  if (raw === "remote") {
+    return "remote";
+  }
+  return "local";
+};
+
+const resolveApiUrl = (profile: AgentProfile): string => {
+  if (profile === "remote") {
+    const apiUrl = process.env.API_URL?.trim();
+    if (!apiUrl) {
+      throw new Error(
+        "API_URL is required when agent targets remote API (--remote or AGENT_PROFILE=remote)",
+      );
+    }
+    return apiUrl;
+  }
+  return process.env.DEV_API_URL?.trim() || DEFAULT_DEV_API_URL;
 };
 
 const parseBlockedApps = (value: string | undefined): string[] => {
@@ -28,7 +55,8 @@ const parseBlockedApps = (value: string | undefined): string[] => {
 };
 
 export const loadConfig = (): AgentConfig => {
-  const apiUrl = process.env.API_URL ?? DEFAULT_API_URL;
+  const profile = parseProfile();
+  const apiUrl = resolveApiUrl(profile);
   const pollIntervalMs = Number(process.env.POLL_INTERVAL_MS ?? DEFAULT_POLL_INTERVAL_MS);
   const blockedApps = parseBlockedApps(process.env.BLOCKED_APPS);
   const ingestSecret = process.env.INGEST_SECRET?.trim() || undefined;
@@ -37,5 +65,5 @@ export const loadConfig = (): AgentConfig => {
     throw new Error("POLL_INTERVAL_MS must be a number >= 500");
   }
 
-  return { apiUrl, pollIntervalMs, blockedApps, ingestSecret };
+  return { profile, apiUrl, pollIntervalMs, blockedApps, ingestSecret };
 };

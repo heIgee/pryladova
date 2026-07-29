@@ -2,7 +2,7 @@
 
 Real-time desktop telemetry: a Windows agent reports the active window to a NestJS 12 (ESM) API; a React web panel displays the latest state.
 
-Architecture details: [MVP.md](MVP.md).
+Future work: [ROADMAP.md](ROADMAP.md).
 
 ## Prerequisites
 
@@ -47,14 +47,16 @@ Classification runs asynchronously after POST — the agent gets `204` immediate
 **2. Agent** — polls active window (`POST /api/telemetry` on change) and host metrics (`POST /api/host` every poll)
 
 ```powershell
-pnpm dev:agent
+pnpm dev:agent         # local API (DEV_API_URL)
+pnpm dev:agent:remote  # VPS API (API_URL)
 ```
 
 Optional env — copy `apps/agent/.env.example` to `apps/agent/.env` (not committed; see `.gitignore`):
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `API_URL` | `http://localhost:3000` | API origin (routes include `/api/...`) |
+| `DEV_API_URL` | `http://localhost:3000` | Dev API origin (`pnpm dev:agent`) |
+| `API_URL` | — | Remote API origin (`pnpm dev:agent:remote`) |
 | `POLL_INTERVAL_MS` | `2000` | Poll interval (ms) |
 | `INGEST_SECRET` | — | Must match API when ingest auth is enabled |
 | `BLOCKED_APPS` | — | Comma-separated app names merged with the default blocklist |
@@ -80,7 +82,8 @@ Open the web URL. Telemetry appears after the agent sends the first POST.
 |---------|-------------|
 | `pnpm dev` | API + agent + web in parallel |
 | `pnpm dev:api` | NestJS API with watch |
-| `pnpm dev:agent` | Telemetry agent |
+| `pnpm dev:agent` | Telemetry agent (local API) |
+| `pnpm dev:agent:remote` | Telemetry agent (remote VPS API) |
 | `pnpm dev:web` | Vite dev server |
 | `pnpm check` | Typecheck + lint + build (turbo) |
 | `pnpm build` | Build all packages (turbo) |
