@@ -26,4 +26,35 @@ jobs:
 
       - run: pnpm exec turbo run typecheck lint build --filter=!agent
 
+      - run: pnpm test:coverage
+
+      - run: pnpm exec playwright install chromium --with-deps
+
+      - run: pnpm test:e2e
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage
+          path: |
+            packages/shared/coverage
+            apps/api/coverage
+            apps/web/coverage
+
       - run: pnpm knip
+
+  agent:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile --filter agent...
+
+      - run: pnpm exec turbo run typecheck lint --filter=agent

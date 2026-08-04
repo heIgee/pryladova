@@ -90,6 +90,21 @@ Open the web URL. Telemetry appears after the agent sends the first POST.
 | `pnpm typecheck` | Typecheck all packages (turbo) |
 | `pnpm lint` / `pnpm lint:fix` | Biome check / fix |
 | `pnpm knip` | Unused exports and dependencies |
+| `pnpm test` | Vitest (shared, api, web, agent privacy) |
+| `pnpm test:coverage` | Vitest with coverage report |
+| `pnpm test:e2e` | Playwright API → web panel |
+
+## Testing
+
+Automated coverage focuses on privacy, typed contracts, ingest auth, async classification, and the API → web poll path. Windows agent capture stays manual.
+
+| Command | What |
+|---------|------|
+| `pnpm test` | Vitest unit + integration (no agent native install) |
+| `pnpm test:coverage` | Same, with lcov output |
+| `pnpm test:e2e` | Playwright: fake ingest POST → panel |
+
+First-time E2E: `pnpm exec playwright install chromium`
 
 ## Manual API check
 

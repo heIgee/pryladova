@@ -1,0 +1,115 @@
+import "reflect-metadata";
+import { type INestApplication } from "@nestjs/common";
+import { Test, type TestingModule } from "@nestjs/testing";
+import request from "supertest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { AppModule } from "../src/app.module.js";
+import type { ApiConfig } from "../src/config.js";
+import { ConfigService } from "../src/config.service.js";
+
+const telemetryPayload = {
+  appName: "Code",
+  windowTitle: "app.tsx",
+  capturedAt: "2026-01-01T12:00:00.000Z",
+};
+
+const hostPayload = {
+  idleMs: 500,
+  cpuPercent: 15,
+  ramPercent: 40,
+  uptimeSec: 900,
+  media: null,
+  capturedAt: "2026-01-01T12:00:00.000Z",
+};
+
+const createApp = async (config: ApiConfig): Promise<INestApplication> => {
+  const moduleRef: TestingModule = await Test.createTestingModule({
+    imports: [AppModule],
+  })
+    .overrideProvider(ConfigService)
+    .useValue({ config })
+    .compile();
+
+  const app = moduleRef.createNestApplication();
+  await app.init();
+  return app;
+};
+
+describe("App integration", () => {
+  let app: INestApplication;
+
+  beforeEach(async () => {
+    app = await createApp({
+      geminiApiKey: undefined,
+      geminiModel: "gemini-3.1-flash-lite",
+      ingestSecret: undefined,
+    });
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  it("GET /api/health returns ok", async () => {
+    await request(app.getHttpServer()).get("/api/health").expect(200, { ok: true });
+  });
+
+  it("GET /api/telemetry returns 404 before ingest", async () => {
+    await request(app.getHttpServer()).get("/api/telemetry").expect(404);
+  });
+
+  it("POST /api/telemetry then GET returns stored state", async () => {
+    await request(app.getHttpServer()).post("/api/telemetry").send(telemetryPayload).expect(204);
+
+    const response = await request(app.getHttpServer()).get("/api/telemetry").expect(200);
+
+    expect(response.body.appName).toBe("Code");
+    expect(response.body.windowTitle).toBe("app.tsx");
+    expect(response.body.classificationStatus).toBe("disabled");
+  });
+
+  it("POST /api/host merges host metrics on GET", async () => {
+    await request(app.getHttpServer()).post("/api/telemetry").send(telemetryPayload).expect(204);
+    await request(app.getHttpServer()).post("/api/host").send(hostPayload).expect(204);
+
+    const response = await request(app.getHttpServer()).get("/api/telemetry").expect(200);
+    expect(response.body.host?.cpuPercent).toBe(15);
+  });
+
+  it("PUT /api/settings updates classification toggle", async () => {
+    const response = await request(app.getHttpServer())
+      .put("/api/settings")
+      .send({ classificationEnabled: true })
+      .expect(200);
+
+    expect(response.body).toEqual({ classificationEnabled: true });
+  });
+});
+
+describe("App integration ingest auth", () => {
+  let app: INestApplication;
+
+  beforeEach(async () => {
+    app = await createApp({
+      geminiApiKey: undefined,
+      geminiModel: "gemini-3.1-flash-lite",
+      ingestSecret: "test-secret",
+    });
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  it("rejects ingest without bearer token", async () => {
+    await request(app.getHttpServer()).post("/api/telemetry").send(telemetryPayload).expect(401);
+  });
+
+  it("accepts ingest with valid bearer token", async () => {
+    await request(app.getHttpServer())
+      .post("/api/telemetry")
+      .set("Authorization", "Bearer test-secret")
+      .send(telemetryPayload)
+      .expect(204);
+  });
+});

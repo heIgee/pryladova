@@ -1,4 +1,4 @@
-import { basename } from "node:path";
+import { basename } from "node:path/win32";
 import { SECURE_APP_NAME, SECURE_WINDOW_TITLE, type TelemetryPayload } from "@pryladova/shared";
 
 export type RawWindowSnapshot = {
