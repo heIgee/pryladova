@@ -25,12 +25,14 @@ jobs:
       - run: pnpm install --frozen-lockfile --filter "!agent"
 
       - run: pnpm exec turbo run typecheck lint build --filter=!agent
+        env:
+          VITE_SENTRY_DSN: ${{ vars.VITE_SENTRY_DSN || secrets.VITE_SENTRY_DSN }}
+          VITE_SENTRY_RELEASE: ${{ github.sha }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
 
       - run: pnpm test:coverage
-
-      - run: pnpm exec playwright install chromium --with-deps
-
-      - run: pnpm test:e2e
 
       - uses: actions/upload-artifact@v4
         if: always()
@@ -42,6 +44,34 @@ jobs:
             apps/web/coverage
 
       - run: pnpm knip
+
+      - uses: actions/upload-artifact@v4
+        if: github.ref == 'refs/heads/main'
+        with:
+          name: web-dist
+          path: apps/web/dist
+          retention-days: 1
+
+  e2e:
+    needs: [ci]
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.62.0-noble
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - run: pnpm install --frozen-lockfile --filter "!agent"
+
+      - run: pnpm test:e2e
 
   agent:
     runs-on: windows-latest

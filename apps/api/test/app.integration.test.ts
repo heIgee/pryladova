@@ -39,6 +39,7 @@ const defaultConfig: ApiConfig = {
   geminiApiKey: undefined,
   geminiModel: "gemini-3.1-flash-lite",
   ingestSecret: undefined,
+  sentryDsn: undefined,
 };
 
 describe("App integration", () => {
@@ -53,7 +54,36 @@ describe("App integration", () => {
   });
 
   it("GET /api/health returns ok", async () => {
-    await request(app.getHttpServer()).get("/api/health").expect(200, { ok: true });
+    const previous = process.env.SENTRY_RELEASE;
+    delete process.env.SENTRY_RELEASE;
+    try {
+      const response = await request(app.getHttpServer()).get("/api/health").expect(200);
+      expect(response.body.ok).toBe(true);
+    } finally {
+      if (previous === undefined) {
+        delete process.env.SENTRY_RELEASE;
+      } else {
+        process.env.SENTRY_RELEASE = previous;
+      }
+    }
+  });
+
+  it("GET /api/health includes release when SENTRY_RELEASE is set", async () => {
+    const previous = process.env.SENTRY_RELEASE;
+    process.env.SENTRY_RELEASE = "abc123deadbeef";
+    try {
+      await app.close();
+      app = await createApp(defaultConfig);
+      await request(app.getHttpServer())
+        .get("/api/health")
+        .expect(200, { ok: true, release: "abc123deadbeef" });
+    } finally {
+      if (previous === undefined) {
+        delete process.env.SENTRY_RELEASE;
+      } else {
+        process.env.SENTRY_RELEASE = previous;
+      }
+    }
   });
 
   it("GET /api/telemetry returns 404 before ingest", async () => {

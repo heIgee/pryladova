@@ -1,9 +1,11 @@
 services:
   api:
-    image: ghcr.io/heigee/pryladova-api:latest
+    image: ghcr.io/heigee/pryladova-api:${IMAGE_TAG:-latest}
     container_name: pryladova-api
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      SENTRY_RELEASE: ${SENTRY_RELEASE:-}
     ports:
       - "127.0.0.1:3000:3000"

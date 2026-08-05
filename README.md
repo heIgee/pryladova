@@ -139,7 +139,7 @@ Agent  ── Bearer ingest ─► Caddy ── POST ingest   ► API (Nest chec
 | Caddy / TLS / panel auth | `/etc/caddy/Caddyfile` (+ domain/root via [`deploy/host.env.example`](deploy/host.env.example)) | No — edit on host |
 | Agent | `apps/agent/.env` on Windows | No — edit on PC |
 
-Push to `main` → [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) builds the image, uploads web + compose, restarts API.
+Push to `main` → [CI](.github/workflows/ci.yml) must pass → [Deploy](.github/workflows/deploy.yml) builds the API image, uploads web + compose, restarts API.
 
 Local `apps/api/.env` is for `pnpm dev` only.
 

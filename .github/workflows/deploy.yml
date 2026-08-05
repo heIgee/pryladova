@@ -1,7 +1,9 @@
 name: Deploy
 
 on:
-  push:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
     branches: [main]
 
 concurrency:
@@ -12,24 +14,16 @@ env:
   IMAGE_NAME: ghcr.io/heigee/pryladova-api
 
 jobs:
-  deploy:
+  build-image:
+    if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
     steps:
       - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-
-      - uses: actions/setup-node@v4
         with:
-          node-version-file: .node-version
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile --filter "!agent"
-
-      - run: pnpm exec turbo run build --filter=@pryladova/shared --filter=web
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       - uses: docker/login-action@v3
         with:
@@ -44,10 +38,32 @@ jobs:
           context: .
           push: true
           tags: |
-            ${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ${{ env.IMAGE_NAME }}:${{ github.event.workflow_run.head_sha }}
             ${{ env.IMAGE_NAME }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  deploy:
+    if: github.event.workflow_run.conclusion == 'success'
+    needs: [build-image]
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      packages: read
+    env:
+      IMAGE_TAG: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: apps/web/dist
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.workflow_run.id }}
 
       - name: Deploy to VPS
         env:
@@ -75,9 +91,22 @@ jobs:
           "${SCP[@]}" docker-compose.yml "${USER_NAME}@${VPS_HOST}:~/pryladova/docker-compose.yml"
           "${SCP[@]}" -r apps/web/dist/. "${USER_NAME}@${VPS_HOST}:~/pryladova/web/"
 
-          echo "$GHCR_TOKEN" | "${SSH[@]}" "${USER_NAME}@${VPS_HOST}" \
-            "docker login ghcr.io -u ${GHCR_USER} --password-stdin \
-              && cd ~/pryladova \
-              && docker compose pull \
-              && docker compose up -d \
-              && docker image prune -f"
+          "${SSH[@]}" "${USER_NAME}@${VPS_HOST}" env \
+            GHCR_USER="${GHCR_USER}" \
+            IMAGE_TAG="${IMAGE_TAG}" \
+            GHCR_TOKEN="${GHCR_TOKEN}" \
+            bash -s <<'REMOTE'
+          set -euo pipefail
+          cd ~/pryladova
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+          unset GHCR_TOKEN
+          FULL_IMAGE="ghcr.io/heigee/pryladova-api:${IMAGE_TAG}"
+          if ! docker image inspect "$FULL_IMAGE" >/dev/null 2>&1; then
+            IMAGE_TAG="$IMAGE_TAG" docker compose pull api
+          else
+            echo "Image ${FULL_IMAGE} already present — skipping pull"
+          fi
+          IMAGE_TAG="$IMAGE_TAG" SENTRY_RELEASE="$IMAGE_TAG" docker compose up -d
+          docker logout ghcr.io
+          docker image prune -f
+          REMOTE

@@ -13,14 +13,16 @@ export type ApiConfig = {
   geminiApiKey: string | undefined;
   geminiModel: string;
   ingestSecret: string | undefined;
+  sentryDsn: string | undefined;
 };
 
 export const loadConfig = (): ApiConfig => {
   const geminiApiKey = process.env.GEMINI_API_KEY?.trim() || undefined;
   const geminiModel = process.env.GEMINI_MODEL?.trim() || DEFAULT_GEMINI_MODEL;
   const ingestSecret = process.env.INGEST_SECRET?.trim() || undefined;
+  const sentryDsn = process.env.SENTRY_DSN?.trim() || undefined;
 
-  return { geminiApiKey, geminiModel, ingestSecret };
+  return { geminiApiKey, geminiModel, ingestSecret, sentryDsn };
 };
 
 export const assertProductionIngestSecret = (config: ApiConfig): void => {

@@ -16,16 +16,21 @@ const createStore = (): PanelPollStore => ({
   requestId: 0,
 });
 
+let moduleStore: PanelPollStore | undefined;
+
 const getStore = (): PanelPollStore => {
-  if (import.meta.hot?.data.panelPollStore) {
+  if (import.meta.hot?.data?.panelPollStore) {
     return import.meta.hot.data.panelPollStore as PanelPollStore;
   }
 
-  const store = createStore();
-  if (import.meta.hot) {
-    import.meta.hot.data.panelPollStore = store;
+  if (moduleStore === undefined) {
+    moduleStore = createStore();
+    if (import.meta.hot?.data) {
+      import.meta.hot.data.panelPollStore = moduleStore;
+    }
   }
-  return store;
+
+  return moduleStore;
 };
 
 const notify = (store: PanelPollStore): void => {

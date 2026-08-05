@@ -1,5 +1,6 @@
 import { Moon, Sun } from "lucide-react";
 import type { ReactNode } from "react";
+import { formatReleaseShort, readAppRelease } from "@/lib/release";
 import type { Theme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 
@@ -9,9 +10,24 @@ export const headerChipClassName =
 export const headerIconButtonClassName =
   "inline-flex size-9 shrink-0 items-center justify-center rounded-lg font-sans text-muted-foreground ring-1 ring-border/60 transition-colors hover:bg-muted hover:text-foreground";
 
+export const ReleaseTag = () => {
+  const release = readAppRelease();
+  const short = formatReleaseShort(release);
+
+  return (
+    <p
+      className="pb-6 text-center font-sans text-micro tabular-nums text-muted-foreground/50"
+      title={`Web build ${release}`}
+    >
+      {short}
+    </p>
+  );
+};
+
 export const Shell = ({ children }: { children: ReactNode }) => (
   <main className="min-h-screen bg-background">
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-5 px-4 py-8">{children}</div>
+    <ReleaseTag />
   </main>
 );
 

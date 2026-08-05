@@ -6,7 +6,9 @@ const apiBase = "http://127.0.0.1:3000";
 test.describe("panel", () => {
   test("shows empty state before ingest", async ({ page }) => {
     await page.goto("/");
-    await expect(page.getByText(/…$/)).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Pryladova", level: 1 })).toBeVisible();
+    await expect(page.getByText("Live desktop presence")).toBeVisible();
+    await expect(page.getByText(/…$/)).toBeVisible({ timeout: 5_000 });
   });
 
   test("shows ingested window after POST", async ({ page, request }) => {

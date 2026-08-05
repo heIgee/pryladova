@@ -2,17 +2,28 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   testDir: ".",
-  testMatch: "**/*.spec.ts",
   fullyParallel: false,
+  workers: 1,
   retries: process.env.CI ? 1 : 0,
-  use: {
-    baseURL: "http://127.0.0.1:5173",
-    trace: "on-first-retry",
-  },
   projects: [
     {
       name: "chromium",
-      use: { ...devices["Desktop Chrome"] },
+      testMatch: "**/panel.spec.ts",
+      use: {
+        ...devices["Desktop Chrome"],
+        baseURL: "http://127.0.0.1:5173",
+        trace: "on-first-retry",
+      },
+    },
+    {
+      name: "chromium-prod",
+      testMatch: "**/panel-prod.spec.ts",
+      dependencies: ["chromium"],
+      use: {
+        ...devices["Desktop Chrome"],
+        baseURL: "http://127.0.0.1:4173",
+        trace: "on-first-retry",
+      },
     },
   ],
   webServer: [
@@ -20,7 +31,7 @@ export default defineConfig({
       command: "node apps/api/dist/main.js",
       url: "http://127.0.0.1:3000/api/health",
       cwd: "..",
-      reuseExistingServer: !process.env.CI,
+      reuseExistingServer: false,
       env: {
         NODE_ENV: "test",
         PORT: "3000",
@@ -31,6 +42,13 @@ export default defineConfig({
       url: "http://127.0.0.1:5173",
       cwd: "..",
       reuseExistingServer: !process.env.CI,
+    },
+    {
+      command:
+        "pnpm exec turbo run build --filter=web && pnpm --filter web exec vite preview --host 127.0.0.1 --port 4173",
+      url: "http://127.0.0.1:4173",
+      cwd: "..",
+      reuseExistingServer: false,
     },
   ],
 });

@@ -14,6 +14,13 @@ export const SETTINGS_ROUTE = "/api/settings";
 export const HEALTH_ROUTE = "/api/health";
 export const WEATHER_ROUTE = "/api/weather";
 
+export const healthResponseSchema = z.object({
+  ok: z.literal(true),
+  release: z.string().min(1).optional(),
+});
+
+export type HealthResponse = z.infer<typeof healthResponseSchema>;
+
 export const SECURE_APP_NAME = "Secure";
 export const SECURE_WINDOW_TITLE = "Redacted";
 
