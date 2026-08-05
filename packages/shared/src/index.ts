@@ -1,11 +1,18 @@
 import { z } from "zod";
 
-export { pickSpinnerVerb, SPINNER_VERBS, type SpinnerVerb } from "./spinner-verbs.js";
+export {
+  pickRandomSpinnerVerb,
+  pickSpinnerVerb,
+  SPINNER_VERBS,
+  type SpinnerVerb,
+} from "./spinner-verbs.js";
+export { weatherCodeToCondition } from "./weather-codes.js";
 
 export const TELEMETRY_ROUTE = "/api/telemetry";
 export const HOST_ROUTE = "/api/host";
 export const SETTINGS_ROUTE = "/api/settings";
 export const HEALTH_ROUTE = "/api/health";
+export const WEATHER_ROUTE = "/api/weather";
 
 export const SECURE_APP_NAME = "Secure";
 export const SECURE_WINDOW_TITLE = "Redacted";
@@ -55,7 +62,22 @@ export const hostMediaSchema = z.object({
   albumTitle: z.string().nullable(),
   appName: z.string().nullable(),
   playbackStatus: playbackStatusSchema,
+  thumbnailDataUrl: z.string().startsWith("data:image/").nullable().default(null),
 });
+
+export const weatherReadySchema = z.object({
+  status: z.literal("ready"),
+  temperatureC: z.number(),
+  weatherCode: z.number().int(),
+  condition: z.string().min(1),
+  fetchedAt: z.iso.datetime(),
+});
+
+export const weatherResponseSchema = z.discriminatedUnion("status", [
+  weatherReadySchema,
+  z.object({ status: z.literal("disabled") }),
+  z.object({ status: z.literal("unavailable") }),
+]);
 
 export const hostPayloadSchema = z.object({
   idleMs: z.number().nonnegative(),
@@ -83,6 +105,8 @@ export type PlaybackStatus = z.infer<typeof playbackStatusSchema>;
 export type HostMedia = z.infer<typeof hostMediaSchema>;
 export type HostPayload = z.infer<typeof hostPayloadSchema>;
 export type TelemetryState = z.infer<typeof telemetryStateSchema>;
+export type WeatherReady = z.infer<typeof weatherReadySchema>;
+export type WeatherResponse = z.infer<typeof weatherResponseSchema>;
 
 export type ParseTelemetryPayloadResult =
   | { success: true; data: TelemetryPayload }

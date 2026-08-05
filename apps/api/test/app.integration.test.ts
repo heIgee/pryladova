@@ -2,7 +2,7 @@ import "reflect-metadata";
 import { type INestApplication } from "@nestjs/common";
 import { Test, type TestingModule } from "@nestjs/testing";
 import request from "supertest";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppModule } from "../src/app.module.js";
 import type { ApiConfig } from "../src/config.js";
 import { ConfigService } from "../src/config.service.js";
@@ -35,15 +35,17 @@ const createApp = async (config: ApiConfig): Promise<INestApplication> => {
   return app;
 };
 
+const defaultConfig: ApiConfig = {
+  geminiApiKey: undefined,
+  geminiModel: "gemini-3.1-flash-lite",
+  ingestSecret: undefined,
+};
+
 describe("App integration", () => {
   let app: INestApplication;
 
   beforeEach(async () => {
-    app = await createApp({
-      geminiApiKey: undefined,
-      geminiModel: "gemini-3.1-flash-lite",
-      ingestSecret: undefined,
-    });
+    app = await createApp(defaultConfig);
   });
 
   afterEach(async () => {
@@ -84,6 +86,44 @@ describe("App integration", () => {
 
     expect(response.body).toEqual({ classificationEnabled: true });
   });
+
+  it("GET /api/weather returns disabled without coordinates", async () => {
+    await request(app.getHttpServer()).get("/api/weather").expect(200, { status: "disabled" });
+  });
+});
+
+describe("App integration weather", () => {
+  let app: INestApplication;
+
+  beforeEach(async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          current: { temperature_2m: 21.5, weather_code: 0 },
+        }),
+      }),
+    );
+
+    app = await createApp(defaultConfig);
+  });
+
+  afterEach(async () => {
+    vi.unstubAllGlobals();
+    await app.close();
+  });
+
+  it("GET /api/weather returns ready payload for query coordinates", async () => {
+    const response = await request(app.getHttpServer())
+      .get("/api/weather")
+      .query({ lat: 50.45, lon: 30.52 })
+      .expect(200);
+
+    expect(response.body.status).toBe("ready");
+    expect(response.body.temperatureC).toBe(21.5);
+    expect(response.body.condition).toBe("Clear");
+  });
 });
 
 describe("App integration ingest auth", () => {
@@ -91,8 +131,7 @@ describe("App integration ingest auth", () => {
 
   beforeEach(async () => {
     app = await createApp({
-      geminiApiKey: undefined,
-      geminiModel: "gemini-3.1-flash-lite",
+      ...defaultConfig,
       ingestSecret: "test-secret",
     });
   });

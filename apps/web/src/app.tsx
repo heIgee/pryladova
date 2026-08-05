@@ -1,9 +1,11 @@
-import { pickSpinnerVerb } from "@pryladova/shared";
+import { pickRandomSpinnerVerb } from "@pryladova/shared";
+import { useMemo } from "react";
 import { BentoGrid, PageHeader, Shell, ThemeToggle } from "@/components/layout/shell";
 import { MachineTile } from "@/components/tiles/machine-tile";
 import { MediaTile } from "@/components/tiles/media-tile";
 import { WindowTile } from "@/components/tiles/window-tile";
 import { Card, CardContent } from "@/components/ui/card";
+import { WeatherHeader } from "@/components/weather-header";
 import { useDashboard } from "@/hooks/use-dashboard";
 import { cn } from "@/lib/utils";
 
@@ -17,17 +19,34 @@ export const App = () => {
     classificationEnabled,
     showAgentHint,
     theme,
+    weather,
+    weatherLocation,
     handleClassificationToggle,
     handleThemeChange,
+    handleWeatherLocationChange,
+    handleWeatherRefresh,
   } = useDashboard();
 
-  const themeToggle = <ThemeToggle theme={theme} onChange={handleThemeChange} />;
+  const loadingVerb = useMemo(() => pickRandomSpinnerVerb(), []);
+  const waitingVerb = useMemo(() => pickRandomSpinnerVerb(), []);
+
+  const headerAction = (
+    <div className="flex items-center gap-2">
+      <WeatherHeader
+        weather={weather}
+        locationLabel={weatherLocation?.label ?? null}
+        onLocationChange={handleWeatherLocationChange}
+        onRefresh={handleWeatherRefresh}
+      />
+      <ThemeToggle theme={theme} onChange={handleThemeChange} />
+    </div>
+  );
 
   if (panel.status === "loading") {
     return (
       <Shell>
-        <PageHeader action={themeToggle} />
-        <p className="text-muted-foreground">{pickSpinnerVerb("loading")}…</p>
+        <PageHeader action={headerAction} />
+        <p className="text-muted-foreground">{loadingVerb}…</p>
       </Shell>
     );
   }
@@ -35,7 +54,7 @@ export const App = () => {
   if (panel.status === "error") {
     return (
       <Shell>
-        <PageHeader action={themeToggle} />
+        <PageHeader action={headerAction} />
         <Card>
           <CardContent className="text-destructive">
             API unreachable: {panel.message}
@@ -49,11 +68,10 @@ export const App = () => {
   if (panel.status === "empty") {
     return (
       <Shell>
-        <PageHeader action={themeToggle} />
+        <PageHeader action={headerAction} />
         <Card>
           <CardContent className="text-muted-foreground">
-            {pickSpinnerVerb("waiting-for-telemetry")}…
-            {showAgentHint ? <AgentHint className="mt-2" /> : null}
+            {waitingVerb}…{showAgentHint ? <AgentHint className="mt-2" /> : null}
           </CardContent>
         </Card>
       </Shell>
@@ -65,7 +83,7 @@ export const App = () => {
 
   return (
     <Shell>
-      <PageHeader action={themeToggle} stale={showAgentHint} />
+      <PageHeader action={headerAction} stale={showAgentHint} />
       <BentoGrid stale={showAgentHint}>
         <WindowTile
           telemetry={telemetry}

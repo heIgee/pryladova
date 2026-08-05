@@ -47,6 +47,9 @@ importers:
       koffi:
         specifier: ^3.1.2
         version: 3.1.2
+      windows-media-sessions:
+        specifier: ^1.0.3
+        version: 1.0.3
     devDependencies:
       '@types/node':
         specifier: ^22.20.0
@@ -84,6 +87,9 @@ importers:
       rxjs:
         specifier: ^7.8.2
         version: 7.8.2
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
     devDependencies:
       '@nestjs/cli':
         specifier: 12.0.0-alpha.6
@@ -154,6 +160,9 @@ importers:
       tw-animate-css:
         specifier: ^1.4.0
         version: 1.4.0
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
     devDependencies:
       '@tailwindcss/vite':
         specifier: ^4.3.1
@@ -5254,6 +5263,12 @@ packages:
 
   wide-align@1.1.5:
     resolution: {integrity: sha512-eDMORYaPNZ4sQIuuYPDHdQvf4gyCF9rEEV/yPxGfwPkRodwEgiMUUXTx/dex+Me0wxx53S+NgUHaP7y3MGlDmg==}
+
+  windows-media-sessions@1.0.3:
+    resolution: {integrity: sha512-qJ6arXEosySikQ5uygl+CnBd//Rh183cvxbNjR8r5XyNN9LPye7cwKKkimLMPuM/us32p+sTCYGenuodno2mOg==}
+    engines: {node: '>=20'}
+    cpu: [x64]
+    os: [win32]
 
   wrap-ansi@6.2.0:
     resolution: {integrity: sha512-r6lPcBGxZXlIcymEu7InxDMhdW0KDxpLgoFLcguasxCaJ/SOIZwINatK9KY/tf+ZrlywOKU0UDj3ATXUBfxJXA==}
@@ -10465,6 +10480,8 @@ snapshots:
     dependencies:
       string-width: 4.2.3
     optional: true
+
+  windows-media-sessions@1.0.3: {}
 
   wrap-ansi@6.2.0:
     dependencies:

@@ -14,7 +14,11 @@ const createContext = (authorization?: string): ExecutionContext =>
 
 const createGuard = (ingestSecret: string | undefined): IngestAuthGuard =>
   new IngestAuthGuard({
-    config: { geminiApiKey: undefined, geminiModel: "gemini-3.1-flash-lite", ingestSecret },
+    config: {
+      geminiApiKey: undefined,
+      geminiModel: "gemini-3.1-flash-lite",
+      ingestSecret,
+    },
   } as ConfigService);
 
 describe("IngestAuthGuard", () => {

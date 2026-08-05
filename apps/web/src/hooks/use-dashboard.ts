@@ -1,21 +1,43 @@
-import { useEffect, useState } from "react";
+import type { WeatherResponse } from "@pryladova/shared";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import {
   AGENT_HINT_AFTER_MS,
   CLASSIFICATION_ENABLED_KEY,
-  fetchTelemetry,
   getAgentLastSeenMs,
-  type PanelState,
-  POLL_INTERVAL_MS,
   readStoredClassificationEnabled,
   syncSettings,
+  WEATHER_POLL_INTERVAL_MS,
 } from "@/lib/panel";
+import { getPanelPollSnapshot, refreshPanelPoll, subscribePanelPoll } from "@/lib/panel-poll";
 import { persistTheme, resolveTheme, type Theme } from "@/lib/theme";
+import { fetchWeather } from "@/lib/weather";
+import {
+  persistWeatherLocation,
+  readStoredWeatherLocation,
+  type WeatherLocation,
+} from "@/lib/weather-location";
 
 export const useDashboard = () => {
-  const [panel, setPanel] = useState<PanelState>({ status: "loading" });
+  const panel = useSyncExternalStore(
+    subscribePanelPoll,
+    getPanelPollSnapshot,
+    getPanelPollSnapshot,
+  );
   const [classificationEnabled, setClassificationEnabled] = useState(false);
   const [showAgentHint, setShowAgentHint] = useState(false);
   const [theme, setTheme] = useState<Theme>(() => resolveTheme());
+  const [weather, setWeather] = useState<WeatherResponse>({ status: "disabled" });
+  const [weatherLocation, setWeatherLocation] = useState<WeatherLocation | null>(() =>
+    readStoredWeatherLocation(),
+  );
+
+  const loadWeather = useCallback(
+    async (location: WeatherLocation | null, refresh = false): Promise<void> => {
+      const next = await fetchWeather(location, { refresh });
+      setWeather(next);
+    },
+    [],
+  );
 
   useEffect(() => {
     const preferred = readStoredClassificationEnabled();
@@ -25,6 +47,27 @@ export const useDashboard = () => {
       console.error(`[web] ${message}`);
     });
   }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    const refresh = async (): Promise<void> => {
+      const next = await fetchWeather(weatherLocation);
+      if (active) {
+        setWeather(next);
+      }
+    };
+
+    void refresh();
+    const timer = window.setInterval(() => {
+      void refresh();
+    }, WEATHER_POLL_INTERVAL_MS);
+
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [weatherLocation]);
 
   useEffect(() => {
     if (panel.status === "loading") {
@@ -51,41 +94,12 @@ export const useDashboard = () => {
     setShowAgentHint(Date.now() - lastSeenMs >= AGENT_HINT_AFTER_MS);
   }, [panel]);
 
-  useEffect(() => {
-    let active = true;
-
-    const load = async (): Promise<void> => {
-      try {
-        const next = await fetchTelemetry();
-        if (active) {
-          setPanel(next);
-        }
-      } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : "Unknown error";
-        if (active) {
-          setPanel({ status: "error", message });
-        }
-      }
-    };
-
-    void load();
-    const timer = window.setInterval(() => {
-      void load();
-    }, POLL_INTERVAL_MS);
-
-    return () => {
-      active = false;
-      window.clearInterval(timer);
-    };
-  }, []);
-
   const handleClassificationToggle = (enabled: boolean): void => {
     setClassificationEnabled(enabled);
     localStorage.setItem(CLASSIFICATION_ENABLED_KEY, String(enabled));
     void syncSettings(enabled)
-      .then(async () => {
-        const next = await fetchTelemetry();
-        setPanel(next);
+      .then(() => {
+        refreshPanelPoll();
       })
       .catch((error: unknown) => {
         const message = error instanceof Error ? error.message : "Unknown error";
@@ -98,12 +112,25 @@ export const useDashboard = () => {
     persistTheme(next);
   };
 
+  const handleWeatherLocationChange = (location: WeatherLocation): void => {
+    persistWeatherLocation(location);
+    setWeatherLocation(location);
+  };
+
+  const handleWeatherRefresh = async (): Promise<void> => {
+    await loadWeather(weatherLocation, true);
+  };
+
   return {
     panel,
     classificationEnabled,
     showAgentHint,
     theme,
+    weather,
+    weatherLocation,
     handleClassificationToggle,
     handleThemeChange,
+    handleWeatherLocationChange,
+    handleWeatherRefresh,
   };
 };

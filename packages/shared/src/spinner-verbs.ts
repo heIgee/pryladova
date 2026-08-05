@@ -198,3 +198,8 @@ export const pickSpinnerVerb = (seed: string): SpinnerVerb => {
   const index = Math.abs(hash) % SPINNER_VERBS.length;
   return SPINNER_VERBS[index] ?? SPINNER_VERBS[0];
 };
+
+export const pickRandomSpinnerVerb = (): SpinnerVerb => {
+  const index = Math.floor(Math.random() * SPINNER_VERBS.length);
+  return SPINNER_VERBS[index] ?? SPINNER_VERBS[0];
+};

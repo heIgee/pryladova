@@ -61,7 +61,7 @@ Optional env — copy `apps/agent/.env.example` to `apps/agent/.env` (not commit
 | `INGEST_SECRET` | — | Must match API when ingest auth is enabled |
 | `BLOCKED_APPS` | — | Comma-separated app names merged with the default blocklist |
 
-**Host metrics** (local Win32 / SMTC, every poll): idle time, CPU%, RAM%, uptime, now playing.
+**Host metrics** (local Win32 / SMTC, every poll): idle time, CPU%, RAM%, uptime, now playing. SMTC album art is sent when the active player exposes a thumbnail (no extra config).
 
 **Agent privacy** (local, before POST):
 
@@ -74,7 +74,7 @@ Optional env — copy `apps/agent/.env.example` to `apps/agent/.env` (not commit
 pnpm dev:web
 ```
 
-Open the web URL. Telemetry appears after the agent sends the first POST.
+Open the web URL. Telemetry appears after the agent sends the first POST. Click the weather chip to use browser location or search a city; choice is saved in the browser.
 
 ## Scripts
 
@@ -86,6 +86,7 @@ Open the web URL. Telemetry appears after the agent sends the first POST.
 | `pnpm dev:agent:remote` | Telemetry agent (remote VPS API) |
 | `pnpm dev:web` | Vite dev server |
 | `pnpm check` | Typecheck + lint + build (turbo) |
+| `pnpm verify` | Full CI locally (same gates as GitHub Actions) |
 | `pnpm build` | Build all packages (turbo) |
 | `pnpm typecheck` | Typecheck all packages (turbo) |
 | `pnpm lint` / `pnpm lint:fix` | Biome check / fix |
@@ -98,9 +99,12 @@ Open the web URL. Telemetry appears after the agent sends the first POST.
 
 Automated coverage focuses on privacy, typed contracts, ingest auth, async classification, and the API → web poll path. Windows agent capture stays manual.
 
+Before commit: `pnpm verify` (build, tests, coverage, e2e, knip, agent checks).
+
 | Command | What |
 |---------|------|
-| `pnpm test` | Vitest unit + integration (no agent native install) |
+| `pnpm verify` | Full local CI — run before commit |
+| `pnpm test` | Vitest unit + integration |
 | `pnpm test:coverage` | Same, with lcov output |
 | `pnpm test:e2e` | Playwright: fake ingest POST → panel |
 

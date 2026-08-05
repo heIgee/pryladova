@@ -7,7 +7,7 @@ import {
 import activeWin from "active-win";
 import { loadConfig } from "./config.js";
 import { readHostMetrics } from "./host-metrics.js";
-import { readNowPlaying } from "./now-playing.js";
+import { readNowPlaying, trackMediaKey } from "./now-playing.js";
 import { createBlockedAppsSet, type RawWindowSnapshot, sanitizeSnapshot } from "./privacy.js";
 
 const readActiveWindow = async (): Promise<RawWindowSnapshot | undefined> => {
@@ -35,13 +35,35 @@ const buildTelemetryPayload = (
   };
 };
 
-const buildHostPayload = async (): Promise<HostPayload> => {
+const buildHostPayload = async (
+  lastTrackKey: string,
+  cachedThumbnail: string | null,
+): Promise<{ host: HostPayload; lastTrackKey: string; cachedThumbnail: string | null }> => {
   const metrics = readHostMetrics();
   const media = await readNowPlaying();
+
+  if (!media) {
+    return {
+      host: { ...metrics, media: null, capturedAt: new Date().toISOString() },
+      lastTrackKey: "",
+      cachedThumbnail: null,
+    };
+  }
+
+  const newTrackKey = trackMediaKey(media);
+  const nextThumbnail =
+    newTrackKey !== lastTrackKey
+      ? media.thumbnailDataUrl
+      : (cachedThumbnail ?? media.thumbnailDataUrl);
+
   return {
-    ...metrics,
-    media,
-    capturedAt: new Date().toISOString(),
+    host: {
+      ...metrics,
+      media: { ...media, thumbnailDataUrl: nextThumbnail },
+      capturedAt: new Date().toISOString(),
+    },
+    lastTrackKey: newTrackKey,
+    cachedThumbnail: nextThumbnail,
   };
 };
 
@@ -75,10 +97,14 @@ const run = async (): Promise<void> => {
   console.log(`[agent] pid=${process.pid} profile=${config.profile} api=${config.apiUrl}`);
   const blockedApps = createBlockedAppsSet(config.blockedApps);
   let lastKey = "";
+  let lastTrackKey = "";
+  let cachedThumbnail: string | null = null;
 
   const tick = async (): Promise<void> => {
-    const host = await buildHostPayload();
-    await postJson(`${config.apiUrl}${HOST_ROUTE}`, host, config.ingestSecret);
+    const hostResult = await buildHostPayload(lastTrackKey, cachedThumbnail);
+    lastTrackKey = hostResult.lastTrackKey;
+    cachedThumbnail = hostResult.cachedThumbnail;
+    await postJson(`${config.apiUrl}${HOST_ROUTE}`, hostResult.host, config.ingestSecret);
 
     const window = await readActiveWindow();
     if (!window) {

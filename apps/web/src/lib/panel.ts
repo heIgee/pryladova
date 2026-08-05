@@ -7,6 +7,7 @@ import {
 } from "@pryladova/shared";
 
 export const POLL_INTERVAL_MS = 2000;
+export const WEATHER_POLL_INTERVAL_MS = 1_800_000;
 export const AGENT_HINT_AFTER_MS = 10_000;
 export const CLASSIFICATION_ENABLED_KEY = "pryladova.classificationEnabled";
 

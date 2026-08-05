@@ -5,6 +5,25 @@ import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/componen
 import { formatPlaybackStatus } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
+const artClassName = "size-24 shrink-0 rounded-lg object-cover";
+
+const MediaArt = ({ thumbnailDataUrl }: { thumbnailDataUrl: string | null }) => {
+  if (thumbnailDataUrl) {
+    return <img src={thumbnailDataUrl} alt="" className={artClassName} />;
+  }
+
+  return (
+    <div
+      className={cn(
+        artClassName,
+        "flex items-center justify-center bg-muted text-muted-foreground ring-1 ring-border/60",
+      )}
+    >
+      <Music2 className="size-6" aria-hidden="true" />
+    </div>
+  );
+};
+
 export const MediaTile = ({
   host,
   className,
@@ -29,12 +48,15 @@ export const MediaTile = ({
       </CardHeader>
       <CardContent className="flex min-w-0 flex-col gap-1">
         {media ? (
-          <>
-            <p className="line-clamp-2 text-body leading-snug font-medium">{media.title}</p>
-            <p className="truncate text-caption text-muted-foreground">
-              {media.artist ?? "Unknown artist"}
-            </p>
-          </>
+          <div className="flex gap-3">
+            <MediaArt thumbnailDataUrl={media.thumbnailDataUrl} />
+            <div className="flex min-w-0 flex-col justify-center gap-1">
+              <p className="line-clamp-2 text-body leading-snug font-medium">{media.title}</p>
+              <p className="truncate text-caption text-muted-foreground">
+                {media.artist ?? "Unknown artist"}
+              </p>
+            </div>
+          </div>
         ) : (
           <p className="text-caption text-muted-foreground">Nothing playing</p>
         )}

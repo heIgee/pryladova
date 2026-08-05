@@ -61,7 +61,7 @@ export const WindowTile = ({
     status === "disabled";
 
   return (
-    <Card>
+    <Card size="sm">
       <CardHeader className="border-b">
         <CardTitle className="flex items-center gap-2 text-sm">
           <Monitor className="size-3.5 text-muted-foreground" />
@@ -69,7 +69,7 @@ export const WindowTile = ({
         </CardTitle>
         {showClassificationChips ? (
           <CardAction>
-            <div className="flex max-w-72 flex-wrap justify-end gap-1.5">
+            <div className="flex max-w-full flex-wrap justify-end gap-1.5">
               {showCategory ? <Badge>{classification.category}</Badge> : null}
               {showWorkChip ? (
                 <Badge>{classification.workRelated === "yes" ? "Work" : "Personal"}</Badge>
@@ -84,13 +84,15 @@ export const WindowTile = ({
           </CardAction>
         ) : null}
       </CardHeader>
-      <CardContent>
+      <CardContent className="flex flex-col gap-2">
         <h2 className="truncate text-display font-medium">{displayName}</h2>
-        <p className="mt-2 min-h-[1.625em] line-clamp-3 text-body leading-relaxed text-muted-foreground">
-          {windowSubtitle ?? "\u00a0"}
-        </p>
+        {windowSubtitle ? (
+          <p className="line-clamp-3 text-body leading-relaxed text-muted-foreground">
+            {windowSubtitle}
+          </p>
+        ) : null}
       </CardContent>
-      <CardFooter className="border-t py-2.5">
+      <CardFooter>
         <label
           htmlFor="classify-toggle"
           className="flex w-fit cursor-pointer items-center gap-2 text-caption text-muted-foreground"

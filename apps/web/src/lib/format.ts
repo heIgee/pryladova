@@ -7,8 +7,7 @@ export const formatDuration = (totalSeconds: number): string => {
   }
   const minutes = Math.floor(seconds / 60);
   if (minutes < 60) {
-    const rem = seconds % 60;
-    return rem === 0 ? `${minutes}m` : `${minutes}m ${rem}s`;
+    return `${minutes}m`;
   }
   const hours = Math.floor(minutes / 60);
   const remMinutes = minutes % 60;

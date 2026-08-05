@@ -65,7 +65,7 @@ export const MachineTile = ({
         </Badge>
       </CardAction>
     </CardHeader>
-    <CardContent className="grid gap-4">
+    <CardContent className="grid gap-3">
       {host ? (
         <>
           <StatBar

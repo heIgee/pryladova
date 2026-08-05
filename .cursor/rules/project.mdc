@@ -92,6 +92,32 @@ alwaysApply: true
 - Forbidden to greenwash checks: `@ts-ignore` / `@ts-expect-error`, blanket `eslint-disable` / `biome-ignore`, commented-out logic, deleted validation, stub/`null as` returns, config loosening (`strict: false`, `skipLibCheck` hacks), unrelated `// @ts-nocheck`.
 - If proper fix is out of scope or blocked, stop and report — do not land a workaround in repo.
 
+## Commit-ready (agent)
+
+Before calling work **done**, **QA pass**, or **commit-ready** — run full local CI and fix until green:
+
+```powershell
+pnpm verify
+```
+
+Mirrors `.github/workflows/ci.yml` (ubuntu job + agent job). Exit 0 required. Re-run after fixes.
+
+| Step | Command (inside `pnpm verify`) |
+|------|----------------------------|
+| Build gate | `turbo run typecheck lint build --filter=!agent` |
+| Tests + coverage | `pnpm test:coverage` |
+| E2E | `pnpm test:e2e` |
+| Deps/exports | `pnpm knip` |
+| Agent | `turbo run typecheck lint --filter=agent` |
+
+Do **not** substitute partial checks (`pnpm test`, `pnpm check`, lint-only, typecheck-only). Pre-commit hook (Biome + typecheck) is not sufficient.
+
+**Dependency hygiene** (CI catches these; verify in the same pass):
+- Direct `import` of a package → declare it in **that** workspace `package.json` (`pnpm --filter <pkg> add …`). Never rely on hoisting from siblings.
+- OS/CPU-specific deps (e.g. win32 native) → no top-level import in modules loaded by cross-platform tests; use dynamic import or split pure logic.
+
+Report CI failures with command + error excerpt. Do not suggest commit until `pnpm verify` passes.
+
 ## Env & secrets
 
 - Never commit `.env` or hardcode secrets. New config → existing env-loading pattern.
@@ -100,10 +126,20 @@ alwaysApply: true
 
 - Semantic HTML first. ARIA/keyboard only if native insufficient.
 - No default `tabindex`/`role`/`aria-*` on natively-working elements.
+- No wrapper `div`/`span` around a single child — use the semantic/interactive element directly, or flex/grid on the parent.
 
 ## Testing
 
-- No suite/convention yet. Don't assume one, don't add speculative test files, don't skip logic assuming "tests cover it."
+Run `pnpm verify` before commit (matches GitHub CI). First-time E2E: `pnpm exec playwright install chromium`.
+
+| Command | What |
+|---------|------|
+| `pnpm verify` | Full CI locally: build gate, coverage, e2e, knip, agent lint/typecheck |
+| `pnpm test` | Vitest only (not commit-ready alone) |
+| `pnpm test:coverage` | Vitest with lcov |
+| `pnpm test:e2e` | Playwright: fake ingest POST → panel |
+| `pnpm check` | Typecheck + lint + build only (not commit-ready alone) |
+| `pnpm knip` | Unused exports and dependencies |
 
 ## Stack-specific rules
 
