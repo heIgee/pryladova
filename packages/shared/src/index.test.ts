@@ -117,6 +117,19 @@ describe("hostMediaSchema", () => {
     });
     expect(media.thumbnailDataUrl).toBeNull();
   });
+
+  it("rejects oversized thumbnail data url", () => {
+    expect(() =>
+      hostMediaSchema.parse({
+        title: "Track",
+        artist: null,
+        albumTitle: null,
+        appName: null,
+        playbackStatus: "playing",
+        thumbnailDataUrl: `data:image/jpeg;base64,${"a".repeat(512_001)}`,
+      }),
+    ).toThrow();
+  });
 });
 
 describe("weatherResponseSchema", () => {

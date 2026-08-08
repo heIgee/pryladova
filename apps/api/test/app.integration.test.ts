@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppModule } from "../src/app.module.js";
 import type { ApiConfig } from "../src/config.js";
 import { ConfigService } from "../src/config.service.js";
+import { resetReleaseCacheForTests } from "../src/release.js";
 
 const telemetryPayload = {
   appName: "Code",
@@ -46,6 +47,7 @@ describe("App integration", () => {
   let app: INestApplication;
 
   beforeEach(async () => {
+    resetReleaseCacheForTests();
     app = await createApp(defaultConfig);
   });
 
@@ -115,6 +117,15 @@ describe("App integration", () => {
       .expect(200);
 
     expect(response.body).toEqual({ classificationEnabled: true });
+  });
+
+  it("PUT /api/settings returns formatted validation errors", async () => {
+    const response = await request(app.getHttpServer())
+      .put("/api/settings")
+      .send({ classificationEnabled: "yes" })
+      .expect(400);
+
+    expect(response.body.classificationEnabled?._errors?.length).toBeGreaterThan(0);
   });
 
   it("GET /api/weather returns disabled without coordinates", async () => {

@@ -50,7 +50,7 @@ jobs:
         with:
           name: web-dist
           path: apps/web/dist
-          retention-days: 1
+          retention-days: 7
 
   e2e:
     needs: [ci]

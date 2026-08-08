@@ -60,16 +60,39 @@ describe("pickCurrentSession", () => {
 });
 
 describe("trackMediaKey", () => {
-  it("uses title and artist only", () => {
+  it("uses title, artist, album, and app name", () => {
     expect(
       trackMediaKey({
         title: " Song ",
         artist: " Artist ",
-        albumTitle: "Different Album",
-        appName: null,
+        albumTitle: " Album ",
+        appName: "Spotify.exe",
         playbackStatus: "playing",
         thumbnailDataUrl: null,
       }),
-    ).toBe("song|artist");
+    ).toBe("song|artist|album|spotify.exe");
+  });
+
+  it("differentiates tracks with the same title and artist", () => {
+    const base = {
+      title: "Song",
+      artist: "Artist",
+      playbackStatus: "playing" as const,
+      thumbnailDataUrl: null,
+    };
+
+    expect(
+      trackMediaKey({
+        ...base,
+        albumTitle: "Album A",
+        appName: "App A",
+      }),
+    ).not.toBe(
+      trackMediaKey({
+        ...base,
+        albumTitle: "Album B",
+        appName: "App B",
+      }),
+    );
   });
 });

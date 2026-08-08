@@ -29,10 +29,16 @@ const classificationSeed = (telemetry: TelemetryState): string =>
 export const WindowTile = ({
   telemetry,
   classificationEnabled,
+  settingsError,
+  settingsSyncing,
+  settingsReady,
   onClassificationChange,
 }: {
   telemetry: TelemetryState;
   classificationEnabled: boolean;
+  settingsError: string | null;
+  settingsSyncing: boolean;
+  settingsReady: boolean;
   onClassificationChange: (enabled: boolean) => void;
 }) => {
   const classification = telemetry.classification;
@@ -53,10 +59,14 @@ export const WindowTile = ({
     classification !== null &&
     classification.workRelated !== "maybe";
   const isClassifying = classificationEnabled && status === "pending";
+  const isClassificationFailed = classificationEnabled && status === "failed";
+  const isMisconfigured = classificationEnabled && status === "misconfigured";
   const showClassificationChips =
     showCategory ||
     showWorkChip ||
     isClassifying ||
+    isClassificationFailed ||
+    isMisconfigured ||
     !classificationEnabled ||
     status === "disabled";
 
@@ -77,6 +87,12 @@ export const WindowTile = ({
               {isClassifying ? (
                 <Badge variant="secondary">{pickSpinnerVerb(classificationSeed(telemetry))}…</Badge>
               ) : null}
+              {isClassificationFailed ? (
+                <Badge variant="secondary">Classification failed</Badge>
+              ) : null}
+              {isMisconfigured ? (
+                <Badge variant="secondary">Classification unavailable</Badge>
+              ) : null}
               {!classificationEnabled || status === "disabled" ? (
                 <MutedChip>Classification off</MutedChip>
               ) : null}
@@ -92,7 +108,7 @@ export const WindowTile = ({
           </p>
         ) : null}
       </CardContent>
-      <CardFooter>
+      <CardFooter className="flex flex-col items-start gap-1">
         <label
           htmlFor="classify-toggle"
           className="flex w-fit cursor-pointer items-center gap-2 text-caption text-muted-foreground"
@@ -102,9 +118,11 @@ export const WindowTile = ({
             id="classify-toggle"
             size="sm"
             checked={classificationEnabled}
+            disabled={!settingsReady || settingsSyncing}
             onCheckedChange={onClassificationChange}
           />
         </label>
+        {settingsError ? <p className="text-caption text-destructive">{settingsError}</p> : null}
       </CardFooter>
     </Card>
   );

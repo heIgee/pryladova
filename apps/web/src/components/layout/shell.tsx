@@ -49,7 +49,7 @@ export const BentoGrid = ({ stale, children }: { stale: boolean; children: React
   <div
     className={cn(
       "flex flex-col gap-5 transition-[opacity,filter] duration-300",
-      stale && "pointer-events-none opacity-45 grayscale",
+      stale && "opacity-45 grayscale",
     )}
   >
     {children}

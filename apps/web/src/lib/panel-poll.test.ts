@@ -27,4 +27,35 @@ describe("panel-poll store", () => {
 
     unsubscribe();
   });
+
+  it("clears the poll timer when the last listener unsubscribes", async () => {
+    const clearInterval = vi.fn();
+    const setInterval = vi.fn(() => 42);
+    vi.stubGlobal("clearInterval", clearInterval);
+    vi.stubGlobal("setInterval", setInterval as unknown as typeof globalThis.setInterval);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          appName: "Code",
+          windowTitle: "app.tsx",
+          capturedAt: "2026-01-01T12:00:00.000Z",
+          receivedAt: "2026-01-01T12:00:01.000Z",
+          classification: null,
+          classificationStatus: "disabled",
+          host: null,
+        }),
+      }),
+    );
+
+    const { subscribePanelPoll } = await import("./panel-poll.js");
+
+    const unsubscribe = subscribePanelPoll(() => {});
+    expect(setInterval).toHaveBeenCalledOnce();
+
+    unsubscribe();
+    expect(clearInterval).toHaveBeenCalledOnce();
+    expect(clearInterval).toHaveBeenCalledWith(42);
+  });
 });

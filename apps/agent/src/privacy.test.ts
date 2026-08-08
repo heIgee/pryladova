@@ -1,6 +1,6 @@
 import { SECURE_APP_NAME, SECURE_WINDOW_TITLE } from "@pryladova/shared";
 import { describe, expect, it } from "vitest";
-import { createBlockedAppsSet, sanitizeSnapshot } from "./privacy.js";
+import { createBlockedAppsSet, sanitizeSnapshot, shouldOmitHostMedia } from "./privacy.js";
 
 const snapshot = (title: string, name: string, path?: string) => ({
   title,
@@ -36,6 +36,15 @@ describe("sanitizeSnapshot", () => {
     expect(result.windowTitle).toBe("Editing [path]");
   });
 
+  it("redacts Windows paths that contain spaces", () => {
+    const blocked = createBlockedAppsSet([]);
+    const result = sanitizeSnapshot(
+      snapshot("Editing C:\\Users\\me\\my secrets\\doc.txt", "Code"),
+      blocked,
+    );
+    expect(result.windowTitle).toBe("Editing [path]");
+  });
+
   it("redacts UNC paths in window titles", () => {
     const blocked = createBlockedAppsSet([]);
     const result = sanitizeSnapshot(
@@ -61,5 +70,12 @@ describe("sanitizeSnapshot", () => {
       blocked,
     );
     expect(result.appName).toBe(SECURE_APP_NAME);
+  });
+
+  it("detects blocklisted foreground for host media omission", () => {
+    const blocked = createBlockedAppsSet([]);
+    const window = snapshot("Secrets", "1Password");
+    expect(shouldOmitHostMedia(window, blocked)).toBe(true);
+    expect(shouldOmitHostMedia(undefined, blocked)).toBe(false);
   });
 });

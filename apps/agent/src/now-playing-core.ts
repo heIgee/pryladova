@@ -1,14 +1,10 @@
-import type { HostMedia, PlaybackStatus } from "@pryladova/shared";
+import { type HostMedia, type PlaybackStatus, trackMediaKey } from "@pryladova/shared";
 
-export type SmtcPlaybackStatus =
-  | "playing"
-  | "paused"
-  | "stopped"
-  | "opened"
-  | "changing"
-  | "closed";
+export { trackMediaKey };
 
-export type MediaSession = {
+type SmtcPlaybackStatus = "playing" | "paused" | "stopped" | "opened" | "changing" | "closed";
+
+type MediaSession = {
   id: string;
   sourceAppUserModelId: string;
   title?: string;
@@ -97,6 +93,3 @@ export const mapMediaSession = (session: MediaSession): HostMedia | null => {
     thumbnailDataUrl: asThumbnailDataUrl(session.thumbnail),
   };
 };
-
-export const trackMediaKey = (media: HostMedia): string =>
-  `${media.title.trim().toLowerCase()}|${(media.artist ?? "").trim().toLowerCase()}`;

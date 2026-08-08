@@ -83,11 +83,13 @@ describe("ClassificationService", () => {
     expect(generateObjectMock).toHaveBeenCalledTimes(1);
   });
 
-  it("returns classification from Gemini", async () => {
+  it("escapes quotes in prompt metadata", async () => {
     const { service, settingsService } = await createService();
     settingsService.setSettings({ classificationEnabled: true });
-    await expect(service.classify("Code", "app.tsx")).resolves.toEqual(classification);
-    expect(generateObjectMock).toHaveBeenCalledTimes(1);
+    await service.classify('App "evil"', 'Title with "quotes"');
+    const call = generateObjectMock.mock.calls[0]?.[0] as { prompt: string };
+    expect(call.prompt).toContain('App \\"evil\\"');
+    expect(call.prompt).toContain('Title with \\"quotes\\"');
   });
 
   it("returns null when Gemini fails", async () => {

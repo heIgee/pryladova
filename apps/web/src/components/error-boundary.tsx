@@ -34,7 +34,6 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
           <div className="mx-auto flex w-full max-w-4xl flex-col gap-3">
             <h1 className="font-heading text-2xl font-medium tracking-tight">Pryladova</h1>
             <p className="text-destructive">Something went wrong loading the panel.</p>
-            <p className="text-caption text-muted-foreground">{this.state.error.message}</p>
             <button
               type="button"
               className="w-fit rounded-lg px-3 py-2 text-caption ring-1 ring-border/60 transition-colors hover:bg-muted"

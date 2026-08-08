@@ -1,0 +1,21 @@
+---
+description: TypeScript and naming conventions
+globs: **/*.ts,**/*.tsx
+alwaysApply: false
+---
+
+# TypeScript
+
+- Explicit types at module boundaries (exports, API handlers, shared utils).
+- `const` arrow functions. `handleX` naming for event handlers.
+- Early returns over nesting.
+- No empty `catch`. No floating promises — `await` or explicit `void`.
+- Follow the package's existing formatter/linter (Biome). No style opinions from this rule.
+- **`as any` forbidden.** No exceptions.
+- Avoid `as` assertions — prefer inference, narrowing, type guards, `satisfies`, generics, schema parse (Zod). Touching existing `as` → remove if feasible.
+- Unavoidable `as` only at untyped external boundary: single line, narrow immediately, comment why.
+
+## Naming
+
+- Filenames: kebab-case (`user-profile.ts`).
+- Exports: PascalCase (components/classes), camelCase (functions/variables).

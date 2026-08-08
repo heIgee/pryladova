@@ -1,8 +1,9 @@
 import type { HostMedia } from "@pryladova/shared";
 import { mapMediaSession, pickCurrentSession } from "./now-playing-core.js";
 
-export type { MediaSession, SmtcPlaybackStatus } from "./now-playing-core.js";
-export { mapMediaSession, pickCurrentSession, trackMediaKey } from "./now-playing-core.js";
+export { trackMediaKey } from "./now-playing-core.js";
+
+let smtcErrorLogged = false;
 
 export const readNowPlaying = async (): Promise<HostMedia | null> => {
   try {
@@ -12,8 +13,14 @@ export const readNowPlaying = async (): Promise<HostMedia | null> => {
     if (!session) {
       return null;
     }
+    smtcErrorLogged = false;
     return mapMediaSession(session);
-  } catch {
+  } catch (error: unknown) {
+    if (!smtcErrorLogged) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`[agent] SMTC read failed: ${message}`);
+      smtcErrorLogged = true;
+    }
     return null;
   }
 };

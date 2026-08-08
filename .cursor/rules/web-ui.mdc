@@ -1,0 +1,11 @@
+---
+description: Accessibility and markup rules for the web app
+globs: apps/web/**/*.tsx
+alwaysApply: false
+---
+
+# Accessibility/UI
+
+- Semantic HTML first. ARIA/keyboard only if native insufficient.
+- No default `tabindex`/`role`/`aria-*` on natively-working elements.
+- No wrapper `div`/`span` around a single child — use the semantic/interactive element directly, or flex/grid on the parent.

@@ -70,6 +70,16 @@ const ensureTimer = (store: PanelPollStore): void => {
   }, POLL_INTERVAL_MS);
 };
 
+const stopTimerIfIdle = (store: PanelPollStore): void => {
+  if (store.listeners.size > 0 || store.timer === null) {
+    return;
+  }
+
+  window.clearInterval(store.timer);
+  store.timer = null;
+  store.requestId += 1;
+};
+
 export const subscribePanelPoll = (listener: () => void): (() => void) => {
   const store = getStore();
   store.listeners.add(listener);
@@ -77,6 +87,7 @@ export const subscribePanelPoll = (listener: () => void): (() => void) => {
 
   return () => {
     store.listeners.delete(listener);
+    stopTimerIfIdle(store);
   };
 };
 

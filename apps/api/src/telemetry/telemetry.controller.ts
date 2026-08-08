@@ -8,10 +8,12 @@ import {
   Post,
   UseGuards,
 } from "@nestjs/common";
+import { Throttle } from "@nestjs/throttler";
 import {
   HOST_ROUTE,
   parseHostPayload,
   parseTelemetryPayload,
+  parseTelemetryState,
   TELEMETRY_ROUTE,
   type TelemetryState,
 } from "@pryladova/shared";
@@ -25,6 +27,7 @@ export class TelemetryController {
   @Post(TELEMETRY_ROUTE)
   @HttpCode(204)
   @UseGuards(IngestAuthGuard)
+  @Throttle({ default: { limit: 120, ttl: 60_000 } })
   ingest(@Body() body: unknown): void {
     const parsed = parseTelemetryPayload(body);
     if (!parsed.success) {
@@ -36,6 +39,7 @@ export class TelemetryController {
   @Post(HOST_ROUTE)
   @HttpCode(204)
   @UseGuards(IngestAuthGuard)
+  @Throttle({ default: { limit: 120, ttl: 60_000 } })
   ingestHost(@Body() body: unknown): void {
     const parsed = parseHostPayload(body);
     if (!parsed.success) {
@@ -50,6 +54,6 @@ export class TelemetryController {
     if (!state) {
       throw new NotFoundException("No telemetry received yet");
     }
-    return state;
+    return parseTelemetryState(state);
   }
 }

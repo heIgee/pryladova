@@ -12,6 +12,14 @@ Future work: [ROADMAP.md](ROADMAP.md).
 
 ## Install
 
+Default (API + web + shared; skips Windows-native agent deps):
+
+```powershell
+pnpm install --filter "!agent"
+```
+
+Full install including the agent (Windows):
+
 ```powershell
 pnpm install
 ```
@@ -55,6 +63,7 @@ Optional env — copy `apps/agent/.env.example` to `apps/agent/.env` (not commit
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `AGENT_PROFILE` | — | Set to `remote` for VPS API (same as `--remote` / `pnpm dev:agent:remote`) |
 | `DEV_API_URL` | `http://localhost:3000` | Dev API origin (`pnpm dev:agent`) |
 | `API_URL` | — | Remote API origin (`pnpm dev:agent:remote`) |
 | `POLL_INTERVAL_MS` | `2000` | Poll interval (ms) |

@@ -17,7 +17,11 @@ import { headerChipClassName, headerIconButtonClassName } from "@/components/lay
 import { cn } from "@/lib/utils";
 import type { GeocodeResult } from "@/lib/weather";
 import { reverseGeocodeCity, searchWeatherCities } from "@/lib/weather";
-import { readBrowserLocation, type WeatherLocation } from "@/lib/weather-location";
+import {
+  formatGeolocationError,
+  readBrowserLocation,
+  type WeatherLocation,
+} from "@/lib/weather-location";
 
 const weatherCodeToIcon = (code: number): LucideIcon => {
   if (code === 0) {
@@ -75,6 +79,7 @@ export const WeatherHeader = ({
   const [refreshing, setRefreshing] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const refreshGeneration = useRef(0);
+  const searchGeneration = useRef(0);
   const inputId = useId();
   const listboxId = useId();
 
@@ -89,9 +94,17 @@ export const WeatherHeader = ({
       }
     };
 
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    };
+
     document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
     return () => {
       document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
     };
   }, [open]);
 
@@ -112,12 +125,19 @@ export const WeatherHeader = ({
     }
 
     const timer = window.setTimeout(() => {
+      const generation = ++searchGeneration.current;
       void searchWeatherCities(trimmed)
         .then((next) => {
+          if (searchGeneration.current !== generation) {
+            return;
+          }
           setResults(next);
           setSearchError(next.length === 0 ? "No matches" : null);
         })
         .catch((error: unknown) => {
+          if (searchGeneration.current !== generation) {
+            return;
+          }
           const message = error instanceof Error ? error.message : "Search failed";
           setSearchError(message);
           setResults([]);
@@ -144,8 +164,7 @@ export const WeatherHeader = ({
         setOpen(false);
       })
       .catch((error: unknown) => {
-        const message = error instanceof Error ? error.message : "Location denied";
-        setGeoError(message);
+        setGeoError(formatGeolocationError(error));
       })
       .finally(() => {
         setBusy(false);

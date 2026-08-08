@@ -44,8 +44,8 @@ const DEFAULT_BLOCKED_APPS = [
 const EMAIL_PATTERN =
   /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+/g;
 
-const WINDOWS_PATH_PATTERN = /[A-Za-z]:\\[^\s"<>|*?]+/g;
-const UNC_PATH_PATTERN = /\\\\[^\s"<>|*?]+/g;
+const WINDOWS_PATH_PATTERN = /[A-Za-z]:\\(?:[^"<>|*?]+(?:\\[^"<>|*?]+)*)/g;
+const UNC_PATH_PATTERN = /\\\\(?:[^"<>|*?]+(?:\\[^"<>|*?]+)*)/g;
 
 const normalizeAppToken = (value: string): string =>
   value
@@ -103,3 +103,8 @@ export const sanitizeSnapshot = (
 
 export const createBlockedAppsSet = (extraApps: string[]): Set<string> =>
   buildBlockedApps(extraApps);
+
+export const shouldOmitHostMedia = (
+  snapshot: RawWindowSnapshot | undefined,
+  blockedApps: Set<string>,
+): boolean => snapshot !== undefined && isBlockedApp(snapshot, blockedApps);

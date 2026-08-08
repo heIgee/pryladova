@@ -11,6 +11,9 @@ import { SettingsService } from "../settings/settings.service.js";
 
 const CACHE_MAX_ENTRIES = 256;
 
+const escapePromptField = (value: string): string =>
+  value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+
 @Injectable()
 export class ClassificationService {
   private readonly cache = new Map<string, WindowClassification>();
@@ -20,6 +23,10 @@ export class ClassificationService {
     private readonly configService: ConfigService,
     private readonly settingsService: SettingsService,
   ) {}
+
+  isGeminiConfigured(): boolean {
+    return Boolean(this.configService.config.geminiApiKey);
+  }
 
   async classify(appName: string, windowTitle: string): Promise<WindowClassification | null> {
     if (!this.settingsService.isClassificationEnabled()) {
@@ -52,12 +59,14 @@ export class ClassificationService {
 
     try {
       const google = createGoogleGenerativeAI({ apiKey: config.geminiApiKey });
+      const safeAppName = escapePromptField(appName);
+      const safeWindowTitle = escapePromptField(windowTitle);
       const { object } = await generateObject({
         model: google(config.geminiModel),
         schema: windowClassificationSchema,
         prompt: `Analyze the following active window.
-Application name (from OS): "${appName}"
-Window title: "${windowTitle}"
+Application name (from OS): "${safeAppName}"
+Window title: "${safeWindowTitle}"
 
 Categorize it strictly into one of the allowed categories.
 Extract the base application name without extra document titles.

@@ -7,7 +7,8 @@ import {
   Inject,
   Put,
 } from "@nestjs/common";
-import { SETTINGS_ROUTE, type Settings, settingsSchema } from "@pryladova/shared";
+import { parseSettings, SETTINGS_ROUTE, type Settings, settingsSchema } from "@pryladova/shared";
+import { z } from "zod";
 import { TelemetryService } from "../telemetry/telemetry.service.js";
 import { SettingsService } from "./settings.service.js";
 
@@ -21,14 +22,14 @@ export class SettingsController {
 
   @Get(SETTINGS_ROUTE)
   getSettings(): Settings {
-    return this.settingsService.getSettings();
+    return parseSettings(this.settingsService.getSettings());
   }
 
   @Put(SETTINGS_ROUTE)
   setSettings(@Body() body: unknown): Settings {
     const parsed = settingsSchema.safeParse(body);
     if (!parsed.success) {
-      throw new BadRequestException(parsed.error.format());
+      throw new BadRequestException(z.formatError(parsed.error));
     }
     const previous = this.settingsService.getSettings();
     const next = this.settingsService.setSettings(parsed.data);
@@ -37,6 +38,6 @@ export class SettingsController {
       this.telemetryService.reclassifyCurrentWindow();
     }
 
-    return next;
+    return parseSettings(next);
   }
 }

@@ -2,8 +2,9 @@ import type { WeatherResponse } from "@pryladova/shared";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import {
   AGENT_HINT_AFTER_MS,
-  CLASSIFICATION_ENABLED_KEY,
+  fetchSettings,
   getAgentLastSeenMs,
+  persistClassificationEnabled,
   readStoredClassificationEnabled,
   syncSettings,
   WEATHER_POLL_INTERVAL_MS,
@@ -23,7 +24,12 @@ export const useDashboard = () => {
     getPanelPollSnapshot,
     getPanelPollSnapshot,
   );
-  const [classificationEnabled, setClassificationEnabled] = useState(false);
+  const [classificationEnabled, setClassificationEnabled] = useState(() =>
+    readStoredClassificationEnabled(),
+  );
+  const [settingsError, setSettingsError] = useState<string | null>(null);
+  const [settingsSyncing, setSettingsSyncing] = useState(false);
+  const [settingsReady, setSettingsReady] = useState(false);
   const [showAgentHint, setShowAgentHint] = useState(false);
   const [theme, setTheme] = useState<Theme>(() => resolveTheme());
   const [weather, setWeather] = useState<WeatherResponse>({ status: "disabled" });
@@ -40,12 +46,51 @@ export const useDashboard = () => {
   );
 
   useEffect(() => {
-    const preferred = readStoredClassificationEnabled();
-    setClassificationEnabled(preferred);
-    void syncSettings(preferred).catch((error: unknown) => {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      console.error(`[web] ${message}`);
-    });
+    let active = true;
+
+    const loadSettings = async (): Promise<void> => {
+      try {
+        const settings = await fetchSettings();
+        if (!active) {
+          return;
+        }
+        setClassificationEnabled(settings.classificationEnabled);
+        persistClassificationEnabled(settings.classificationEnabled);
+        setSettingsError(null);
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : "Unknown error";
+        console.error(`[web] ${message}`);
+
+        if (!active) {
+          return;
+        }
+
+        const preferred = readStoredClassificationEnabled();
+        setClassificationEnabled(preferred);
+        try {
+          await syncSettings(preferred);
+          if (active) {
+            setSettingsError(null);
+          }
+        } catch (syncError: unknown) {
+          const syncMessage = syncError instanceof Error ? syncError.message : "Unknown error";
+          console.error(`[web] ${syncMessage}`);
+          if (active) {
+            setSettingsError("Could not sync classification setting");
+          }
+        }
+      } finally {
+        if (active) {
+          setSettingsReady(true);
+        }
+      }
+    };
+
+    void loadSettings();
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -95,15 +140,26 @@ export const useDashboard = () => {
   }, [panel]);
 
   const handleClassificationToggle = (enabled: boolean): void => {
-    setClassificationEnabled(enabled);
-    localStorage.setItem(CLASSIFICATION_ENABLED_KEY, String(enabled));
+    if (settingsSyncing) {
+      return;
+    }
+
+    setSettingsSyncing(true);
+    setSettingsError(null);
+
     void syncSettings(enabled)
       .then(() => {
+        setClassificationEnabled(enabled);
+        persistClassificationEnabled(enabled);
         refreshPanelPoll();
       })
       .catch((error: unknown) => {
         const message = error instanceof Error ? error.message : "Unknown error";
         console.error(`[web] ${message}`);
+        setSettingsError("Could not save classification setting");
+      })
+      .finally(() => {
+        setSettingsSyncing(false);
       });
   };
 
@@ -124,6 +180,9 @@ export const useDashboard = () => {
   return {
     panel,
     classificationEnabled,
+    settingsError,
+    settingsSyncing,
+    settingsReady,
     showAgentHint,
     theme,
     weather,

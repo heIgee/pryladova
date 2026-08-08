@@ -26,6 +26,7 @@ const createService = async (classifyImpl?: ClassificationService["classify"]) =
         provide: ClassificationService,
         useValue: {
           classify: classifyImpl ?? vi.fn().mockResolvedValue(classification),
+          isGeminiConfigured: vi.fn().mockReturnValue(true),
         },
       },
     ],
@@ -88,6 +89,67 @@ describe("TelemetryService", () => {
     });
     telemetryService.setState(telemetryPayload);
     expect(telemetryService.getState()?.host?.cpuPercent).toBe(10);
+  });
+
+  it("preserves thumbnail when host post omits it for unchanged track", async () => {
+    const { telemetryService } = await createService();
+    telemetryService.setState(telemetryPayload);
+    telemetryService.setHost({
+      idleMs: 0,
+      cpuPercent: 10,
+      ramPercent: 20,
+      uptimeSec: 100,
+      media: {
+        title: "Track",
+        artist: "Artist",
+        albumTitle: null,
+        appName: "Player",
+        playbackStatus: "playing",
+        thumbnailDataUrl: "data:image/jpeg;base64,abc",
+      },
+      capturedAt: "2026-01-01T12:00:01.000Z",
+    });
+    telemetryService.setHost({
+      idleMs: 0,
+      cpuPercent: 12,
+      ramPercent: 22,
+      uptimeSec: 101,
+      media: {
+        title: "Track",
+        artist: "Artist",
+        albumTitle: null,
+        appName: "Player",
+        playbackStatus: "playing",
+        thumbnailDataUrl: null,
+      },
+      capturedAt: "2026-01-01T12:00:02.000Z",
+    });
+    expect(telemetryService.getState()?.host?.media?.thumbnailDataUrl).toBe(
+      "data:image/jpeg;base64,abc",
+    );
+  });
+
+  it("marks misconfigured when classification enabled without Gemini key", async () => {
+    const classify = vi.fn().mockResolvedValue(null);
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        TelemetryService,
+        SettingsService,
+        {
+          provide: ClassificationService,
+          useValue: {
+            classify,
+            isGeminiConfigured: vi.fn().mockReturnValue(false),
+          },
+        },
+      ],
+    }).compile();
+    const telemetryService = moduleRef.get(TelemetryService);
+    const settingsService = moduleRef.get(SettingsService);
+    settingsService.setSettings({ classificationEnabled: true });
+    telemetryService.setState(telemetryPayload);
+    expect(telemetryService.getState()?.classificationStatus).toBe("misconfigured");
+    expect(classify).not.toHaveBeenCalled();
   });
 
   it("discards stale classification results", async () => {

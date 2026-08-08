@@ -1,5 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import { fetchTelemetry, getAgentLastSeenMs, type PanelState } from "./panel.js";
+import {
+  fetchSettings,
+  fetchTelemetry,
+  getAgentLastSeenMs,
+  type PanelState,
+  shouldShowMediaTile,
+  syncSettings,
+} from "./panel.js";
 import { buildWeatherUrl, fetchWeather, reverseGeocodeCity } from "./weather.js";
 
 const readyTelemetry = {
@@ -18,6 +25,88 @@ const readyTelemetry = {
     capturedAt: "2026-01-01T12:00:02.000Z",
   },
 };
+
+describe("fetchSettings", () => {
+  it("returns parsed settings on success", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ classificationEnabled: true }),
+      }),
+    );
+
+    await expect(fetchSettings()).resolves.toEqual({ classificationEnabled: true });
+    vi.unstubAllGlobals();
+  });
+
+  it("throws on failed response", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+      }),
+    );
+
+    await expect(fetchSettings()).rejects.toThrow("Settings error (500)");
+    vi.unstubAllGlobals();
+  });
+});
+
+describe("syncSettings", () => {
+  it("throws on failed response", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 401,
+      }),
+    );
+
+    await expect(syncSettings(true)).rejects.toThrow("Settings error (401)");
+    vi.unstubAllGlobals();
+  });
+});
+
+describe("shouldShowMediaTile", () => {
+  it("is false when host is undefined", () => {
+    expect(shouldShowMediaTile(undefined)).toBe(false);
+  });
+
+  it("is false when host media is null", () => {
+    expect(
+      shouldShowMediaTile({
+        idleMs: 0,
+        cpuPercent: 0,
+        ramPercent: 0,
+        uptimeSec: 0,
+        media: null,
+        capturedAt: "2026-01-01T12:00:00.000Z",
+      }),
+    ).toBe(false);
+  });
+
+  it("is true when host media exists", () => {
+    expect(
+      shouldShowMediaTile({
+        idleMs: 0,
+        cpuPercent: 0,
+        ramPercent: 0,
+        uptimeSec: 0,
+        media: {
+          title: "Track",
+          artist: "Artist",
+          albumTitle: null,
+          appName: null,
+          playbackStatus: "playing" as const,
+          thumbnailDataUrl: null,
+        },
+        capturedAt: "2026-01-01T12:00:00.000Z",
+      }),
+    ).toBe(true);
+  });
+});
 
 describe("fetchTelemetry", () => {
   it("returns empty on 404", async () => {
@@ -62,6 +151,23 @@ describe("fetchTelemetry", () => {
     await expect(fetchTelemetry()).resolves.toEqual({
       status: "error",
       message: "API error (500)",
+    });
+    vi.unstubAllGlobals();
+  });
+
+  it("returns error when response fails schema validation", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        status: 200,
+        ok: true,
+        json: async () => ({ appName: "Code" }),
+      }),
+    );
+
+    await expect(fetchTelemetry()).resolves.toEqual({
+      status: "error",
+      message: "Invalid telemetry response",
     });
     vi.unstubAllGlobals();
   });
@@ -133,15 +239,15 @@ describe("fetchWeather", () => {
 });
 
 describe("reverseGeocodeCity", () => {
-  it("returns closest city label from coordinates", async () => {
+  it("parses geocode JSON from the reverse-geocode API", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
         ok: true,
         json: async () => ({
-          city: "Kyiv",
-          principalSubdivision: "Kyiv City",
-          countryName: "Ukraine",
+          label: "Kyiv, Kyiv City, Ukraine",
+          lat: 50.45,
+          lon: 30.52,
         }),
       }),
     );
@@ -154,24 +260,16 @@ describe("reverseGeocodeCity", () => {
     vi.unstubAllGlobals();
   });
 
-  it("uses locality when city is missing", async () => {
+  it("throws when reverse geocode request fails", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          locality: "Brooklyn",
-          principalSubdivision: "New York",
-          countryName: "United States",
-        }),
+        ok: false,
+        status: 502,
       }),
     );
 
-    await expect(reverseGeocodeCity(40.65, -73.95)).resolves.toEqual({
-      label: "Brooklyn, New York, United States",
-      lat: 40.65,
-      lon: -73.95,
-    });
+    await expect(reverseGeocodeCity(50.45, 30.52)).rejects.toThrow("Reverse geocoding HTTP 502");
     vi.unstubAllGlobals();
   });
 });

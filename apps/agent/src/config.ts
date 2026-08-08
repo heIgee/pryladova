@@ -31,6 +31,8 @@ const parseProfile = (): AgentProfile => {
   return "local";
 };
 
+const stripTrailingSlashes = (url: string): string => url.replace(/\/+$/, "");
+
 const resolveApiUrl = (profile: AgentProfile): string => {
   if (profile === "remote") {
     const apiUrl = process.env.API_URL?.trim();
@@ -39,9 +41,9 @@ const resolveApiUrl = (profile: AgentProfile): string => {
         "API_URL is required when agent targets remote API (--remote or AGENT_PROFILE=remote)",
       );
     }
-    return apiUrl;
+    return stripTrailingSlashes(apiUrl);
   }
-  return process.env.DEV_API_URL?.trim() || DEFAULT_DEV_API_URL;
+  return stripTrailingSlashes(process.env.DEV_API_URL?.trim() || DEFAULT_DEV_API_URL);
 };
 
 const parseBlockedApps = (value: string | undefined): string[] => {
@@ -63,6 +65,12 @@ export const loadConfig = (): AgentConfig => {
 
   if (!Number.isFinite(pollIntervalMs) || pollIntervalMs < 500) {
     throw new Error("POLL_INTERVAL_MS must be a number >= 500");
+  }
+
+  if (profile === "remote" && !ingestSecret) {
+    throw new Error(
+      "INGEST_SECRET is required when agent targets remote API (--remote or AGENT_PROFILE=remote)",
+    );
   }
 
   return { profile, apiUrl, pollIntervalMs, blockedApps, ingestSecret };

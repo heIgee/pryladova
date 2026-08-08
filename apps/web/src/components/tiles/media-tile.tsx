@@ -7,9 +7,24 @@ import { cn } from "@/lib/utils";
 
 const artClassName = "size-24 shrink-0 rounded-lg object-cover";
 
-const MediaArt = ({ thumbnailDataUrl }: { thumbnailDataUrl: string | null }) => {
+const coverArtAlt = (title: string, artist: string | null): string => {
+  if (artist) {
+    return `Cover art for ${title} by ${artist}`;
+  }
+  return `Cover art for ${title}`;
+};
+
+const MediaArt = ({
+  thumbnailDataUrl,
+  title,
+  artist,
+}: {
+  thumbnailDataUrl: string | null;
+  title: string;
+  artist: string | null;
+}) => {
   if (thumbnailDataUrl) {
-    return <img src={thumbnailDataUrl} alt="" className={artClassName} />;
+    return <img src={thumbnailDataUrl} alt={coverArtAlt(title, artist)} className={artClassName} />;
   }
 
   return (
@@ -49,7 +64,11 @@ export const MediaTile = ({
       <CardContent className="flex min-w-0 flex-col gap-1">
         {media ? (
           <div className="flex gap-3">
-            <MediaArt thumbnailDataUrl={media.thumbnailDataUrl} />
+            <MediaArt
+              thumbnailDataUrl={media.thumbnailDataUrl}
+              title={media.title}
+              artist={media.artist}
+            />
             <div className="flex min-w-0 flex-col justify-center gap-1">
               <p className="line-clamp-2 text-body leading-snug font-medium">{media.title}</p>
               <p className="truncate text-caption text-muted-foreground">

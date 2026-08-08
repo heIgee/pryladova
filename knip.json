@@ -1,6 +1,5 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "ignoreWorkspaces": ["apps/agent"],
   "workspaces": {
     "packages/shared": {
       "project": "src/**/*.ts"
@@ -13,6 +12,11 @@
       "project": "src/**/*.{ts,tsx}",
       "ignoreExportsUsedInFile": true,
       "ignore": ["src/components/ui/**"]
+    },
+    "apps/agent": {
+      "project": "src/**/*.ts",
+      "ignoreDependencies": ["tsx", "typescript"],
+      "ignoreBinaries": ["tsx", "tsc"]
     }
   }
 }

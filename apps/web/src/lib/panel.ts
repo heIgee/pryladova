@@ -25,6 +25,19 @@ export const readStoredClassificationEnabled = (): boolean => {
   return stored === "true";
 };
 
+export const persistClassificationEnabled = (classificationEnabled: boolean): void => {
+  localStorage.setItem(CLASSIFICATION_ENABLED_KEY, String(classificationEnabled));
+};
+
+export const fetchSettings = async (): Promise<{ classificationEnabled: boolean }> => {
+  const response = await fetch(SETTINGS_ROUTE);
+  if (!response.ok) {
+    throw new Error(`Settings error (${response.status})`);
+  }
+  const json: unknown = await response.json();
+  return settingsSchema.parse(json);
+};
+
 export const syncSettings = async (classificationEnabled: boolean): Promise<void> => {
   const response = await fetch(SETTINGS_ROUTE, {
     method: "PUT",
@@ -50,8 +63,12 @@ export const fetchTelemetry = async (): Promise<PanelState> => {
   }
 
   const json: unknown = await response.json();
-  const telemetry = telemetryStateSchema.parse(json);
-  return { status: "ready", telemetry };
+  try {
+    const telemetry = telemetryStateSchema.parse(json);
+    return { status: "ready", telemetry };
+  } catch {
+    return { status: "error", message: "Invalid telemetry response" };
+  }
 };
 
 export const getAgentLastSeenMs = (panel: PanelState): number | null => {
@@ -66,3 +83,6 @@ export const getAgentLastSeenMs = (panel: PanelState): number | null => {
 
   return Math.max(...timestamps);
 };
+
+export const shouldShowMediaTile = (host: TelemetryState["host"] | undefined): boolean =>
+  host != null && host.media != null;

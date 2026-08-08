@@ -5,27 +5,26 @@ alwaysApply: true
 
 # Pryladova Monorepo
 
-## This file
-
-- `.cursor/rules/project.mdc` — always-on Cursor project rule (`alwaysApply: true`).
-- Injected into every agent request in this repo; follow it over generic model habits.
-- When editing this file, match its existing format. Do not be overly descriptive.
-
 ## Agent Communication
 
-- Terse, technical, no-fluff responses (Caveman-lite).
+- Terse, technical, no-fluff responses.
 - Drop filler, pleasantries, hedging.
 - Direct answers, code snippets, exact commands only. No yapping.
 
 ## Environment & Tooling
 
-- OS: Windows. Terminal: PowerShell.
-- Output PowerShell-compatible commands. No Bash-specific syntax.
+- OS: Windows. Terminal: PowerShell. No Bash-specific syntax.
+
+## Repo map
+
+- `apps/api` — NestJS. `apps/web` — React + Vite. `apps/agent` — Windows-only capture, native deps, `tsx`, no build step. `packages/shared` — Zod contracts, built before dev and e2e.
+- `agent` is excluded from the default install (`pnpm install --filter "!agent"`) and gated in its own `windows-latest` CI job.
+- Env samples are per app: `apps/api/.env.example`, `apps/web/.env.example`, `apps/agent/.env.example`.
 
 ## Runtime versions
 
 - Never pin or cite Node, pnpm, or dependency versions from memory.
-- Repo wins: `package.json` (`engines`, `packageManager`), lockfile.
+- Repo wins: `.node-version` (CI resolves Node from it), `package.json` (`engines`, `packageManager`), lockfile.
 - Local: `node -v`, `pnpm -v` when tooling targets this machine.
 - Upstream: `npm view <pkg> version` before greenfield defaults or version advice.
 - After verify: new production work uses Active LTS; not EOL majors (18, 20, …) unless a dependency forces it.
@@ -43,14 +42,6 @@ alwaysApply: true
 - No session-specific fixes, version pins, workarounds, or chat context in repo files.
 - Docs state what to run and where config lives — not how we debugged it once.
 - Comments: why non-obvious, not what the code already says.
-- If a fact belongs in package.json, lockfile, or .env.example — put it there, not in prose.
-
-## Docs maintenance
-
-- Living docs: behavior, deploy, env, or CI changes → update relevant doc in the same change. Do not wait to be asked.
-- Map: `deploy/*` → `deploy/README.md`; local dev → `README.md`; future work → `ROADMAP.md`.
-- Single source of truth: env vars in `.env.example`, scripts in `package.json` — docs reference, don't duplicate.
-- Notice stale or wrong docs while working → fix in that change or call it out before finishing.
 
 ## Monorepo discipline
 
@@ -64,33 +55,15 @@ alwaysApply: true
 
 - Never commit, stage, or push. User runs all git ops.
 - Active task on X — don't touch unrelated Y (other apps, packages, or files) for commit separation.
-- Commit plans should not be overly precise and small.
-
-## TypeScript (.ts/.tsx)
-
-- Explicit types at module boundaries (exports, API handlers, shared utils).
-- `const` arrow functions. `handleX` naming for event handlers.
-- Early returns over nesting.
-- No empty `catch`. No floating promises — `await` or explicit `void`.
-- Follow package's existing formatter/linter. No style opinions from this rule.
-- **`as any` forbidden.** No exceptions.
-- Avoid `as` assertions — prefer inference, narrowing, type guards, `satisfies`, generics, schema parse (Zod). Touching existing `as` → remove if feasible.
-- Unavoidable `as` only at untyped external boundary: single line, narrow immediately, comment why.
-
-## Naming
-
-- Filenames: kebab-case (`user-profile.ts`).
-- Exports: PascalCase (components/classes), camelCase (functions/variables).
 
 ## Quality bar
 
-- Complete, working changes for requested scope only.
-- No placeholders, stubs, "wire up later" unless asked.
-- Include imports/types/wiring needed to run.
-- Shared type/API contract changed → update callers, run typecheck (`pnpm -r typecheck` or local script) before done.
-- Passing build/lint/typecheck is necessary, not sufficient. Fix root cause — not symptom.
-- Forbidden to greenwash checks: `@ts-ignore` / `@ts-expect-error`, blanket `eslint-disable` / `biome-ignore`, commented-out logic, deleted validation, stub/`null as` returns, config loosening (`strict: false`, `skipLibCheck` hacks), unrelated `// @ts-nocheck`.
-- If proper fix is out of scope or blocked, stop and report — do not land a workaround in repo.
+- Applies to **all** repo changes — code, workflows, Docker, config.
+- Complete, working changes for requested scope only. No placeholders or stubs unless asked; include the imports, types, and wiring needed to run.
+- Shared type/API contract changed → update callers, typecheck before done.
+- Passing build/lint/typecheck is necessary, not sufficient.
+- **Root cause only.** A symptom fix makes the check pass without removing why it failed — wrong scope, skip/bypass flags, silencing, loosening. Forbidden, including `@ts-ignore` / `@ts-expect-error`, blanket `eslint-disable` / `biome-ignore`, commented-out logic, deleted validation, stub returns, config loosening (`strict: false`, `skipLibCheck` hacks), unrelated `// @ts-nocheck`, and the same class of bypass in workflows/Docker/config.
+- Proper fix blocked or out of scope → **stop and report**. Do not land a workaround.
 
 ## Commit-ready (agent)
 
@@ -100,47 +73,26 @@ Before calling work **done**, **QA pass**, or **commit-ready** — run full loca
 pnpm verify
 ```
 
-Mirrors `.github/workflows/ci.yml` (ubuntu job + agent job). Exit 0 required. Re-run after fixes.
+Mirrors `.github/workflows/ci.yml` (`ci` + `e2e` + `agent` jobs). Exit 0 required. Re-run after fixes.
 
 | Step | Command (inside `pnpm verify`) |
-|------|----------------------------|
+|---|---|
 | Build gate | `turbo run typecheck lint build --filter=!agent` |
 | Tests + coverage | `pnpm test:coverage` |
 | E2E | `pnpm test:e2e` |
 | Deps/exports | `pnpm knip` |
 | Agent | `turbo run typecheck lint --filter=agent` |
 
-Do **not** substitute partial checks (`pnpm test`, `pnpm check`, lint-only, typecheck-only). Pre-commit hook (Biome + typecheck) is not sufficient.
+- Expensive (full build, coverage, Playwright, knip). Run it once at the end, not per edit; `pnpm check` is the inner loop.
+- Partial checks (`pnpm test`, `pnpm check`, lint-only, typecheck-only) and the pre-commit hook do not substitute for it.
+- First-time E2E on a machine: `pnpm exec playwright install chromium`.
+- Report failures with command + error excerpt. Do not suggest commit until `pnpm verify` passes.
 
 **Dependency hygiene** (CI catches these; verify in the same pass):
-- Direct `import` of a package → declare it in **that** workspace `package.json` (`pnpm --filter <pkg> add …`). Never rely on hoisting from siblings.
-- OS/CPU-specific deps (e.g. win32 native) → no top-level import in modules loaded by cross-platform tests; use dynamic import or split pure logic.
 
-Report CI failures with command + error excerpt. Do not suggest commit until `pnpm verify` passes.
+- Direct `import` of a package → declare it in **that** workspace `package.json`. Never rely on hoisting from siblings.
+- OS/CPU-specific deps (e.g. win32 native) → no top-level import in modules loaded by cross-platform tests; use dynamic import or split pure logic.
 
 ## Env & secrets
 
 - Never commit `.env` or hardcode secrets. New config → existing env-loading pattern.
-
-## Accessibility/UI
-
-- Semantic HTML first. ARIA/keyboard only if native insufficient.
-- No default `tabindex`/`role`/`aria-*` on natively-working elements.
-- No wrapper `div`/`span` around a single child — use the semantic/interactive element directly, or flex/grid on the parent.
-
-## Testing
-
-Run `pnpm verify` before commit (matches GitHub CI). First-time E2E: `pnpm exec playwright install chromium`.
-
-| Command | What |
-|---------|------|
-| `pnpm verify` | Full CI locally: build gate, coverage, e2e, knip, agent lint/typecheck |
-| `pnpm test` | Vitest only (not commit-ready alone) |
-| `pnpm test:coverage` | Vitest with lcov |
-| `pnpm test:e2e` | Playwright: fake ingest POST → panel |
-| `pnpm check` | Typecheck + lint + build only (not commit-ready alone) |
-| `pnpm knip` | Unused exports and dependencies |
-
-## Stack-specific rules
-
-- NestJS/React/shared-Zod-types etc. → separate globbed `.mdc` files. Deferred for now.

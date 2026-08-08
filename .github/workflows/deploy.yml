@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  IMAGE_NAME: ghcr.io/heigee/pryladova-api
+  IMAGE_REPO: pryladova-api
 
 jobs:
   build-image:
@@ -21,6 +21,12 @@ jobs:
       contents: read
       packages: write
     steps:
+      - name: Normalize GHCR owner
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          echo "GHCR_OWNER=${owner}" >> "$GITHUB_ENV"
+          echo "IMAGE_NAME=ghcr.io/${owner}/${{ env.IMAGE_REPO }}" >> "$GITHUB_ENV"
+
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
@@ -54,6 +60,9 @@ jobs:
     env:
       IMAGE_TAG: ${{ github.event.workflow_run.head_sha }}
     steps:
+      - name: Normalize GHCR owner
+        run: echo "GHCR_OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
+
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
@@ -75,8 +84,8 @@ jobs:
           GHCR_USER: ${{ github.actor }}
         run: |
           set -euo pipefail
-          if [ -z "${SSH_KEY}" ] || [ -z "${VPS_HOST}" ]; then
-            echo "VPS_SSH_KEY and VPS_HOST secrets are required"
+          if [ -z "${SSH_KEY}" ] || [ -z "${VPS_HOST}" ] || [ -z "${VPS_SSH_KNOWN_HOST}" ]; then
+            echo "VPS_SSH_KEY, VPS_HOST, and VPS_SSH_KNOWN_HOST secrets are required"
             exit 1
           fi
           USER_NAME="${VPS_USER:-ubuntu}"
@@ -93,6 +102,7 @@ jobs:
 
           "${SSH[@]}" "${USER_NAME}@${VPS_HOST}" env \
             GHCR_USER="${GHCR_USER}" \
+            GHCR_OWNER="${GHCR_OWNER}" \
             IMAGE_TAG="${IMAGE_TAG}" \
             GHCR_TOKEN="${GHCR_TOKEN}" \
             bash -s <<'REMOTE'
@@ -100,13 +110,13 @@ jobs:
           cd ~/pryladova
           printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
           unset GHCR_TOKEN
-          FULL_IMAGE="ghcr.io/heigee/pryladova-api:${IMAGE_TAG}"
+          FULL_IMAGE="ghcr.io/${GHCR_OWNER}/pryladova-api:${IMAGE_TAG}"
           if ! docker image inspect "$FULL_IMAGE" >/dev/null 2>&1; then
-            IMAGE_TAG="$IMAGE_TAG" docker compose pull api
+            GHCR_OWNER="$GHCR_OWNER" IMAGE_TAG="$IMAGE_TAG" docker compose pull api
           else
             echo "Image ${FULL_IMAGE} already present — skipping pull"
           fi
-          IMAGE_TAG="$IMAGE_TAG" SENTRY_RELEASE="$IMAGE_TAG" docker compose up -d
+          GHCR_OWNER="$GHCR_OWNER" IMAGE_TAG="$IMAGE_TAG" SENTRY_RELEASE="$IMAGE_TAG" docker compose up -d
           docker logout ghcr.io
           docker image prune -f
           REMOTE

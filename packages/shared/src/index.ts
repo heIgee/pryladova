@@ -13,6 +13,11 @@ export const HOST_ROUTE = "/api/host";
 export const SETTINGS_ROUTE = "/api/settings";
 export const HEALTH_ROUTE = "/api/health";
 export const WEATHER_ROUTE = "/api/weather";
+export const WEATHER_CITIES_ROUTE = "/api/weather/cities";
+export const WEATHER_REVERSE_ROUTE = "/api/weather/reverse";
+
+/** Max base64 album-art payload length accepted on ingest (~512 KB). */
+export const THUMBNAIL_DATA_URL_MAX_LENGTH = 512_000;
 
 export const healthResponseSchema = z.object({
   ok: z.literal(true),
@@ -53,7 +58,13 @@ export const settingsSchema = z.object({
   classificationEnabled: z.boolean(),
 });
 
-export const classificationStatusSchema = z.enum(["pending", "ready", "failed", "disabled"]);
+export const classificationStatusSchema = z.enum([
+  "pending",
+  "ready",
+  "failed",
+  "misconfigured",
+  "disabled",
+]);
 
 export const telemetryPayloadSchema = z.object({
   appName: z.string().min(1),
@@ -69,7 +80,12 @@ export const hostMediaSchema = z.object({
   albumTitle: z.string().nullable(),
   appName: z.string().nullable(),
   playbackStatus: playbackStatusSchema,
-  thumbnailDataUrl: z.string().startsWith("data:image/").nullable().default(null),
+  thumbnailDataUrl: z
+    .string()
+    .startsWith("data:image/")
+    .max(THUMBNAIL_DATA_URL_MAX_LENGTH)
+    .nullable()
+    .default(null),
 });
 
 export const weatherReadySchema = z.object({
@@ -85,6 +101,15 @@ export const weatherResponseSchema = z.discriminatedUnion("status", [
   z.object({ status: z.literal("disabled") }),
   z.object({ status: z.literal("unavailable") }),
 ]);
+
+/** Identity key for a media track: same source data yields the same key regardless of case/whitespace. */
+export const trackMediaKey = (media: HostMedia): string =>
+  [
+    media.title.trim().toLowerCase(),
+    (media.artist ?? "").trim().toLowerCase(),
+    (media.albumTitle ?? "").trim().toLowerCase(),
+    (media.appName ?? "").trim().toLowerCase(),
+  ].join("|");
 
 export const hostPayloadSchema = z.object({
   idleMs: z.number().nonnegative(),
@@ -138,3 +163,30 @@ export const parseHostPayload = (body: unknown): ParseHostPayloadResult => {
   }
   return { success: false, issues: z.formatError(result.error) };
 };
+
+export const geocodeCitySchema = z.object({
+  label: z.string().min(1),
+  lat: z.number(),
+  lon: z.number(),
+});
+
+export const geocodeCitiesResponseSchema = z.array(geocodeCitySchema);
+
+export type GeocodeCity = z.infer<typeof geocodeCitySchema>;
+
+export const parseSettings = (body: unknown): Settings => settingsSchema.parse(body);
+
+export const parseTelemetryState = (state: unknown): TelemetryState =>
+  telemetryStateSchema.parse(state);
+
+export const parseHealthResponse = (response: unknown): HealthResponse =>
+  healthResponseSchema.parse(response);
+
+export const parseWeatherResponse = (response: unknown): WeatherResponse =>
+  weatherResponseSchema.parse(response);
+
+export const parseGeocodeCitiesResponse = (response: unknown): GeocodeCity[] =>
+  geocodeCitiesResponseSchema.parse(response);
+
+export const parseGeocodeCity = (response: unknown): GeocodeCity =>
+  geocodeCitySchema.parse(response);

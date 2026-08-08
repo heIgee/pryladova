@@ -2,11 +2,41 @@ import { Injectable } from "@nestjs/common";
 import {
   type HostPayload,
   isRedactedTelemetry,
+  parseTelemetryState,
   type TelemetryPayload,
   type TelemetryState,
+  trackMediaKey,
+  type WindowClassification,
 } from "@pryladova/shared";
 import { ClassificationService } from "../classification/classification.service.js";
 import { SettingsService } from "../settings/settings.service.js";
+
+type ClassificationStatus = TelemetryState["classificationStatus"];
+
+/** Status before classify() has resolved: "pending" is the only state that should trigger a run. */
+const resolvePendingStatus = (
+  classificationEnabled: boolean,
+  redacted: boolean,
+  geminiConfigured: boolean,
+): ClassificationStatus => {
+  if (!classificationEnabled) {
+    return "disabled";
+  }
+  if (redacted) {
+    return "ready";
+  }
+  return geminiConfigured ? "pending" : "misconfigured";
+};
+
+const resolveResultStatus = (
+  classification: WindowClassification | null,
+  geminiConfigured: boolean,
+): ClassificationStatus => {
+  if (classification) {
+    return "ready";
+  }
+  return geminiConfigured ? "failed" : "misconfigured";
+};
 
 @Injectable()
 export class TelemetryService {
@@ -26,15 +56,21 @@ export class TelemetryService {
     const host = this.state?.host ?? this.pendingHost;
     this.pendingHost = null;
 
-    this.state = {
+    const classificationStatus = resolvePendingStatus(
+      classificationEnabled,
+      redacted,
+      this.classificationService.isGeminiConfigured(),
+    );
+
+    this.state = parseTelemetryState({
       ...payload,
       receivedAt: new Date().toISOString(),
       classification: null,
-      classificationStatus: !classificationEnabled ? "disabled" : redacted ? "ready" : "pending",
+      classificationStatus,
       host,
-    };
+    });
 
-    if (!classificationEnabled || redacted) {
+    if (classificationStatus !== "pending") {
       return;
     }
 
@@ -42,15 +78,17 @@ export class TelemetryService {
   }
 
   setHost(payload: HostPayload): void {
+    const merged = this.mergeHostPayload(this.state?.host ?? this.pendingHost, payload);
+
     if (!this.state) {
-      this.pendingHost = payload;
+      this.pendingHost = merged;
       return;
     }
 
-    this.state = {
+    this.state = parseTelemetryState({
       ...this.state,
-      host: payload,
-    };
+      host: merged,
+    });
   }
 
   getState(): TelemetryState | null {
@@ -68,24 +106,51 @@ export class TelemetryService {
 
     const { appName, windowTitle, capturedAt } = this.state;
     const redacted = isRedactedTelemetry(appName, windowTitle);
+    const classificationStatus = resolvePendingStatus(
+      true,
+      redacted,
+      this.classificationService.isGeminiConfigured(),
+    );
 
-    if (redacted) {
-      this.state = {
-        ...this.state,
-        classification: null,
-        classificationStatus: "ready",
-      };
+    const generation = ++this.ingestGeneration;
+    this.state = parseTelemetryState({
+      ...this.state,
+      classification: null,
+      classificationStatus,
+    });
+
+    if (classificationStatus !== "pending") {
       return;
     }
 
-    const generation = ++this.ingestGeneration;
-    this.state = {
-      ...this.state,
-      classification: null,
-      classificationStatus: "pending",
-    };
-
     void this.runClassification({ appName, windowTitle, capturedAt }, generation);
+  }
+
+  private mergeHostPayload(
+    previous: HostPayload | null | undefined,
+    incoming: HostPayload,
+  ): HostPayload {
+    if (!previous?.media || !incoming.media) {
+      return incoming;
+    }
+
+    const sameTrack = trackMediaKey(previous.media) === trackMediaKey(incoming.media);
+    const preservedThumbnail =
+      sameTrack && !incoming.media.thumbnailDataUrl && previous.media.thumbnailDataUrl
+        ? previous.media.thumbnailDataUrl
+        : incoming.media.thumbnailDataUrl;
+
+    if (preservedThumbnail === incoming.media.thumbnailDataUrl) {
+      return incoming;
+    }
+
+    return {
+      ...incoming,
+      media: {
+        ...incoming.media,
+        thumbnailDataUrl: preservedThumbnail,
+      },
+    };
   }
 
   private async runClassification(payload: TelemetryPayload, generation: number): Promise<void> {
@@ -100,11 +165,11 @@ export class TelemetryService {
 
     if (!this.settingsService.isClassificationEnabled()) {
       if (this.state) {
-        this.state = {
+        this.state = parseTelemetryState({
           ...this.state,
           classification: null,
           classificationStatus: "disabled",
-        };
+        });
       }
       return;
     }
@@ -113,10 +178,15 @@ export class TelemetryService {
       return;
     }
 
-    this.state = {
+    const classificationStatus = resolveResultStatus(
+      classification,
+      this.classificationService.isGeminiConfigured(),
+    );
+
+    this.state = parseTelemetryState({
       ...this.state,
       classification,
-      classificationStatus: classification ? "ready" : "failed",
-    };
+      classificationStatus,
+    });
   }
 }

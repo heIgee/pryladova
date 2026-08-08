@@ -7,6 +7,7 @@ import { WindowTile } from "@/components/tiles/window-tile";
 import { Card, CardContent } from "@/components/ui/card";
 import { WeatherHeader } from "@/components/weather-header";
 import { useDashboard } from "@/hooks/use-dashboard";
+import { shouldShowMediaTile } from "@/lib/panel";
 import { cn } from "@/lib/utils";
 
 const AgentHint = ({ className }: { className?: string }) => (
@@ -17,6 +18,9 @@ export const App = () => {
   const {
     panel,
     classificationEnabled,
+    settingsError,
+    settingsSyncing,
+    settingsReady,
     showAgentHint,
     theme,
     weather,
@@ -79,7 +83,7 @@ export const App = () => {
   }
 
   const { telemetry } = panel;
-  const showMediaTile = telemetry.host?.media !== null;
+  const showMediaTile = shouldShowMediaTile(telemetry.host);
 
   return (
     <Shell>
@@ -88,6 +92,9 @@ export const App = () => {
         <WindowTile
           telemetry={telemetry}
           classificationEnabled={classificationEnabled}
+          settingsError={settingsError}
+          settingsSyncing={settingsSyncing}
+          settingsReady={settingsReady}
           onClassificationChange={handleClassificationToggle}
         />
         <div
