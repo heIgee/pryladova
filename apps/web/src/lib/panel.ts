@@ -1,12 +1,11 @@
 import {
+  type PanelWsMessage,
   SETTINGS_ROUTE,
   settingsSchema,
-  TELEMETRY_ROUTE,
   type TelemetryState,
-  telemetryStateSchema,
 } from "@pryladova/shared";
+import { apiFetch } from "./api-fetch.js";
 
-export const POLL_INTERVAL_MS = 2000;
 export const WEATHER_POLL_INTERVAL_MS = 1_800_000;
 export const AGENT_HINT_AFTER_MS = 10_000;
 export const CLASSIFICATION_ENABLED_KEY = "pryladova.classificationEnabled";
@@ -30,7 +29,7 @@ export const persistClassificationEnabled = (classificationEnabled: boolean): vo
 };
 
 export const fetchSettings = async (): Promise<{ classificationEnabled: boolean }> => {
-  const response = await fetch(SETTINGS_ROUTE);
+  const response = await apiFetch(SETTINGS_ROUTE);
   if (!response.ok) {
     throw new Error(`Settings error (${response.status})`);
   }
@@ -39,7 +38,7 @@ export const fetchSettings = async (): Promise<{ classificationEnabled: boolean 
 };
 
 export const syncSettings = async (classificationEnabled: boolean): Promise<void> => {
-  const response = await fetch(SETTINGS_ROUTE, {
+  const response = await apiFetch(SETTINGS_ROUTE, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ classificationEnabled }),
@@ -51,24 +50,12 @@ export const syncSettings = async (classificationEnabled: boolean): Promise<void
   settingsSchema.parse(json);
 };
 
-export const fetchTelemetry = async (): Promise<PanelState> => {
-  const response = await fetch(TELEMETRY_ROUTE);
-
-  if (response.status === 404) {
+export const panelStateFromWsMessage = (message: PanelWsMessage): PanelState => {
+  if (message.type === "empty") {
     return { status: "empty" };
   }
 
-  if (!response.ok) {
-    return { status: "error", message: `API error (${response.status})` };
-  }
-
-  const json: unknown = await response.json();
-  try {
-    const telemetry = telemetryStateSchema.parse(json);
-    return { status: "ready", telemetry };
-  } catch {
-    return { status: "error", message: "Invalid telemetry response" };
-  }
+  return { status: "ready", telemetry: message.telemetry };
 };
 
 export const getAgentLastSeenMs = (panel: PanelState): number | null => {
@@ -82,6 +69,15 @@ export const getAgentLastSeenMs = (panel: PanelState): number | null => {
   }
 
   return Math.max(...timestamps);
+};
+
+export const isAgentStale = (panel: PanelState, nowMs = Date.now()): boolean => {
+  const lastSeenMs = getAgentLastSeenMs(panel);
+  if (lastSeenMs === null) {
+    return false;
+  }
+
+  return nowMs - lastSeenMs >= AGENT_HINT_AFTER_MS;
 };
 
 export const shouldShowMediaTile = (host: TelemetryState["host"] | undefined): boolean =>

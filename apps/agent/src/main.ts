@@ -1,9 +1,4 @@
-import {
-  HOST_ROUTE,
-  type HostPayload,
-  TELEMETRY_ROUTE,
-  type TelemetryPayload,
-} from "@pryladova/shared";
+import type { HostPayload, TelemetryPayload } from "@pryladova/shared";
 import { loadConfig } from "./config.js";
 import { initHostMetrics, readHostMetrics } from "./host-metrics.js";
 import { readNowPlaying, trackMediaKey } from "./now-playing.js";
@@ -13,12 +8,7 @@ import {
   sanitizeSnapshot,
   shouldOmitHostMedia,
 } from "./privacy.js";
-
-const POST_TIMEOUT_MS = 30_000;
-const POST_ERROR_BODY_MAX = 200;
-
-const truncatePostErrorBody = (text: string): string =>
-  text.length <= POST_ERROR_BODY_MAX ? text : `${text.slice(0, POST_ERROR_BODY_MAX)}…`;
+import { type AgentWsClient, connectAgentWs } from "./ws-client.js";
 
 type HostPayloadPost = Omit<HostPayload, "cpuPercent"> & { cpuPercent?: number };
 
@@ -97,32 +87,25 @@ const buildHostPayload = async (
   };
 };
 
-const postJson = async (
-  url: string,
-  body: unknown,
-  ingestSecret: string | undefined,
-): Promise<void> => {
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (ingestSecret) {
-    headers.Authorization = `Bearer ${ingestSecret}`;
-  }
-
-  const response = await fetch(url, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(POST_TIMEOUT_MS),
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    const body = truncatePostErrorBody(text);
-    throw new Error(`POST ${url} failed (${response.status}): ${body}`);
-  }
-};
-
 const snapshotKey = (payload: TelemetryPayload): string =>
   `${payload.appName}|${payload.windowTitle}`;
+
+const connectWithRetry = async (
+  apiUrl: string,
+  ingestSecret: string | undefined,
+): Promise<AgentWsClient> => {
+  for (;;) {
+    try {
+      return await connectAgentWs(apiUrl, ingestSecret);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`[agent] ws connect failed: ${message}`);
+      await new Promise((resolve) => {
+        setTimeout(resolve, 2_000);
+      });
+    }
+  }
+};
 
 const run = async (): Promise<void> => {
   const config = loadConfig();
@@ -133,6 +116,7 @@ const run = async (): Promise<void> => {
   let lastTrackKey = "";
   let cachedThumbnail: string | null = null;
   let tickInFlight = false;
+  let client = await connectWithRetry(config.apiUrl, config.ingestSecret);
 
   const tick = async (): Promise<void> => {
     const foreground = await readActiveWindow();
@@ -142,31 +126,34 @@ const run = async (): Promise<void> => {
       foreground,
       blockedApps,
     );
+
     if (hostResult.host.cpuPercent !== undefined) {
-      await postJson(
-        `${config.apiUrl}${HOST_ROUTE}`,
-        hostResult.host as HostPayload,
-        config.ingestSecret,
-      );
-      // Track cache only after a successful host POST — otherwise the CPU warm-up skip
-      // marks the current track as "seen" and the next POST omits the thumbnail.
-      lastTrackKey = hostResult.lastTrackKey;
-      cachedThumbnail = hostResult.cachedThumbnail;
+      let telemetry: TelemetryPayload | undefined;
+      if (foreground) {
+        const payload = buildTelemetryPayload(foreground, blockedApps);
+        const key = snapshotKey(payload);
+        if (key !== lastKey) {
+          telemetry = payload;
+          lastKey = key;
+          console.log(`[agent] ${payload.appName} — ${payload.windowTitle}`);
+        }
+      }
+
+      try {
+        client.sendUpdate(hostResult.host as HostPayload, telemetry);
+        lastTrackKey = hostResult.lastTrackKey;
+        cachedThumbnail = hostResult.cachedThumbnail;
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`[agent] ws update send failed: ${message}`);
+        client.close();
+        client = await connectWithRetry(config.apiUrl, config.ingestSecret);
+      }
     }
 
     if (!foreground) {
       return;
     }
-
-    const payload = buildTelemetryPayload(foreground, blockedApps);
-    const key = snapshotKey(payload);
-    if (key === lastKey) {
-      return;
-    }
-
-    await postJson(`${config.apiUrl}${TELEMETRY_ROUTE}`, payload, config.ingestSecret);
-    lastKey = key;
-    console.log(`[agent] ${payload.appName} — ${payload.windowTitle}`);
   };
 
   const runTick = async (): Promise<void> => {

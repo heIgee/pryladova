@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { forwardRef, Inject, Injectable } from "@nestjs/common";
 import {
   type HostPayload,
   isRedactedTelemetry,
@@ -9,6 +9,7 @@ import {
   type WindowClassification,
 } from "@pryladova/shared";
 import { ClassificationService } from "../classification/classification.service.js";
+import { RealtimeService } from "../realtime/realtime.service.js";
 import { SettingsService } from "../settings/settings.service.js";
 
 type ClassificationStatus = TelemetryState["classificationStatus"];
@@ -43,13 +44,67 @@ export class TelemetryService {
   private state: TelemetryState | null = null;
   private pendingHost: HostPayload | null = null;
   private ingestGeneration = 0;
+  private publishQueued = false;
 
   constructor(
     private readonly classificationService: ClassificationService,
     private readonly settingsService: SettingsService,
+    @Inject(forwardRef(() => RealtimeService))
+    private readonly realtimeService: RealtimeService,
   ) {}
 
+  private publishState(): void {
+    if (this.publishQueued) {
+      return;
+    }
+
+    this.publishQueued = true;
+    queueMicrotask(() => {
+      this.publishQueued = false;
+      this.realtimeService.broadcastPanelState(this.state);
+    });
+  }
+
+  ingestAgentUpdate(host: HostPayload, telemetry?: TelemetryPayload): void {
+    if (!telemetry) {
+      this.applyHost(host);
+      return;
+    }
+
+    const generation = ++this.ingestGeneration;
+    const classificationEnabled = this.settingsService.isClassificationEnabled();
+    const redacted = isRedactedTelemetry(telemetry.appName, telemetry.windowTitle);
+    const mergedHost = this.mergeHostPayload(this.state?.host ?? this.pendingHost, host);
+    this.pendingHost = null;
+
+    const classificationStatus = resolvePendingStatus(
+      classificationEnabled,
+      redacted,
+      this.classificationService.isGeminiConfigured(),
+    );
+
+    this.state = parseTelemetryState({
+      ...telemetry,
+      receivedAt: new Date().toISOString(),
+      classification: null,
+      classificationStatus,
+      host: mergedHost,
+    });
+
+    this.publishState();
+
+    if (classificationStatus !== "pending") {
+      return;
+    }
+
+    void this.runClassification(telemetry, generation);
+  }
+
   setState(payload: TelemetryPayload): void {
+    this.applyTelemetry(payload);
+  }
+
+  private applyTelemetry(payload: TelemetryPayload): void {
     const generation = ++this.ingestGeneration;
     const classificationEnabled = this.settingsService.isClassificationEnabled();
     const redacted = isRedactedTelemetry(payload.appName, payload.windowTitle);
@@ -70,6 +125,8 @@ export class TelemetryService {
       host,
     });
 
+    this.publishState();
+
     if (classificationStatus !== "pending") {
       return;
     }
@@ -77,7 +134,7 @@ export class TelemetryService {
     void this.runClassification(payload, generation);
   }
 
-  setHost(payload: HostPayload): void {
+  private applyHost(payload: HostPayload): void {
     const merged = this.mergeHostPayload(this.state?.host ?? this.pendingHost, payload);
 
     if (!this.state) {
@@ -89,6 +146,11 @@ export class TelemetryService {
       ...this.state,
       host: merged,
     });
+    this.publishState();
+  }
+
+  setHost(payload: HostPayload): void {
+    this.applyHost(payload);
   }
 
   getState(): TelemetryState | null {
@@ -118,6 +180,8 @@ export class TelemetryService {
       classification: null,
       classificationStatus,
     });
+
+    this.publishState();
 
     if (classificationStatus !== "pending") {
       return;
@@ -170,6 +234,7 @@ export class TelemetryService {
           classification: null,
           classificationStatus: "disabled",
         });
+        this.publishState();
       }
       return;
     }
@@ -188,5 +253,6 @@ export class TelemetryService {
       classification,
       classificationStatus,
     });
+    this.publishState();
   }
 }

@@ -1,26 +1,11 @@
 {$PRYLADOVA_DOMAIN} {
-	# Agent ingest — Bearer INGEST_SECRET enforced by Nest (no Caddy basic auth)
-	@ingest {
-		method POST
-		path /api/telemetry /api/host
-	}
-	handle @ingest {
-		reverse_proxy 127.0.0.1:3000
-	}
-
-	# Panel API reads/settings — replace hash on server only (caddy hash-password); never commit real value
+	# API and WebSockets — Nest enforces panel and agent authentication.
 	handle /api/* {
-		basic_auth {
-			admin REPLACE_WITH_BCRYPT_HASH
-		}
 		reverse_proxy 127.0.0.1:3000
 	}
 
-	# Static web SPA
+	# Static web SPA — login handled by the app
 	handle {
-		basic_auth {
-			admin REPLACE_WITH_BCRYPT_HASH
-		}
 		root * {$PRYLADOVA_WEB_ROOT}
 		encode gzip
 		try_files {path} /index.html

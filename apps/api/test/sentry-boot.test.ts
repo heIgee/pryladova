@@ -1,8 +1,8 @@
 import "reflect-metadata";
 import type { INestApplication } from "@nestjs/common";
-import { Test } from "@nestjs/testing";
 import request from "supertest";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createHttpTestApp } from "./http-test-app.js";
 
 describe("Sentry boot", () => {
   const previousDsn = process.env.SENTRY_DSN;
@@ -21,14 +21,9 @@ describe("Sentry boot", () => {
     process.env.SENTRY_DSN = "https://examplePublicKey@o0.ingest.sentry.io/0";
 
     await import("../src/instrument.js");
-    const { AppModule } = await import("../src/app.module.js");
+    const { ConfigService } = await import("../src/config.service.js");
 
-    const moduleRef = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
-
-    const app: INestApplication = moduleRef.createNestApplication();
-    await app.init();
+    const app: INestApplication = await createHttpTestApp(new ConfigService().config);
 
     await request(app.getHttpServer())
       .get("/api/health")

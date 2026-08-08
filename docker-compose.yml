@@ -1,6 +1,6 @@
 services:
   api:
-    image: ghcr.io/${GHCR_OWNER}/pryladova-api:${IMAGE_TAG:-latest}
+    image: ghcr.io/${GHCR_OWNER}/pryladova-api:${IMAGE_TAG}
     container_name: pryladova-api
     restart: unless-stopped
     env_file:

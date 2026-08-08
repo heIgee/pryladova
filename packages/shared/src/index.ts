@@ -8,13 +8,16 @@ export {
 } from "./spinner-verbs.js";
 export { weatherCodeToCondition } from "./weather-codes.js";
 
-export const TELEMETRY_ROUTE = "/api/telemetry";
-export const HOST_ROUTE = "/api/host";
 export const SETTINGS_ROUTE = "/api/settings";
 export const HEALTH_ROUTE = "/api/health";
+export const AUTH_LOGIN_ROUTE = "/api/auth/login";
+export const AUTH_LOGOUT_ROUTE = "/api/auth/logout";
+export const AUTH_SESSION_ROUTE = "/api/auth/session";
 export const WEATHER_ROUTE = "/api/weather";
 export const WEATHER_CITIES_ROUTE = "/api/weather/cities";
 export const WEATHER_REVERSE_ROUTE = "/api/weather/reverse";
+export const PANEL_WS_ROUTE = "/api/ws/panel";
+export const AGENT_WS_ROUTE = "/api/ws/agent";
 
 /** Max base64 album-art payload length accepted on ingest (~512 KB). */
 export const THUMBNAIL_DATA_URL_MAX_LENGTH = 512_000;
@@ -25,6 +28,17 @@ export const healthResponseSchema = z.object({
 });
 
 export type HealthResponse = z.infer<typeof healthResponseSchema>;
+
+export const loginRequestSchema = z.object({
+  password: z.string().min(1),
+});
+
+export const authSessionResponseSchema = z.object({
+  authenticated: z.boolean(),
+});
+
+export type LoginRequest = z.infer<typeof loginRequestSchema>;
+export type AuthSessionResponse = z.infer<typeof authSessionResponseSchema>;
 
 export const SECURE_APP_NAME = "Secure";
 export const SECURE_WINDOW_TITLE = "Redacted";
@@ -127,6 +141,32 @@ export const telemetryStateSchema = telemetryPayloadSchema.extend({
   host: hostPayloadSchema.nullable(),
 });
 
+export const panelWsMessageSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("state"),
+    telemetry: telemetryStateSchema,
+  }),
+  z.object({
+    type: z.literal("empty"),
+  }),
+]);
+
+export const agentWsInboundSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("update"),
+    host: hostPayloadSchema,
+    telemetry: telemetryPayloadSchema.optional(),
+  }),
+  z.object({
+    type: z.literal("host"),
+    payload: hostPayloadSchema,
+  }),
+  z.object({
+    type: z.literal("telemetry"),
+    payload: telemetryPayloadSchema,
+  }),
+]);
+
 export type ActivityCategory = z.infer<typeof activityCategorySchema>;
 export type WindowClassification = z.infer<typeof windowClassificationSchema>;
 export type WorkRelated = z.infer<typeof workRelatedSchema>;
@@ -137,32 +177,10 @@ export type PlaybackStatus = z.infer<typeof playbackStatusSchema>;
 export type HostMedia = z.infer<typeof hostMediaSchema>;
 export type HostPayload = z.infer<typeof hostPayloadSchema>;
 export type TelemetryState = z.infer<typeof telemetryStateSchema>;
+export type PanelWsMessage = z.infer<typeof panelWsMessageSchema>;
+export type AgentWsInbound = z.infer<typeof agentWsInboundSchema>;
 export type WeatherReady = z.infer<typeof weatherReadySchema>;
 export type WeatherResponse = z.infer<typeof weatherResponseSchema>;
-
-export type ParseTelemetryPayloadResult =
-  | { success: true; data: TelemetryPayload }
-  | { success: false; issues: z.core.$ZodFormattedError<unknown> };
-
-export type ParseHostPayloadResult =
-  | { success: true; data: HostPayload }
-  | { success: false; issues: z.core.$ZodFormattedError<unknown> };
-
-export const parseTelemetryPayload = (body: unknown): ParseTelemetryPayloadResult => {
-  const result = telemetryPayloadSchema.safeParse(body);
-  if (result.success) {
-    return { success: true, data: result.data };
-  }
-  return { success: false, issues: z.formatError(result.error) };
-};
-
-export const parseHostPayload = (body: unknown): ParseHostPayloadResult => {
-  const result = hostPayloadSchema.safeParse(body);
-  if (result.success) {
-    return { success: true, data: result.data };
-  }
-  return { success: false, issues: z.formatError(result.error) };
-};
 
 export const geocodeCitySchema = z.object({
   label: z.string().min(1),
@@ -182,6 +200,11 @@ export const parseTelemetryState = (state: unknown): TelemetryState =>
 export const parseHealthResponse = (response: unknown): HealthResponse =>
   healthResponseSchema.parse(response);
 
+export const parseLoginRequest = (body: unknown): LoginRequest => loginRequestSchema.parse(body);
+
+export const parseAuthSessionResponse = (response: unknown): AuthSessionResponse =>
+  authSessionResponseSchema.parse(response);
+
 export const parseWeatherResponse = (response: unknown): WeatherResponse =>
   weatherResponseSchema.parse(response);
 
@@ -190,3 +213,9 @@ export const parseGeocodeCitiesResponse = (response: unknown): GeocodeCity[] =>
 
 export const parseGeocodeCity = (response: unknown): GeocodeCity =>
   geocodeCitySchema.parse(response);
+
+export const parsePanelWsMessage = (body: unknown): PanelWsMessage =>
+  panelWsMessageSchema.parse(body);
+
+export const parseAgentWsInbound = (body: unknown): AgentWsInbound =>
+  agentWsInboundSchema.parse(body);

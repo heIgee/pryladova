@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
+import { panelPassword } from "./constants.js";
 
 const errorBoundaryText = "Something went wrong loading the panel.";
-
 test.describe("panel production bundle", () => {
   test("loads the panel shell without an error-boundary crash", async ({ page }) => {
     const consoleErrors: string[] = [];
@@ -12,6 +12,8 @@ test.describe("panel production bundle", () => {
     });
 
     await page.goto("/");
+    await page.getByLabel("Password").fill(panelPassword);
+    await page.getByRole("button", { name: "Sign in" }).click();
     await expect(page.getByRole("heading", { name: "Pryladova", level: 1 })).toBeVisible();
     await expect(page.getByText(errorBoundaryText)).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Reload" })).toHaveCount(0);

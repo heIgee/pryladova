@@ -27,12 +27,15 @@
   "devDependencies": {
     "@biomejs/biome": "^2.5.1",
     "@playwright/test": "^1.62.0",
+    "@pryladova/shared": "workspace:*",
+    "@types/ws": "^8.18.1",
     "@vitest/coverage-v8": "^4.1.10",
     "concurrently": "^10.0.3",
     "knip": "^6.23.0",
     "lefthook": "^2.1.9",
     "turbo": "^2.10.0",
     "vitest": "^4.1.10",
-    "wait-on": "^9.0.10"
+    "wait-on": "^9.0.10",
+    "ws": "^8.21.3"
   }
 }

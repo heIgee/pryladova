@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   fetchSettings,
-  fetchTelemetry,
   getAgentLastSeenMs,
+  isAgentStale,
   type PanelState,
   shouldShowMediaTile,
   syncSettings,
@@ -108,71 +108,6 @@ describe("shouldShowMediaTile", () => {
   });
 });
 
-describe("fetchTelemetry", () => {
-  it("returns empty on 404", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        status: 404,
-        ok: false,
-      }),
-    );
-
-    await expect(fetchTelemetry()).resolves.toEqual({ status: "empty" });
-    vi.unstubAllGlobals();
-  });
-
-  it("returns ready state for valid telemetry", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        status: 200,
-        ok: true,
-        json: async () => readyTelemetry,
-      }),
-    );
-
-    await expect(fetchTelemetry()).resolves.toEqual({
-      status: "ready",
-      telemetry: readyTelemetry,
-    });
-    vi.unstubAllGlobals();
-  });
-
-  it("returns error on failed response", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        status: 500,
-        ok: false,
-      }),
-    );
-
-    await expect(fetchTelemetry()).resolves.toEqual({
-      status: "error",
-      message: "API error (500)",
-    });
-    vi.unstubAllGlobals();
-  });
-
-  it("returns error when response fails schema validation", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        status: 200,
-        ok: true,
-        json: async () => ({ appName: "Code" }),
-      }),
-    );
-
-    await expect(fetchTelemetry()).resolves.toEqual({
-      status: "error",
-      message: "Invalid telemetry response",
-    });
-    vi.unstubAllGlobals();
-  });
-});
-
 describe("getAgentLastSeenMs", () => {
   it("returns null for non-ready panels", () => {
     const panel: PanelState = { status: "empty" };
@@ -182,6 +117,20 @@ describe("getAgentLastSeenMs", () => {
   it("returns latest timestamp from telemetry and host", () => {
     const panel: PanelState = { status: "ready", telemetry: readyTelemetry };
     expect(getAgentLastSeenMs(panel)).toBe(Date.parse("2026-01-01T12:00:02.000Z"));
+  });
+});
+
+describe("isAgentStale", () => {
+  it("is false when host was seen within the threshold", () => {
+    const panel: PanelState = { status: "ready", telemetry: readyTelemetry };
+    const now = Date.parse("2026-01-01T12:00:02.000Z") + 5_000;
+    expect(isAgentStale(panel, now)).toBe(false);
+  });
+
+  it("is true when host was last seen beyond the threshold", () => {
+    const panel: PanelState = { status: "ready", telemetry: readyTelemetry };
+    const now = Date.parse("2026-01-01T12:00:02.000Z") + 10_000;
+    expect(isAgentStale(panel, now)).toBe(true);
   });
 });
 

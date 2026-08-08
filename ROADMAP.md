@@ -6,7 +6,7 @@ Future work — not scheduled. Current stack and deploy: [README.md](README.md),
 
 **Supabase** as the system of record for window history. Live host metrics (CPU, RAM, uptime, media) stay ephemeral in the API — not a stored time series.
 
-- **Persist window segments, not polls** — the agent already POSTs only on focus change, so each ingest closes the open segment and opens the next
+- **Persist window segments, not polls** — the agent sends window telemetry only on focus change (WS ingest), so each focus-change message closes the open segment and opens the next
 - Aggregate on read (day view = time per app); no pre-rollup until query cost justifies one
 - **Persist settings** (classification toggle survives API restart)
 - Web reads history through the API first. **Supabase Realtime** direct to the browser comes after: it needs anon-key RLS policies, and the panel still depends on the API for ephemeral host state either way
@@ -15,8 +15,8 @@ Future work — not scheduled. Current stack and deploy: [README.md](README.md),
 
 - One open segment per agent, enforced by a partial unique index (`ended_at is null`) rather than application code
 - Both interval ends come from agent `capturedAt`, so durations do not inherit network latency
-- **Stale close** — host POSTs refresh `last_seen_at`; after a gap (sleep, crash, network loss) the open segment closes at `last_seen_at`, not at wake, and records why it closed
-- Decide whether `idleMs` closes a segment or accrues inside it — "time focused" and "time active" are different claims
+- **Stale close** — host ticks (WS) refresh `last_seen_at`; after a gap (sleep, crash, network loss) the open segment closes at `last_seen_at`, not at wake, and records why it closed
+- Decide whether `idleMs` closes a segment or accrues inside it — **decided: accrues inside segment**
 - Redacted segments are stored as `Secure` / `Redacted`: accurate totals, no leaked titles
 - `agent_id` column from the first migration, before multi-agent needs it
 - Optional `eventId` on the telemetry payload with a unique constraint — required before the agent retry queue can replay without double-counting
@@ -25,9 +25,9 @@ Future work — not scheduled. Current stack and deploy: [README.md](README.md),
 
 ## Identity and config (self-hosted)
 
-Today: one hub — Caddy **basic auth** for panel reads, shared **`INGEST_SECRET`** Bearer for agent ingest. No user accounts, no per-agent id, no integration token storage.
+Today: one hub — Nest **session cookie** for panel reads, shared **`INGEST_SECRET`** Bearer for agent ingest. No user accounts, no per-agent id, no integration token storage.
 
-**Security model (intentional):** Nest does not guard panel routes (`GET/PUT /api/settings`, `GET /api/telemetry`). Production relies on Caddy basic auth + API bound to localhost in Docker. Nest-layer guards are deferred (defense-in-depth for dev/exposed ports).
+**Security model:** Nest guards panel routes (`GET/PUT /api/settings`, weather) and panel WebSocket. Single password from env (`PANEL_PASSWORD_HASH`). Caddy = TLS + reverse proxy. API bound to localhost in Docker.
 
 - Per-agent identity in env → include in ingest; panel labels machines when multi-agent lands
 - **Integration keys on the server** — env-based secrets (same pattern as existing API keys): configure once, restart API
@@ -52,9 +52,8 @@ Server-side fetch + cache (minutes-scale TTL). Not agent OAuth except where OS a
 
 ## API / ops
 
-- Panel Nest auth (optional defense-in-depth when API run outside Caddy)
-- E2E coverage for production auth path (Caddy basic auth + ingest secret)
-- External uptime checks against `/api/health` need Caddy basic-auth credentials (see deploy README)
+- Panel Nest auth (done — session cookie; see `deploy/README.md`)
+- E2E coverage for production auth path (panel login + ingest secret) — partial in `e2e/panel*.spec.ts`
 - LLM classification treats window title and app name as untrusted input; trust boundary is the agent/OS
 - Reject or sanitize non-raster `thumbnailDataUrl` at the API/shared boundary (SVG etc.)
 - Contract tests: API responses satisfy shared Zod output schemas
@@ -73,7 +72,7 @@ Server-side fetch + cache (minutes-scale TTL). Not agent OAuth except where OS a
 - **Node.js SEA** (Single Executable Application) for a distributable `.exe` — alternative to long-running Node + pm2
 - Graceful shutdown (clear poll interval on SIGINT/SIGTERM)
 - `pickCurrentSession` stable tie-breaking when multiple SMTC sessions share rank
-- Degrade gracefully when `active-win` fails — don't skip window telemetry after a successful host POST
+- Degrade gracefully when `active-win` fails — don't skip window telemetry after a successful host tick
 - Reset track/thumbnail cache when SMTC session clears (avoid stale re-fetch when media resumes)
 
 ## Product and UX
@@ -82,7 +81,7 @@ Server-side fetch + cache (minutes-scale TTL). Not agent OAuth except where OS a
 - Multi-machine / multi-agent identity in payloads
 - Weather popover full a11y (arrow keys, focus trap, `aria-activedescendant`)
 - Consolidate WMO weather code → icon mapping in shared (web header duplicates text mapping today)
-- Host CPU/RAM/media can go stale if host POSTs stop while window telemetry still updates
+- Host CPU/RAM/media can go stale if host ticks stop while window telemetry still updates
 - Use shared release from `GET /api/health` for deploy verification (web uses build-time `VITE_APP_RELEASE` today)
 
 ## Internationalization

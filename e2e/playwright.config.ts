@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
+import { ingestSecret } from "./constants.js";
 
 export default defineConfig({
   testDir: ".",
@@ -35,6 +36,9 @@ export default defineConfig({
       env: {
         NODE_ENV: "test",
         PORT: "3000",
+        SESSION_SECRET: "e2e-session-secret-at-least-32-characters-long",
+        PANEL_PASSWORD_HASH: "$2b$10$TtcGsCYSJ53WtzGpi0k7lOXLR3yY2n2jrjAnw0grKQFPV9sCEtQuq",
+        INGEST_SECRET: ingestSecret,
       },
     },
     {

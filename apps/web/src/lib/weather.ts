@@ -7,6 +7,7 @@ import {
   type WeatherResponse,
   weatherResponseSchema,
 } from "@pryladova/shared";
+import { apiFetch } from "./api-fetch.js";
 import type { WeatherLocation } from "./weather-location.js";
 
 export type GeocodeResult = {
@@ -36,7 +37,7 @@ export const fetchWeather = async (
   options?: { refresh?: boolean },
 ): Promise<WeatherResponse> => {
   try {
-    const response = await fetch(buildWeatherUrl(location, options));
+    const response = await apiFetch(buildWeatherUrl(location, options));
     if (!response.ok) {
       return { status: "unavailable" };
     }
@@ -54,7 +55,7 @@ export const searchWeatherCities = async (query: string): Promise<GeocodeResult[
   }
 
   const params = new URLSearchParams({ q: trimmed });
-  const response = await fetch(`${WEATHER_CITIES_ROUTE}?${params}`);
+  const response = await apiFetch(`${WEATHER_CITIES_ROUTE}?${params}`);
   if (!response.ok) {
     throw new Error(`City search HTTP ${response.status}`);
   }
@@ -68,7 +69,7 @@ export const reverseGeocodeCity = async (lat: number, lon: number): Promise<Geoc
     lat: String(lat),
     lon: String(lon),
   });
-  const response = await fetch(`${WEATHER_REVERSE_ROUTE}?${params}`);
+  const response = await apiFetch(`${WEATHER_REVERSE_ROUTE}?${params}`);
   if (!response.ok) {
     throw new Error(`Reverse geocoding HTTP ${response.status}`);
   }

@@ -24,9 +24,22 @@ export const ReleaseTag = () => {
   );
 };
 
-export const Shell = ({ children }: { children: ReactNode }) => (
-  <main className="min-h-screen bg-background">
-    <div className="mx-auto flex w-full max-w-4xl flex-col gap-5 px-4 py-8">{children}</div>
+export const Shell = ({
+  children,
+  centered = false,
+}: {
+  children: ReactNode;
+  centered?: boolean;
+}) => (
+  <main className="flex min-h-screen flex-col bg-background">
+    <div
+      className={cn(
+        "mx-auto flex w-full max-w-4xl flex-1 flex-col gap-5 px-4",
+        centered ? "items-center justify-center py-8" : "py-8",
+      )}
+    >
+      {children}
+    </div>
     <ReleaseTag />
   </main>
 );

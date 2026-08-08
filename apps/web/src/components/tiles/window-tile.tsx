@@ -11,6 +11,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
+import { useClassificationDisplay } from "@/hooks/use-classification-display";
 
 const MutedChip = ({ children }: { children: ReactNode }) => (
   <span className="inline-flex h-5 items-center rounded-md bg-muted px-2 text-micro font-medium leading-none text-muted-foreground">
@@ -41,9 +42,16 @@ export const WindowTile = ({
   settingsReady: boolean;
   onClassificationChange: (enabled: boolean) => void;
 }) => {
-  const classification = telemetry.classification;
   const status = telemetry.classificationStatus;
-  const displayName = classification?.displayAppName ?? telemetry.appName;
+  const {
+    badgeClassification,
+    showCategory,
+    showWorkChip,
+    showSpinner,
+    isClassificationFailed,
+    isMisconfigured,
+  } = useClassificationDisplay(telemetry, classificationEnabled);
+  const displayName = telemetry.classification?.displayAppName ?? telemetry.appName;
 
   const windowSubtitle =
     telemetry.windowTitle.trim().length > 0 &&
@@ -52,19 +60,10 @@ export const WindowTile = ({
       ? telemetry.windowTitle
       : null;
 
-  const showCategory = classificationEnabled && status === "ready" && classification !== null;
-  const showWorkChip =
-    classificationEnabled &&
-    status === "ready" &&
-    classification !== null &&
-    classification.workRelated !== "maybe";
-  const isClassifying = classificationEnabled && status === "pending";
-  const isClassificationFailed = classificationEnabled && status === "failed";
-  const isMisconfigured = classificationEnabled && status === "misconfigured";
   const showClassificationChips =
     showCategory ||
     showWorkChip ||
-    isClassifying ||
+    showSpinner ||
     isClassificationFailed ||
     isMisconfigured ||
     !classificationEnabled ||
@@ -80,11 +79,11 @@ export const WindowTile = ({
         {showClassificationChips ? (
           <CardAction>
             <div className="flex max-w-full flex-wrap justify-end gap-1.5">
-              {showCategory ? <Badge>{classification.category}</Badge> : null}
+              {showCategory ? <Badge>{badgeClassification?.category}</Badge> : null}
               {showWorkChip ? (
-                <Badge>{classification.workRelated === "yes" ? "Work" : "Personal"}</Badge>
+                <Badge>{badgeClassification?.workRelated === "yes" ? "Work" : "Personal"}</Badge>
               ) : null}
-              {isClassifying ? (
+              {showSpinner ? (
                 <Badge variant="secondary">{pickSpinnerVerb(classificationSeed(telemetry))}…</Badge>
               ) : null}
               {isClassificationFailed ? (

@@ -19,7 +19,7 @@ fi
 if [[ ! -f "${PRYLADOVA_HOME}/.env" ]]; then
   cp "${SCRIPT_DIR}/env.example" "${PRYLADOVA_HOME}/.env"
   chmod 600 "${PRYLADOVA_HOME}/.env"
-  echo "created ${PRYLADOVA_HOME}/.env — set INGEST_SECRET (and optional GEMINI_*)"
+  echo "created ${PRYLADOVA_HOME}/.env — set INGEST_SECRET, SESSION_SECRET, PANEL_PASSWORD_HASH_B64 (and optional GEMINI_*)"
 else
   echo "ok: ${PRYLADOVA_HOME}/.env exists"
 fi
@@ -30,7 +30,7 @@ Host layout ready at ${PRYLADOVA_HOME}
 
 Next:
   1. Edit ${PRYLADOVA_HOME}/.env
-  2. Copy deploy/host.env.example → /etc/caddy/pryladova.env (domain + web root); set basic_auth hash in /etc/caddy/Caddyfile
+  2. Copy deploy/host.env.example → /etc/caddy/pryladova.env (domain + web root)
   3. Configure Caddy — see deploy/README.md
   4. Add GitHub deploy secrets; push to main
 

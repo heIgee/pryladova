@@ -1,9 +1,11 @@
 import { Module } from "@nestjs/common";
 import { APP_FILTER, APP_GUARD } from "@nestjs/core";
 import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
+import { AuthModule } from "./auth/auth.module.js";
 import { loadConfig } from "./config.js";
 import { ConfigModule } from "./config.module.js";
 import { HealthModule } from "./health/health.module.js";
+import { RealtimeModule } from "./realtime/realtime.module.js";
 import { ApiSentryExceptionFilter } from "./sentry-exception.filter.js";
 import { TelemetryModule } from "./telemetry/telemetry.module.js";
 import { WeatherModule } from "./weather/weather.module.js";
@@ -28,8 +30,10 @@ const throttlerProviders = throttlingEnabled
       },
     ]),
     ConfigModule,
+    AuthModule,
     HealthModule,
     TelemetryModule,
+    RealtimeModule,
     WeatherModule,
   ],
   providers: [...sentryProviders, ...throttlerProviders],

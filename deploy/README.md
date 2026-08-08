@@ -28,11 +28,28 @@ flowchart LR
 ### Production runtime
 
 ```mermaid
-flowchart LR
-  browser[Browser] -->|HTTPS| caddy[Caddy :443]
-  agent[Windows agent] -->|POST /api/telemetry| caddy
-  caddy --> spa[Static SPA<br/>~/pryladova/web]
-  caddy --> api[API container<br/>127.0.0.1:3000]
+flowchart TB
+  subgraph clients [Clients]
+    browser[Browser]
+    agent[Windows agent]
+  end
+
+  caddy[Caddy :443]
+
+  subgraph host [Linux host]
+    spa[Static SPA<br/>~/pryladova/web]
+    api[API container<br/>127.0.0.1:3000]
+  end
+
+  browser -->|HTTPS session cookie| caddy
+  browser -->|WSS /api/ws/panel| caddy
+  agent -->|WSS /api/ws/agent + Bearer| caddy
+
+  caddy --> spa
+  caddy --> api
+
+  agent -.->|ingest| api
+  api -.->|stream| browser
 ```
 
 Caddy, `.env`, and Caddyfile are configured **once on the host** — not touched by CI.
@@ -55,7 +72,7 @@ Caddy, `.env`, and Caddyfile are configured **once on the host** — not touched
 | [`bootstrap.sh`](bootstrap.sh) | Host (once) | Create `~/pryladova/web`, seed API `.env` |
 | [`env.example`](env.example) | API container | Template for `~/pryladova/.env` |
 | [`host.env.example`](host.env.example) | Caddy | Template for `/etc/caddy/pryladova.env` |
-| [`Caddyfile`](Caddyfile) | Caddy | TLS, routing, basic auth for panel |
+| [`Caddyfile`](Caddyfile) | Caddy | TLS, routing |
 | [`../docker-compose.yml`](../docker-compose.yml) | Host Docker | Runs API image on `127.0.0.1:3000` |
 | [`uptime-kuma/docker-compose.yml`](uptime-kuma/docker-compose.yml) | Host Docker (optional) | Self-hosted uptime UI on `127.0.0.1:3002` |
 
@@ -63,11 +80,19 @@ Caddy, `.env`, and Caddyfile are configured **once on the host** — not touched
 
 | File on host | Variables | Consumed by |
 |--------------|-----------|-------------|
-| `~/pryladova/.env` | `INGEST_SECRET`, `GEMINI_*`, `SENTRY_*`, `PORT` | API Docker container |
+| `~/pryladova/.env` | `INGEST_SECRET`, `SESSION_SECRET`, `PANEL_PASSWORD_HASH_B64`, `GEMINI_*`, `SENTRY_*`, `PORT`, `GHCR_OWNER` | API Docker container + compose |
 | `/etc/caddy/pryladova.env` | `PRYLADOVA_DOMAIN`, `PRYLADOVA_WEB_ROOT` | Caddy process |
-| `/etc/caddy/Caddyfile` | Panel `basic_auth` bcrypt hash | Caddy (server-only; not in env) |
 
-Same name pattern on `.env` files, different jobs. API secrets never go in the Caddy env file.
+**Panel password on prod:** Docker Compose mangles `$` in bcrypt hashes. Set `PANEL_PASSWORD_HASH_B64` (not plain `PANEL_PASSWORD_HASH`):
+
+```bash
+caddy hash-password | base64 -w0
+# paste into PANEL_PASSWORD_HASH_B64=...
+```
+
+Local dev keeps plain `PANEL_PASSWORD_HASH` in `apps/api/.env` — Node loads it directly.
+
+Same `.env` name pattern on the host, different jobs. API secrets never go in the Caddy env file.
 
 ## First-time host setup
 
@@ -93,10 +118,14 @@ Edit API env:
 ```bash
 nano ~/pryladova/.env
 # Required: INGEST_SECRET=<long random string>
+# Required: SESSION_SECRET=<long random string>
+# Required: PANEL_PASSWORD_HASH_B64=<output of: caddy hash-password | base64 -w0>
 # Optional: GEMINI_API_KEY, GEMINI_MODEL
-# Optional: SENTRY_DSN=<same DSN as VITE_SENTRY_DSN>
+# Optional: SENTRY_DSN=<real DSN from Sentry project settings>
 # SENTRY_RELEASE is injected by deploy (git sha); do not set manually.
 ```
+
+Sign in with the **plaintext password** you typed into `caddy hash-password`, not the hash or base64 string.
 
 ### 3. Caddy edge config
 
@@ -120,7 +149,7 @@ EOF
 sudo systemctl daemon-reload
 ```
 
-**Caddyfile** (routing + panel password hash):
+**Caddyfile** (routing):
 
 ```bash
 # Option A: this app is the only site on the host
@@ -129,8 +158,6 @@ sudo cp deploy/Caddyfile /etc/caddy/Caddyfile
 # Option B: other sites already on the host — add to existing Caddyfile:
 #   import /home/ubuntu/pryladova/deploy/Caddyfile
 ```
-
-Replace both `REPLACE_WITH_BCRYPT_HASH` lines in `/etc/caddy/Caddyfile` with your hash (`caddy hash-password`). **Do not commit the real hash.** When updating the Caddyfile from repo later, re-paste your existing hash.
 
 ```bash
 sudo caddy validate --config /etc/caddy/Caddyfile --envfile /etc/caddy/pryladova.env
@@ -216,7 +243,7 @@ Open `http://localhost:3002`, create the admin user, then add monitors:
 
 | Monitor | URL | Notes |
 |---------|-----|-------|
-| Edge (recommended) | `https://<PRYLADOVA_DOMAIN>/api/health` | Full stack; set HTTP basic auth (same as panel) |
+| Edge (recommended) | `https://<PRYLADOVA_DOMAIN>/api/health` | Full stack; no panel login required |
 | API container | `http://pryladova-api:3000/api/health` | Only after joining Kuma to the API compose network (see below) |
 
 The API binds to `127.0.0.1:3000` on the host, so `http://host.docker.internal:3000` from a default-bridge container will **not** reach it. Prefer the Caddy edge URL, or attach Kuma to the API network:
@@ -242,7 +269,7 @@ Free SaaS uptime checks from outside the VPS. Catches whole-host outages that [U
 1. Sign up at [uptimerobot.com](https://uptimerobot.com)
 2. Add monitor → type **HTTP(s)** → URL `https://<PRYLADOVA_DOMAIN>/api/health`
 3. Interval **5 minutes**; add alert contact (email or Telegram)
-4. **HTTP auth:** enable basic auth with the same user/password as the Caddy panel (`/api/*` is protected)
+4. No HTTP auth on `/api/health` — health stays public
 5. Optional keyword: `ok`
 
 ## Observability
@@ -293,11 +320,12 @@ Official references (UI changes over time): [DSN](https://docs.sentry.io/product
 3. **GitHub** → repo → Settings → Secrets and variables → Actions:
    - **Variables:** `VITE_SENTRY_DSN`
    - **Secrets:** `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT`
-4. **VPS** — add to `~/pryladova/.env`:
+4. **VPS** — paste the **Client DSN** from Sentry project settings into `~/pryladova/.env`:
    ```env
-   SENTRY_DSN=<same DSN>
+   SENTRY_DSN=https://xxxxxxxx@o0.ingest.sentry.io/0
    ```
-   Restart API: `docker compose -f ~/pryladova/docker-compose.yml up -d` (or wait for the next deploy — CI sets `SENTRY_RELEASE` to the git sha on each deploy).
+   Do **not** set `SENTRY_RELEASE` in `.env` — deploy passes the git sha at `docker compose up` time.
+   Restart API: `docker compose -f ~/pryladova/docker-compose.yml up -d` (or wait for the next deploy).
 5. Merge to `main` (or re-run Deploy). CI uploads source maps when the three Sentry secrets are set; EU DSNs auto-use `https://de.sentry.io` (override with `SENTRY_URL` in the deploy workflow if needed). Upload failure fails the build. Maps are not deployed to `~/pryladova/web/`.
 6. Open the live panel. Issues may show a sample event until the first real error from your app.
 
@@ -312,7 +340,7 @@ From [`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml) (triggere
 3. SSH: `mkdir -p ~/pryladova/web`
 4. SCP `docker-compose.yml` → `~/pryladova/`
 5. SCP `apps/web/dist/*` → `~/pryladova/web/`
-6. Remote: `docker login ghcr.io` → pull `api` only if `<sha>` image missing locally → `docker compose up -d` with `IMAGE_TAG=<sha>` → `docker logout ghcr.io`
+6. Remote: persist `IMAGE_TAG=<sha>` in `~/pryladova/.env` → pull if missing → `docker compose up -d`
 
 Web files update immediately. API restarts with the pinned image tag. No Caddy reload unless you changed Caddy config manually.
 
@@ -338,39 +366,41 @@ Use a fine-grained PAT with **read:packages** only. Deploy workflow does not rel
 On the host:
 
 ```bash
-curl -s http://127.0.0.1:3000/api/health          # {"ok":true,"release":"<git-sha>"}
-docker compose -f ~/pryladova/docker-compose.yml ps
+docker compose ps                              # IMAGE column = git sha from .env, not :latest
+curl -s http://127.0.0.1:3000/api/health     # release should match IMAGE_TAG
 ```
+
+Manual restarts: `docker compose up -d` from `~/pryladova` only — deploy writes `IMAGE_TAG` to `.env` each run. Do not run compose from an old git checkout in another directory.
 
 Optional external uptime: [UptimeRobot](#uptimerobot-optional-external). Self-hosted internal uptime: [Uptime Kuma](#uptime-kuma-optional-self-hosted).
 
 From your PC:
 
 ```bash
-# Panel (will prompt for basic auth)
-curl -u admin: https://<PRYLADOVA_DOMAIN>/api/telemetry
+# Panel login (browser) — sign in at https://<PRYLADOVA_DOMAIN>/
+# API health (public)
+curl -s https://<PRYLADOVA_DOMAIN>/api/health
 
-# Ingest (replace SECRET)
-curl -X POST https://<PRYLADOVA_DOMAIN>/api/telemetry \
-  -H "Authorization: Bearer SECRET" \
-  -H "Content-Type: application/json" \
-  -d '{"appName":"Test","windowTitle":"Hi","capturedAt":"2026-01-01T00:00:00.000Z"}'
 ```
 
 ## Routing reference
 
 | Request | Edge auth | App auth |
 |---------|-----------|----------|
-| `GET /` (SPA) | Caddy basic auth | — |
-| `GET /api/*` (panel) | Caddy basic auth | — |
-| `POST /api/telemetry`, `POST /api/host` | None | Nest `INGEST_SECRET` Bearer |
+| `GET /` (SPA) | — | Panel session (login form) |
+| `GET /api/health` | — | Public |
+| `GET/PUT /api/*` (panel REST) | — | Nest session cookie |
+| `WSS /api/ws/panel` | — | Nest session cookie |
+| `WSS /api/ws/agent` | — | Nest `INGEST_SECRET` Bearer |
 
 ## Troubleshooting
 
 | Symptom | Check |
 |---------|-------|
-| 502 on `/api/*` | `docker compose ps` in `~/pryladova`; `curl localhost:3000/api/health` |
+| 404 on `/api/auth/*`, logs missing AuthModule | `docker compose ps` — tag must be deploy sha (`IMAGE_TAG` in `.env`), not `:latest` |
+| 502 on `/api/*` | `docker compose ps` in `~/pryladova`; `curl localhost:3000/api/health`; `docker logs pryladova-api` |
+| Compose warns `$… variable is not set` | Plain `PANEL_PASSWORD_HASH` in `.env` — use `PANEL_PASSWORD_HASH_B64` instead |
 | Agent 401 | `INGEST_SECRET` match between agent `.env` and `~/pryladova/.env` |
-| Panel 401 | Caddy `basic_auth` user/password; hash in `/etc/caddy/Caddyfile` |
+| Panel 401 | Sign in at `/`; check `SESSION_SECRET` and `PANEL_PASSWORD_HASH_B64` in `~/pryladova/.env` |
 | Caddy fails to start | `sudo caddy validate --config /etc/caddy/Caddyfile --envfile /etc/caddy/pryladova.env`; env vars set? |
 | `docker pull` 403 | GHCR package visibility; deploy workflow logs in via `GITHUB_TOKEN` |

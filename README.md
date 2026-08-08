@@ -46,13 +46,15 @@ Optional env — copy `apps/api/.env.example` to `apps/api/.env`:
 |----------|---------|-------------|
 | `GEMINI_API_KEY` | — | Google AI Studio key; without it classification is disabled |
 | `GEMINI_MODEL` | `gemini-3.1-flash-lite` | Gemini model id for window classification |
-| `INGEST_SECRET` | — | Shared secret for `POST /api/telemetry` and `POST /api/host`; required in production |
+| `INGEST_SECRET` | — | Shared secret for agent WebSocket (`Authorization: Bearer …`); required in production |
+| `SESSION_SECRET` | (see `.env.example`) | Signs panel session cookies; required |
+| `PANEL_PASSWORD_HASH` | (see `.env.example`) | Bcrypt hash for panel login (`caddy hash-password`); required |
 
 When `GEMINI_API_KEY` is missing or the LLM call fails, telemetry is still stored with `classificationStatus: "failed"`.
 
 Classification runs asynchronously after POST — the agent gets `204` immediately; the web panel may show a pending spinner verb until the result arrives.
 
-**2. Agent** — polls active window (`POST /api/telemetry` on change) and host metrics (`POST /api/host` every poll)
+**2. Agent** — active window + host metrics over WebSocket (`/api/ws/agent`)
 
 ```powershell
 pnpm dev:agent         # local API (DEV_API_URL)
@@ -83,7 +85,7 @@ Optional env — copy `apps/agent/.env.example` to `apps/agent/.env` (not commit
 pnpm dev:web
 ```
 
-Open the web URL. Telemetry appears after the agent sends the first POST. Click the weather chip to use browser location or search a city; choice is saved in the browser.
+Open the web URL and sign in (dev password in `apps/api/.env.example`). Telemetry appears after the agent connects. The panel streams state over WebSocket; login uses the session cookie on `/api/auth/*`. Click the weather chip to use browser location or search a city; choice is saved in the browser.
 
 ## Scripts
 
@@ -106,7 +108,7 @@ Open the web URL. Telemetry appears after the agent sends the first POST. Click 
 
 ## Testing
 
-Automated coverage focuses on privacy, typed contracts, ingest auth, async classification, and the API → web poll path. Windows agent capture stays manual.
+Automated coverage focuses on privacy, typed contracts, ingest auth, async classification, and the API → web stream path. Windows agent capture stays manual.
 
 Before commit: `pnpm verify` (build, tests, coverage, e2e, knip, agent checks).
 
@@ -115,37 +117,49 @@ Before commit: `pnpm verify` (build, tests, coverage, e2e, knip, agent checks).
 | `pnpm verify` | Full local CI — run before commit |
 | `pnpm test` | Vitest unit + integration |
 | `pnpm test:coverage` | Same, with lcov output |
-| `pnpm test:e2e` | Playwright: fake ingest POST → panel |
+| `pnpm test:e2e` | Playwright: login + agent WebSocket update → panel |
 
 First-time E2E: `pnpm exec playwright install chromium`
 
-## Manual API check
-
-```powershell
-$body = '{"appName":"Test","windowTitle":"Hello","capturedAt":"2026-06-29T10:00:00.000Z"}'
-Invoke-WebRequest -Uri http://localhost:3000/api/telemetry -Method POST -ContentType "application/json" -Body $body
-Invoke-WebRequest -Uri http://localhost:3000/api/telemetry
-```
-
-If `INGEST_SECRET` is set on the API, add header `Authorization: Bearer <secret>` to the POST.
-
 ## Production
 
-Single Linux host (currently Oracle VPS + DuckDNS). **Step-by-step runbook:** [`deploy/README.md`](deploy/README.md).
+Same three apps as local dev; production serves the built SPA from disk and routes `/api/*` through Caddy instead of the Vite dev proxy.
 
+Single Linux host (currently Oracle VPS + DuckDNS). **Step-by-step runbook:** [`deploy/README.md`](deploy/README.md) (panel auth: `SESSION_SECRET`, `PANEL_PASSWORD_HASH` / `_B64`).
+
+```mermaid
+flowchart TB
+  subgraph clients [Clients]
+    browser[Browser]
+    agent[Windows agent]
+  end
+
+  caddy[Caddy :443<br/>TLS + reverse proxy]
+
+  subgraph host [Linux host]
+    spa[Static SPA<br/>~/pryladova/web]
+    api[Nest API container<br/>127.0.0.1:3000]
+  end
+
+  browser -->|HTTPS /, /api/*<br/>session cookie| caddy
+  browser -->|WSS /api/ws/panel<br/>session cookie| caddy
+  agent -->|WSS /api/ws/agent<br/>Bearer INGEST_SECRET| caddy
+
+  caddy -->|/ except /api/*| spa
+  caddy -->|/api/*| api
+
+  agent -.->|telemetry + host| api
+  api -.->|panel state stream| browser
 ```
-Browser ── basic auth ──► Caddy ── /              ► ~/pryladova/web (SPA)
-                         Caddy ── /api/*          ► API container (basic auth)
-Agent  ── Bearer ingest ─► Caddy ── POST ingest   ► API (Nest checks INGEST_SECRET)
-                         API container ──────────► 127.0.0.1:3000
-```
+
+Dashed arrows = logical data flow over the connections above (not a separate network path).
 
 | Piece | Where | Auto on push to `main`? |
 |-------|-------|-------------------------|
 | API container | `~/pryladova/` + [`docker-compose.yml`](docker-compose.yml) | Yes |
 | Web static files | `~/pryladova/web/` | Yes |
-| API secrets | `~/pryladova/.env` ← [`deploy/env.example`](deploy/env.example) | No — edit on host |
-| Caddy / TLS / panel auth | `/etc/caddy/Caddyfile` (+ domain/root via [`deploy/host.env.example`](deploy/host.env.example)) | No — edit on host |
+| API secrets + panel auth | `~/pryladova/.env` ← [`deploy/env.example`](deploy/env.example) | No — edit on host |
+| Caddy / TLS | `/etc/caddy/Caddyfile` (+ domain/root via [`deploy/host.env.example`](deploy/host.env.example)) | No — edit on host |
 | Agent | `apps/agent/.env` on Windows | No — edit on PC |
 
 Push to `main` → [CI](.github/workflows/ci.yml) must pass → [Deploy](.github/workflows/deploy.yml) builds the API image, uploads web + compose, restarts API.

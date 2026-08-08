@@ -85,3 +85,9 @@ yarn.lock
 *.local
 *.pem
 .vercel
+
+# Markdown — ignore by default
+*.md
+!README.md
+!ROADMAP.md
+!deploy/README.md

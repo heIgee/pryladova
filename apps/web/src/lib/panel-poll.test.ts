@@ -1,21 +1,38 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-describe("panel-poll store", () => {
+class MockWebSocket {
+  static instances: MockWebSocket[] = [];
+  static OPEN = 1;
+
+  readyState = MockWebSocket.OPEN;
+  onopen: (() => void) | null = null;
+  onmessage: ((event: MessageEvent<string>) => void) | null = null;
+  onclose: (() => void) | null = null;
+  onerror: (() => void) | null = null;
+
+  constructor(_url: string) {
+    MockWebSocket.instances.push(this);
+    queueMicrotask(() => {
+      this.onopen?.();
+    });
+  }
+
+  close = vi.fn(() => {
+    this.onclose?.();
+  });
+
+  send = vi.fn();
+}
+
+describe("panel stream store", () => {
   afterEach(() => {
     vi.resetModules();
     vi.unstubAllGlobals();
+    MockWebSocket.instances = [];
   });
 
-  it("reuses one store across snapshot reads in production-like builds", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockImplementation(
-        () =>
-          new Promise(() => {
-            /* keep poll pending */
-          }),
-      ),
-    );
+  it("reuses one store across snapshot reads", async () => {
+    vi.stubGlobal("WebSocket", MockWebSocket);
 
     const { getPanelPollSnapshot, subscribePanelPoll } = await import("./panel-poll.js");
 
@@ -28,16 +45,20 @@ describe("panel-poll store", () => {
     unsubscribe();
   });
 
-  it("clears the poll timer when the last listener unsubscribes", async () => {
-    const clearInterval = vi.fn();
-    const setInterval = vi.fn(() => 42);
-    vi.stubGlobal("clearInterval", clearInterval);
-    vi.stubGlobal("setInterval", setInterval as unknown as typeof globalThis.setInterval);
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({
+  it("applies websocket state messages", async () => {
+    vi.stubGlobal("WebSocket", MockWebSocket);
+
+    const { getPanelPollSnapshot, subscribePanelPoll } = await import("./panel-poll.js");
+    const states: string[] = [];
+    const unsubscribe = subscribePanelPoll(() => {
+      states.push(getPanelPollSnapshot().status);
+    });
+
+    const socket = MockWebSocket.instances[0];
+    socket.onmessage?.({
+      data: JSON.stringify({
+        type: "state",
+        telemetry: {
           appName: "Code",
           windowTitle: "app.tsx",
           capturedAt: "2026-01-01T12:00:00.000Z",
@@ -45,17 +66,28 @@ describe("panel-poll store", () => {
           classification: null,
           classificationStatus: "disabled",
           host: null,
-        }),
+        },
       }),
-    );
+    } as MessageEvent<string>);
 
-    const { subscribePanelPoll } = await import("./panel-poll.js");
-
-    const unsubscribe = subscribePanelPoll(() => {});
-    expect(setInterval).toHaveBeenCalledOnce();
+    expect(getPanelPollSnapshot()).toEqual({
+      status: "ready",
+      telemetry: expect.objectContaining({ appName: "Code" }),
+    });
 
     unsubscribe();
-    expect(clearInterval).toHaveBeenCalledOnce();
-    expect(clearInterval).toHaveBeenCalledWith(42);
+    expect(states).toContain("ready");
+  });
+
+  it("closes the socket when the last listener unsubscribes", async () => {
+    vi.stubGlobal("WebSocket", MockWebSocket);
+
+    const { subscribePanelPoll } = await import("./panel-poll.js");
+    const unsubscribe = subscribePanelPoll(() => {});
+    const socket = MockWebSocket.instances[0];
+
+    unsubscribe();
+
+    expect(socket.close).toHaveBeenCalledOnce();
   });
 });

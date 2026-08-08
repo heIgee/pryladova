@@ -5,6 +5,7 @@ import { IngestAuthGuard } from "./ingest-auth.guard.js";
 
 const createContext = (authorization?: string): ExecutionContext =>
   ({
+    getType: () => "http",
     switchToHttp: () => ({
       getRequest: () => ({
         headers: { authorization },

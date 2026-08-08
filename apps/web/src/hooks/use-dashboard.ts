@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import {
   AGENT_HINT_AFTER_MS,
   fetchSettings,
-  getAgentLastSeenMs,
+  isAgentStale,
   persistClassificationEnabled,
   readStoredClassificationEnabled,
   syncSettings,
@@ -130,13 +130,16 @@ export const useDashboard = () => {
       };
     }
 
-    const lastSeenMs = getAgentLastSeenMs(panel);
-    if (lastSeenMs === null) {
-      setShowAgentHint(false);
-      return;
-    }
+    const evaluate = (): void => {
+      setShowAgentHint(isAgentStale(panel));
+    };
 
-    setShowAgentHint(Date.now() - lastSeenMs >= AGENT_HINT_AFTER_MS);
+    evaluate();
+    const timer = window.setInterval(evaluate, 1_000);
+
+    return () => {
+      window.clearInterval(timer);
+    };
   }, [panel]);
 
   const handleClassificationToggle = (enabled: boolean): void => {

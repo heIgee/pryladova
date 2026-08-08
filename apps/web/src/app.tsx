@@ -1,11 +1,13 @@
 import { pickRandomSpinnerVerb } from "@pryladova/shared";
 import { useMemo } from "react";
 import { BentoGrid, PageHeader, Shell, ThemeToggle } from "@/components/layout/shell";
+import { LoginForm } from "@/components/login-form";
 import { MachineTile } from "@/components/tiles/machine-tile";
 import { MediaTile } from "@/components/tiles/media-tile";
 import { WindowTile } from "@/components/tiles/window-tile";
 import { Card, CardContent } from "@/components/ui/card";
 import { WeatherHeader } from "@/components/weather-header";
+import { useAuth } from "@/hooks/use-auth";
 import { useDashboard } from "@/hooks/use-dashboard";
 import { shouldShowMediaTile } from "@/lib/panel";
 import { cn } from "@/lib/utils";
@@ -14,7 +16,7 @@ const AgentHint = ({ className }: { className?: string }) => (
   <p className={cn("text-caption text-destructive", className)}>Check that the agent is running.</p>
 );
 
-export const App = () => {
+const Dashboard = () => {
   const {
     panel,
     classificationEnabled,
@@ -106,4 +108,23 @@ export const App = () => {
       </BentoGrid>
     </Shell>
   );
+};
+
+export const App = () => {
+  const { status, error, login } = useAuth();
+
+  if (status === "loading") {
+    return (
+      <Shell>
+        <PageHeader />
+        <p className="text-muted-foreground">Loading…</p>
+      </Shell>
+    );
+  }
+
+  if (status === "anonymous") {
+    return <LoginForm error={error} onLogin={login} />;
+  }
+
+  return <Dashboard />;
 };

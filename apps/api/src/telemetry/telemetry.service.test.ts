@@ -2,6 +2,7 @@ import { Test } from "@nestjs/testing";
 import { SECURE_APP_NAME, SECURE_WINDOW_TITLE, type WindowClassification } from "@pryladova/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ClassificationService } from "../classification/classification.service.js";
+import { RealtimeService } from "../realtime/realtime.service.js";
 import { SettingsService } from "../settings/settings.service.js";
 import { TelemetryService } from "./telemetry.service.js";
 
@@ -27,6 +28,12 @@ const createService = async (classifyImpl?: ClassificationService["classify"]) =
         useValue: {
           classify: classifyImpl ?? vi.fn().mockResolvedValue(classification),
           isGeminiConfigured: vi.fn().mockReturnValue(true),
+        },
+      },
+      {
+        provide: RealtimeService,
+        useValue: {
+          broadcastPanelState: vi.fn(),
         },
       },
     ],
@@ -91,6 +98,30 @@ describe("TelemetryService", () => {
     expect(telemetryService.getState()?.host?.cpuPercent).toBe(10);
   });
 
+  it("ingestAgentUpdate publishes once for host and telemetry together", async () => {
+    const { telemetryService } = await createService();
+    const broadcast = vi.fn();
+    (
+      telemetryService as unknown as { realtimeService: { broadcastPanelState: typeof broadcast } }
+    ).realtimeService = { broadcastPanelState: broadcast };
+
+    telemetryService.ingestAgentUpdate(
+      {
+        idleMs: 0,
+        cpuPercent: 10,
+        ramPercent: 20,
+        uptimeSec: 100,
+        media: null,
+        capturedAt: "2026-01-01T12:00:01.000Z",
+      },
+      telemetryPayload,
+    );
+
+    await Promise.resolve();
+    expect(broadcast).toHaveBeenCalledTimes(1);
+    expect(telemetryService.getState()?.host?.cpuPercent).toBe(10);
+  });
+
   it("preserves thumbnail when host post omits it for unchanged track", async () => {
     const { telemetryService } = await createService();
     telemetryService.setState(telemetryPayload);
@@ -140,6 +171,12 @@ describe("TelemetryService", () => {
           useValue: {
             classify,
             isGeminiConfigured: vi.fn().mockReturnValue(false),
+          },
+        },
+        {
+          provide: RealtimeService,
+          useValue: {
+            broadcastPanelState: vi.fn(),
           },
         },
       ],
