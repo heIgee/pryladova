@@ -1,5 +1,5 @@
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import {
   isRedactedTelemetry,
   type WindowClassification,
@@ -7,7 +7,10 @@ import {
 } from "@pryladova/shared";
 import { generateObject } from "ai";
 import { ConfigService } from "../config.service.js";
+import { formatPersistenceError, isSchemaMissingError } from "../persistence/persistence-error.js";
+import { SupabaseService } from "../persistence/supabase.service.js";
 import { SettingsService } from "../settings/settings.service.js";
+import { parseClassificationCacheRow } from "./classification-cache.logic.js";
 
 const CACHE_MAX_ENTRIES = 256;
 
@@ -16,12 +19,15 @@ const escapePromptField = (value: string): string =>
 
 @Injectable()
 export class ClassificationService {
+  private readonly logger = new Logger(ClassificationService.name);
   private readonly cache = new Map<string, WindowClassification>();
   private warnedMissingKey = false;
+  private schemaMissingLogged = false;
 
   constructor(
     private readonly configService: ConfigService,
     private readonly settingsService: SettingsService,
+    private readonly supabaseService: SupabaseService,
   ) {}
 
   isGeminiConfigured(): boolean {
@@ -38,12 +44,21 @@ export class ClassificationService {
     }
 
     const cacheKey = `${appName}|${windowTitle}`;
-    const cached = this.readCache(cacheKey);
-    if (cached) {
+    const memoryCached = this.readMemoryCache(cacheKey);
+    if (memoryCached) {
       console.log(
-        `[api] classification cache hit 0ms category=${cached.category} workRelated=${cached.workRelated}`,
+        `[api] classification cache hit memory category=${memoryCached.category} workRelated=${memoryCached.workRelated}`,
       );
-      return cached;
+      return memoryCached;
+    }
+
+    const dbCached = await this.readDbCache(appName, windowTitle);
+    if (dbCached) {
+      this.writeMemoryCache(cacheKey, dbCached);
+      console.log(
+        `[api] classification cache hit db category=${dbCached.category} workRelated=${dbCached.workRelated}`,
+      );
+      return dbCached;
     }
 
     const { config } = this.configService;
@@ -74,7 +89,8 @@ For workRelated: use "yes" only when clearly work/dev; "no" when clearly persona
       });
 
       const elapsedMs = Math.round(performance.now() - started);
-      this.writeCache(cacheKey, object);
+      this.writeMemoryCache(cacheKey, object);
+      void this.writeDbCache(appName, windowTitle, object);
       console.log(
         `[api] classification gemini ${elapsedMs}ms model=${config.geminiModel} category=${object.category} workRelated=${object.workRelated}`,
       );
@@ -87,7 +103,7 @@ For workRelated: use "yes" only when clearly work/dev; "no" when clearly persona
     }
   }
 
-  private readCache(key: string): WindowClassification | undefined {
+  private readMemoryCache(key: string): WindowClassification | undefined {
     const value = this.cache.get(key);
     if (value === undefined) {
       return undefined;
@@ -97,7 +113,7 @@ For workRelated: use "yes" only when clearly work/dev; "no" when clearly persona
     return value;
   }
 
-  private writeCache(key: string, value: WindowClassification): void {
+  private writeMemoryCache(key: string, value: WindowClassification): void {
     if (this.cache.has(key)) {
       this.cache.delete(key);
     }
@@ -108,5 +124,79 @@ For workRelated: use "yes" only when clearly work/dev; "no" when clearly persona
         this.cache.delete(oldest);
       }
     }
+  }
+
+  private async readDbCache(
+    appName: string,
+    windowTitle: string,
+  ): Promise<WindowClassification | null> {
+    if (!this.supabaseService.isConfigured()) {
+      return null;
+    }
+
+    try {
+      const { data, error } = await this.supabaseService
+        .getClient()
+        .from("classification_cache")
+        .select("app_name, window_title, classification, updated_at")
+        .eq("app_name", appName)
+        .eq("window_title", windowTitle)
+        .maybeSingle();
+
+      if (error) {
+        this.logCachePersistenceFailure("read", error);
+        return null;
+      }
+
+      if (!data) {
+        return null;
+      }
+
+      return parseClassificationCacheRow(data);
+    } catch (error: unknown) {
+      this.logCachePersistenceFailure("read", error);
+      return null;
+    }
+  }
+
+  private async writeDbCache(
+    appName: string,
+    windowTitle: string,
+    classification: WindowClassification,
+  ): Promise<void> {
+    if (!this.supabaseService.isConfigured()) {
+      return;
+    }
+
+    try {
+      const { error } = await this.supabaseService.getClient().from("classification_cache").upsert(
+        {
+          app_name: appName,
+          window_title: windowTitle,
+          classification,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "app_name,window_title" },
+      );
+
+      if (error) {
+        this.logCachePersistenceFailure("write", error);
+      }
+    } catch (error: unknown) {
+      this.logCachePersistenceFailure("write", error);
+    }
+  }
+
+  private logCachePersistenceFailure(context: "read" | "write", error: unknown): void {
+    const detail = formatPersistenceError(error);
+    if (isSchemaMissingError(detail)) {
+      if (!this.schemaMissingLogged) {
+        this.schemaMissingLogged = true;
+        this.logger.warn(`[classification] cache ${context} skipped — schema not applied`);
+      }
+      return;
+    }
+
+    this.logger.warn(`[classification] cache ${context} failed: ${detail}`);
   }
 }

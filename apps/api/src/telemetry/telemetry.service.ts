@@ -2,13 +2,15 @@ import { forwardRef, Inject, Injectable } from "@nestjs/common";
 import {
   type HostPayload,
   isRedactedTelemetry,
+  mergeHostPayload,
   parseTelemetryState,
   type TelemetryPayload,
   type TelemetryState,
-  trackMediaKey,
   type WindowClassification,
 } from "@pryladova/shared";
 import { ClassificationService } from "../classification/classification.service.js";
+import { AgentBindingService } from "../ingest/agent-binding.service.js";
+import { SegmentService } from "../persistence/segment.service.js";
 import { RealtimeService } from "../realtime/realtime.service.js";
 import { SettingsService } from "../settings/settings.service.js";
 
@@ -45,10 +47,13 @@ export class TelemetryService {
   private pendingHost: HostPayload | null = null;
   private ingestGeneration = 0;
   private publishQueued = false;
+  private publishHostQueued = false;
 
   constructor(
     private readonly classificationService: ClassificationService,
     private readonly settingsService: SettingsService,
+    private readonly segmentService: SegmentService,
+    private readonly agentBindingService: AgentBindingService,
     @Inject(forwardRef(() => RealtimeService))
     private readonly realtimeService: RealtimeService,
   ) {}
@@ -65,9 +70,24 @@ export class TelemetryService {
     });
   }
 
-  ingestAgentUpdate(host: HostPayload, telemetry?: TelemetryPayload): void {
+  private publishHost(): void {
+    if (this.publishHostQueued) {
+      return;
+    }
+
+    this.publishHostQueued = true;
+    queueMicrotask(() => {
+      this.publishHostQueued = false;
+      const host = this.state?.host;
+      if (host) {
+        this.realtimeService.broadcastPanelHost(host);
+      }
+    });
+  }
+
+  ingestAgentUpdate(agentId: string, host: HostPayload, telemetry?: TelemetryPayload): void {
     if (!telemetry) {
-      this.applyHost(host);
+      this.applyHost(agentId, host);
       return;
     }
 
@@ -93,11 +113,27 @@ export class TelemetryService {
 
     this.publishState();
 
+    void this.persistFocusIngest(agentId, host, telemetry, generation, classificationStatus);
+  }
+
+  private async persistFocusIngest(
+    agentId: string,
+    host: HostPayload,
+    telemetry: TelemetryPayload,
+    generation: number,
+    classificationStatus: ClassificationStatus,
+  ): Promise<void> {
+    const segmentId = await this.segmentService.onFocusChange(agentId, telemetry);
+    await this.segmentService.onHostTick(agentId, host.capturedAt, {
+      skipStaleClose: true,
+      idleMs: host.idleMs,
+    });
+
     if (classificationStatus !== "pending") {
       return;
     }
 
-    void this.runClassification(telemetry, generation);
+    void this.runClassification(telemetry, generation, segmentId);
   }
 
   setState(payload: TelemetryPayload): void {
@@ -131,11 +167,19 @@ export class TelemetryService {
       return;
     }
 
-    void this.runClassification(payload, generation);
+    void this.runClassification(payload, generation, undefined);
   }
 
-  private applyHost(payload: HostPayload): void {
-    const merged = this.mergeHostPayload(this.state?.host ?? this.pendingHost, payload);
+  private applyHost(agentId: string | null, payload: HostPayload): void {
+    const previousHost = this.state?.host ?? this.pendingHost;
+    const previousThumbnail = previousHost?.media?.thumbnailDataUrl ?? null;
+    const merged = this.mergeHostPayload(previousHost, payload);
+    const thumbnailNewlyAvailable =
+      merged.media?.thumbnailDataUrl != null && previousThumbnail == null;
+
+    if (agentId) {
+      void this.segmentService.onHostTick(agentId, payload.capturedAt, { idleMs: payload.idleMs });
+    }
 
     if (!this.state) {
       this.pendingHost = merged;
@@ -146,11 +190,17 @@ export class TelemetryService {
       ...this.state,
       host: merged,
     });
-    this.publishState();
+
+    if (thumbnailNewlyAvailable) {
+      this.publishState();
+      return;
+    }
+
+    this.publishHost();
   }
 
   setHost(payload: HostPayload): void {
-    this.applyHost(payload);
+    this.applyHost(this.agentBindingService.getBoundAgentId(), payload);
   }
 
   getState(): TelemetryState | null {
@@ -187,37 +237,21 @@ export class TelemetryService {
       return;
     }
 
-    void this.runClassification({ appName, windowTitle, capturedAt }, generation);
+    void this.runClassification({ appName, windowTitle, capturedAt }, generation, undefined);
   }
 
   private mergeHostPayload(
     previous: HostPayload | null | undefined,
     incoming: HostPayload,
   ): HostPayload {
-    if (!previous?.media || !incoming.media) {
-      return incoming;
-    }
-
-    const sameTrack = trackMediaKey(previous.media) === trackMediaKey(incoming.media);
-    const preservedThumbnail =
-      sameTrack && !incoming.media.thumbnailDataUrl && previous.media.thumbnailDataUrl
-        ? previous.media.thumbnailDataUrl
-        : incoming.media.thumbnailDataUrl;
-
-    if (preservedThumbnail === incoming.media.thumbnailDataUrl) {
-      return incoming;
-    }
-
-    return {
-      ...incoming,
-      media: {
-        ...incoming.media,
-        thumbnailDataUrl: preservedThumbnail,
-      },
-    };
+    return mergeHostPayload(previous, incoming);
   }
 
-  private async runClassification(payload: TelemetryPayload, generation: number): Promise<void> {
+  private async runClassification(
+    payload: TelemetryPayload,
+    generation: number,
+    segmentId: string | undefined,
+  ): Promise<void> {
     const classification = await this.classificationService.classify(
       payload.appName,
       payload.windowTitle,
@@ -254,5 +288,16 @@ export class TelemetryService {
       classificationStatus,
     });
     this.publishState();
+
+    if (classification) {
+      if (segmentId) {
+        void this.segmentService.updateClassification(segmentId, classification);
+      } else {
+        void this.segmentService.updateOpenSegmentClassification(
+          this.agentBindingService.getBoundAgentId() ?? undefined,
+          classification,
+        );
+      }
+    }
   }
 }

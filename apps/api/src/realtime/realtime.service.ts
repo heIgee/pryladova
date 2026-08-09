@@ -1,5 +1,11 @@
 import { Injectable } from "@nestjs/common";
-import { type PanelWsMessage, parseTelemetryState, type TelemetryState } from "@pryladova/shared";
+import {
+  type HostPayload,
+  hostPayloadForPanelWs,
+  type PanelWsMessage,
+  parseTelemetryState,
+  type TelemetryState,
+} from "@pryladova/shared";
 import WebSocket from "ws";
 
 @Injectable()
@@ -15,7 +21,14 @@ export class RealtimeService {
   }
 
   broadcastPanelState(state: TelemetryState | null): void {
-    const message = this.buildPanelMessage(state);
+    this.broadcastPanelMessage(this.buildPanelMessage(state));
+  }
+
+  broadcastPanelHost(host: HostPayload): void {
+    this.broadcastPanelMessage(this.buildPanelHostMessage(host));
+  }
+
+  private broadcastPanelMessage(message: PanelWsMessage): void {
     const payload = JSON.stringify(message);
 
     for (const client of this.panelClients) {
@@ -33,6 +46,13 @@ export class RealtimeService {
     return {
       type: "state",
       telemetry: parseTelemetryState(state),
+    };
+  }
+
+  buildPanelHostMessage(host: HostPayload): PanelWsMessage {
+    return {
+      type: "host",
+      host: hostPayloadForPanelWs(host),
     };
   }
 }

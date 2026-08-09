@@ -8,6 +8,7 @@
 @layer base {
   html {
     @apply font-sans;
+    scrollbar-gutter: stable;
   }
 
   html,

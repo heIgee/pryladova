@@ -1,9 +1,10 @@
 /// <reference types="vite/client" />
 
 import { PANEL_WS_ROUTE, parsePanelWsMessage } from "@pryladova/shared";
-import { type PanelState, panelStateFromWsMessage } from "./panel.js";
+import { applyPanelWsMessage, type PanelState } from "./panel.js";
 
 const RECONNECT_MS = 2_000;
+const STOP_GRACE_MS = 500;
 
 type PanelStreamStore = {
   panel: PanelState;
@@ -11,6 +12,7 @@ type PanelStreamStore = {
   socket: WebSocket | null;
   reconnectTimer: number | null;
   shouldRun: boolean;
+  connectGeneration: number;
 };
 
 const createStore = (): PanelStreamStore => ({
@@ -19,9 +21,11 @@ const createStore = (): PanelStreamStore => ({
   socket: null,
   reconnectTimer: null,
   shouldRun: false,
+  connectGeneration: 0,
 });
 
 let moduleStore: PanelStreamStore | undefined;
+let stopTimer: number | null = null;
 
 const getStore = (): PanelStreamStore => {
   if (import.meta.hot?.data?.panelStreamStore) {
@@ -56,6 +60,29 @@ const clearReconnect = (store: PanelStreamStore): void => {
   }
 };
 
+const abandonSocket = (socket: WebSocket | null): void => {
+  if (
+    !socket ||
+    socket.readyState === WebSocket.CLOSED ||
+    socket.readyState === WebSocket.CLOSING
+  ) {
+    return;
+  }
+
+  if (socket.readyState === WebSocket.CONNECTING) {
+    const pending = socket;
+    pending.onopen = () => {
+      pending.close(1000, "client closing");
+    };
+    pending.onmessage = null;
+    pending.onclose = null;
+    pending.onerror = null;
+    return;
+  }
+
+  socket.close(1000, "client closing");
+};
+
 const scheduleReconnect = (store: PanelStreamStore): void => {
   if (!store.shouldRun || store.reconnectTimer !== null) {
     return;
@@ -72,18 +99,30 @@ const connect = (store: PanelStreamStore): void => {
     return;
   }
 
-  store.socket?.close();
+  if (store.socket?.readyState === WebSocket.OPEN) {
+    return;
+  }
+
+  const generation = ++store.connectGeneration;
+  abandonSocket(store.socket);
   const socket = new WebSocket(buildPanelWsUrl());
   store.socket = socket;
 
   socket.onopen = () => {
+    if (generation !== store.connectGeneration) {
+      return;
+    }
     clearReconnect(store);
   };
 
   socket.onmessage = (event: MessageEvent<string>) => {
+    if (generation !== store.connectGeneration) {
+      return;
+    }
+
     try {
       const message = parsePanelWsMessage(JSON.parse(event.data));
-      store.panel = panelStateFromWsMessage(message);
+      store.panel = applyPanelWsMessage(store.panel, message);
       notify(store);
     } catch {
       store.panel = { status: "error", message: "Invalid telemetry response" };
@@ -92,21 +131,33 @@ const connect = (store: PanelStreamStore): void => {
   };
 
   socket.onclose = () => {
-    if (!store.shouldRun) {
+    if (generation !== store.connectGeneration || !store.shouldRun) {
       return;
-    }
-
-    if (store.panel.status !== "error") {
-      store.panel = { status: "error", message: "Live connection closed" };
-      notify(store);
     }
 
     scheduleReconnect(store);
   };
 
   socket.onerror = () => {
-    socket.close();
+    // onclose follows; reconnect is scheduled there.
   };
+};
+
+const cancelPendingStop = (): void => {
+  if (stopTimer !== null) {
+    window.clearTimeout(stopTimer);
+    stopTimer = null;
+  }
+};
+
+const scheduleStop = (store: PanelStreamStore): void => {
+  cancelPendingStop();
+  stopTimer = window.setTimeout(() => {
+    stopTimer = null;
+    if (store.listeners.size === 0) {
+      stop(store);
+    }
+  }, STOP_GRACE_MS);
 };
 
 const start = (store: PanelStreamStore): void => {
@@ -115,27 +166,31 @@ const start = (store: PanelStreamStore): void => {
   }
 
   store.shouldRun = true;
-  store.panel = { status: "loading" };
-  notify(store);
+  if (store.panel.status !== "ready") {
+    store.panel = { status: "loading" };
+    notify(store);
+  }
   connect(store);
 };
 
 const stop = (store: PanelStreamStore): void => {
   store.shouldRun = false;
+  store.connectGeneration += 1;
   clearReconnect(store);
-  store.socket?.close();
+  abandonSocket(store.socket);
   store.socket = null;
 };
 
 export const subscribePanelPoll = (listener: () => void): (() => void) => {
   const store = getStore();
+  cancelPendingStop();
   store.listeners.add(listener);
   start(store);
 
   return () => {
     store.listeners.delete(listener);
     if (store.listeners.size === 0) {
-      stop(store);
+      scheduleStop(store);
     }
   };
 };
@@ -150,3 +205,7 @@ export const refreshPanelPoll = (): void => {
 
   connect(store);
 };
+
+if (import.meta.hot) {
+  import.meta.hot.accept();
+}

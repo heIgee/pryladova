@@ -2,6 +2,7 @@ import { pickRandomSpinnerVerb } from "@pryladova/shared";
 import { useMemo } from "react";
 import { BentoGrid, PageHeader, Shell, ThemeToggle } from "@/components/layout/shell";
 import { LoginForm } from "@/components/login-form";
+import { HistoryTile } from "@/components/tiles/history-tile";
 import { MachineTile } from "@/components/tiles/machine-tile";
 import { MediaTile } from "@/components/tiles/media-tile";
 import { WindowTile } from "@/components/tiles/window-tile";
@@ -9,7 +10,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { WeatherHeader } from "@/components/weather-header";
 import { useAuth } from "@/hooks/use-auth";
 import { useDashboard } from "@/hooks/use-dashboard";
-import { shouldShowMediaTile } from "@/lib/panel";
+import { useHistory } from "@/hooks/use-history";
+import { resolveHistoryLiveCapMs } from "@/lib/history-live";
+import { getAgentLastSeenMs, shouldShowMediaTile } from "@/lib/panel";
 import { cn } from "@/lib/utils";
 
 const AgentHint = ({ className }: { className?: string }) => (
@@ -32,6 +35,14 @@ const Dashboard = () => {
     handleWeatherLocationChange,
     handleWeatherRefresh,
   } = useDashboard();
+  const agentLastSeenMs = panel.status === "ready" ? getAgentLastSeenMs(panel) : null;
+  const host = panel.status === "ready" ? panel.telemetry.host : null;
+  const historyLiveCapMs = resolveHistoryLiveCapMs(host, agentLastSeenMs, showAgentHint);
+  const { history, refreshHistory, refreshing, hasLoaded } = useHistory(
+    panel.status === "ready",
+    panel.status === "ready" ? panel.telemetry : null,
+    historyLiveCapMs,
+  );
 
   const loadingVerb = useMemo(() => pickRandomSpinnerVerb(), []);
   const waitingVerb = useMemo(() => pickRandomSpinnerVerb(), []);
@@ -100,11 +111,20 @@ const Dashboard = () => {
           onClassificationChange={handleClassificationToggle}
         />
         <div
-          className={`grid grid-cols-1 items-start gap-4 ${showMediaTile ? "md:grid-cols-2" : ""}`}
+          className={`grid grid-cols-1 items-stretch gap-4 ${showMediaTile ? "md:grid-cols-2" : ""}`}
         >
           <MachineTile host={telemetry.host} />
           {showMediaTile ? <MediaTile host={telemetry.host} /> : null}
         </div>
+        <HistoryTile
+          history={history}
+          activeAppName={telemetry.appName}
+          refreshing={refreshing}
+          hasLoaded={hasLoaded}
+          onRefresh={() => {
+            void refreshHistory();
+          }}
+        />
       </BentoGrid>
     </Shell>
   );

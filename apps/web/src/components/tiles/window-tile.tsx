@@ -53,6 +53,8 @@ export const WindowTile = ({
   } = useClassificationDisplay(telemetry, classificationEnabled);
   const displayName = telemetry.classification?.displayAppName ?? telemetry.appName;
 
+  const showNameSkeleton = classificationEnabled && status === "pending";
+
   const windowSubtitle =
     telemetry.windowTitle.trim().length > 0 &&
     !titlesMatch(telemetry.windowTitle, displayName) &&
@@ -100,7 +102,14 @@ export const WindowTile = ({
         ) : null}
       </CardHeader>
       <CardContent className="flex flex-col gap-2">
-        <h2 className="truncate text-display font-medium">{displayName}</h2>
+        {showNameSkeleton ? (
+          <div
+            className="h-[1.1em] max-w-[min(60%,18rem)] animate-pulse rounded bg-muted text-display"
+            aria-hidden="true"
+          />
+        ) : (
+          <h2 className="truncate text-display font-medium">{displayName}</h2>
+        )}
         {windowSubtitle ? (
           <p className="line-clamp-3 text-body leading-relaxed text-muted-foreground">
             {windowSubtitle}

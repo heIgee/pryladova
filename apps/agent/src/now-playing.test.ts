@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { mapMediaSession, pickCurrentSession, trackMediaKey } from "./now-playing-core.js";
+import {
+  mapMediaSession,
+  pickCurrentSession,
+  resolveHostMediaThumbnail,
+  trackMediaKey,
+} from "./now-playing-core.js";
 
 describe("mapMediaSession", () => {
   it("maps full payload including thumbnail", () => {
@@ -56,6 +61,50 @@ describe("pickCurrentSession", () => {
     ]);
 
     expect(picked?.id).toBe("c");
+  });
+});
+
+describe("resolveHostMediaThumbnail", () => {
+  const media = {
+    title: "Anubis",
+    artist: "Septicflesh",
+    albumTitle: "Codex Omega",
+    appName: "Player.exe",
+    playbackStatus: "paused" as const,
+    thumbnailDataUrl: "data:image/jpeg;base64,abc",
+  };
+
+  it("sends thumbnail on first track observation", () => {
+    expect(resolveHostMediaThumbnail(media, { lastTrackKey: "", cachedThumbnail: null })).toEqual({
+      lastTrackKey: "anubis|septicflesh|codex omega|player.exe",
+      cachedThumbnail: "data:image/jpeg;base64,abc",
+      thumbnailDataUrl: "data:image/jpeg;base64,abc",
+    });
+  });
+
+  it("omits thumbnail on routine host ticks for the same track", () => {
+    const state = {
+      lastTrackKey: "anubis|septicflesh|codex omega|player.exe",
+      cachedThumbnail: "data:image/jpeg;base64,abc",
+    };
+
+    expect(resolveHostMediaThumbnail(media, state)).toEqual({
+      ...state,
+      thumbnailDataUrl: null,
+    });
+  });
+
+  it("sends thumbnail when SMTC provides it after an earlier null read", () => {
+    const state = {
+      lastTrackKey: "anubis|septicflesh|codex omega|player.exe",
+      cachedThumbnail: null,
+    };
+
+    expect(resolveHostMediaThumbnail(media, state)).toEqual({
+      lastTrackKey: state.lastTrackKey,
+      cachedThumbnail: "data:image/jpeg;base64,abc",
+      thumbnailDataUrl: "data:image/jpeg;base64,abc",
+    });
   });
 });
 

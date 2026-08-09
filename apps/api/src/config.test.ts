@@ -33,3 +33,12 @@ describe("loadConfig panel password hash", () => {
     expect(loadConfig().panelPasswordHash).toBe("$2b$10$fromenv");
   });
 });
+
+describe("normalizeSupabaseUrl", () => {
+  it("strips a trailing /rest/v1 path", async () => {
+    const { normalizeSupabaseUrl } = await import("./config.js");
+    expect(normalizeSupabaseUrl("https://example.supabase.co/rest/v1/")).toBe(
+      "https://example.supabase.co",
+    );
+  });
+});

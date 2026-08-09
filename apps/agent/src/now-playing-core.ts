@@ -93,3 +93,29 @@ export const mapMediaSession = (session: MediaSession): HostMedia | null => {
     thumbnailDataUrl: asThumbnailDataUrl(session.thumbnail),
   };
 };
+
+export type HostMediaThumbnailState = {
+  lastTrackKey: string;
+  cachedThumbnail: string | null;
+};
+
+export const resolveHostMediaThumbnail = (
+  media: HostMedia,
+  state: HostMediaThumbnailState,
+): HostMediaThumbnailState & { thumbnailDataUrl: string | null } => {
+  const newTrackKey = trackMediaKey(media);
+  const trackChanged = newTrackKey !== state.lastTrackKey;
+  const nextCached = trackChanged
+    ? media.thumbnailDataUrl
+    : (state.cachedThumbnail ?? media.thumbnailDataUrl);
+  const shouldSendThumbnail =
+    trackChanged || (state.cachedThumbnail === null && media.thumbnailDataUrl !== null);
+
+  return {
+    lastTrackKey: newTrackKey,
+    cachedThumbnail: nextCached,
+    thumbnailDataUrl: shouldSendThumbnail
+      ? (media.thumbnailDataUrl ?? state.cachedThumbnail)
+      : null,
+  };
+};

@@ -10,3 +10,7 @@ alwaysApply: false
 - Map: `deploy/*` → `deploy/README.md`; local dev → `README.md`; future work → `ROADMAP.md`.
 - Single source of truth: env vars in the app's `.env.example`, scripts in `package.json` — docs reference, don't duplicate.
 - Notice stale or wrong docs while working → fix in that change or call it out before finishing.
+
+## Todos in markdown
+
+- Never use strikethrough (`~~…~~`) on todo or checklist items — remove the line or move it to a done/completed section.

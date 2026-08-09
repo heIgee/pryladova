@@ -72,7 +72,25 @@ const collectAppTokens = (snapshot: RawWindowSnapshot): string[] => {
   if (snapshot.owner.path) {
     tokens.push(normalizeAppToken(basename(snapshot.owner.path)));
   }
-  return tokens;
+  return tokens.filter((token) => token.length > 0);
+};
+
+export const resolveAppName = (snapshot: RawWindowSnapshot): string | null => {
+  const fromName = snapshot.owner.name.trim();
+  if (fromName) {
+    return fromName;
+  }
+
+  if (snapshot.owner.path) {
+    const fromPath = basename(snapshot.owner.path)
+      .replace(/\.exe$/i, "")
+      .trim();
+    if (fromPath) {
+      return fromPath;
+    }
+  }
+
+  return null;
 };
 
 const isBlockedApp = (snapshot: RawWindowSnapshot, blockedApps: Set<string>): boolean =>
@@ -96,8 +114,8 @@ export const sanitizeSnapshot = (
   }
 
   return {
-    appName: snapshot.owner.name,
-    windowTitle: redactWindowTitle(snapshot.title),
+    appName: resolveAppName(snapshot)!,
+    windowTitle: redactWindowTitle(snapshot.title.trim()),
   };
 };
 

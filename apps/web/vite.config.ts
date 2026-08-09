@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { sentryVitePlugin } from "@sentry/vite-plugin";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
+import { createLogger, defineConfig, type Logger } from "vite";
 
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
 
@@ -46,7 +46,49 @@ const resolveSentryApiUrl = (): string | undefined => {
 
 const sentryApiUrl = resolveSentryApiUrl();
 
+const isBenignDevProxyError = (error: unknown): boolean => {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const code = (error as NodeJS.ErrnoException).code;
+  return code === "ECONNABORTED" || code === "ECONNRESET" || code === "ECONNREFUSED";
+};
+
+const createDevLogger = (): Logger => {
+  const logger = createLogger();
+  const logError = logger.error.bind(logger);
+  logger.error = (msg, options) => {
+    const err = options?.error ?? (msg instanceof Error ? msg : null);
+    if (err && isBenignDevProxyError(err)) {
+      return;
+    }
+    if (typeof msg === "string" && msg.includes("ws proxy")) {
+      return;
+    }
+    logError(msg, options);
+  };
+  return logger;
+};
+
+const apiProxy = {
+  target: "http://127.0.0.1:3000",
+  changeOrigin: true,
+  ws: true,
+  configure: (proxy: { on: (event: string, listener: (...args: never[]) => void) => void }) => {
+    proxy.on(
+      "proxyReqWs",
+      (_proxyReq, _req, socket: { on: (event: string, listener: () => void) => void }) => {
+        socket.on("error", () => {
+          // Panel WS reconnect / HMR close — expected in dev.
+        });
+      },
+    );
+  },
+};
+
 export default defineConfig({
+  customLogger: createDevLogger(),
   define: {
     "import.meta.env.VITE_APP_RELEASE": JSON.stringify(appRelease),
   },
@@ -81,20 +123,12 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      "/api": {
-        target: "http://localhost:3000",
-        changeOrigin: true,
-        ws: true,
-      },
+      "/api": apiProxy,
     },
   },
   preview: {
     proxy: {
-      "/api": {
-        target: "http://127.0.0.1:3000",
-        changeOrigin: true,
-        ws: true,
-      },
+      "/api": apiProxy,
     },
   },
 });

@@ -1,13 +1,42 @@
 import { describe, expect, it } from "vitest";
 import {
+  agentWsInboundSchema,
   hostMediaSchema,
+  hostPayloadForPanelWs,
   isRedactedTelemetry,
+  mergeHostPayload,
+  normalizeAppName,
+  panelWsMessageSchema,
   SECURE_APP_NAME,
   SECURE_WINDOW_TITLE,
   settingsSchema,
+  telemetryPayloadSchema,
   weatherCodeToCondition,
   weatherResponseSchema,
 } from "./index.js";
+
+describe("normalizeAppName", () => {
+  it("trims whitespace and rejects empty values", () => {
+    expect(normalizeAppName(" Code ")).toBe("Code");
+    expect(normalizeAppName("   ")).toBeNull();
+  });
+});
+
+describe("telemetryPayloadSchema", () => {
+  it("trims app and window names on parse", () => {
+    expect(
+      telemetryPayloadSchema.parse({
+        appName: " Code ",
+        windowTitle: " app.tsx ",
+        capturedAt: "2026-01-01T12:00:00.000Z",
+      }),
+    ).toEqual({
+      appName: "Code",
+      windowTitle: "app.tsx",
+      capturedAt: "2026-01-01T12:00:00.000Z",
+    });
+  });
+});
 
 describe("isRedactedTelemetry", () => {
   it("detects secure redacted payloads", () => {
@@ -24,6 +53,33 @@ describe("settingsSchema", () => {
     expect(settingsSchema.parse({ classificationEnabled: true })).toEqual({
       classificationEnabled: true,
     });
+  });
+});
+
+describe("agentWsInboundSchema", () => {
+  it("parses update and shutdown messages with agentId", () => {
+    expect(
+      agentWsInboundSchema.parse({
+        type: "update",
+        agentId: "desk-pc",
+        host: {
+          idleMs: 0,
+          cpuPercent: 1,
+          ramPercent: 2,
+          uptimeSec: 3,
+          media: null,
+          capturedAt: "2026-01-01T12:00:00.000Z",
+        },
+      }).type,
+    ).toBe("update");
+
+    expect(
+      agentWsInboundSchema.parse({
+        type: "shutdown",
+        agentId: "desk-pc",
+        capturedAt: "2026-01-01T12:00:00.000Z",
+      }).type,
+    ).toBe("shutdown");
   });
 });
 
@@ -74,6 +130,72 @@ describe("hostMediaSchema", () => {
         thumbnailDataUrl: `data:image/jpeg;base64,${"a".repeat(512_001)}`,
       }),
     ).toThrow();
+  });
+});
+
+describe("panel host ws helpers", () => {
+  it("parses host-only panel websocket messages", () => {
+    expect(
+      panelWsMessageSchema.parse({
+        type: "host",
+        host: {
+          idleMs: 0,
+          cpuPercent: 10,
+          ramPercent: 20,
+          uptimeSec: 100,
+          media: null,
+          capturedAt: "2026-01-01T12:00:00.000Z",
+        },
+      }),
+    ).toMatchObject({ type: "host" });
+  });
+
+  it("strips thumbnails from host-only payloads", () => {
+    expect(
+      hostPayloadForPanelWs({
+        idleMs: 0,
+        cpuPercent: 10,
+        ramPercent: 20,
+        uptimeSec: 100,
+        capturedAt: "2026-01-01T12:00:00.000Z",
+        media: {
+          title: "Track",
+          artist: "Artist",
+          albumTitle: null,
+          appName: "Player",
+          playbackStatus: "playing",
+          thumbnailDataUrl: "data:image/jpeg;base64,abc",
+        },
+      }).media?.thumbnailDataUrl,
+    ).toBeNull();
+  });
+
+  it("preserves thumbnails across unchanged tracks", () => {
+    const previous = {
+      idleMs: 0,
+      cpuPercent: 10,
+      ramPercent: 20,
+      uptimeSec: 100,
+      capturedAt: "2026-01-01T12:00:00.000Z",
+      media: {
+        title: "Track",
+        artist: "Artist",
+        albumTitle: null,
+        appName: "Player",
+        playbackStatus: "playing" as const,
+        thumbnailDataUrl: "data:image/jpeg;base64,abc",
+      },
+    };
+    const incoming = {
+      ...previous,
+      cpuPercent: 12,
+      capturedAt: "2026-01-01T12:00:02.000Z",
+      media: previous.media ? { ...previous.media, thumbnailDataUrl: null } : null,
+    };
+
+    expect(mergeHostPayload(previous, incoming).media?.thumbnailDataUrl).toBe(
+      "data:image/jpeg;base64,abc",
+    );
   });
 });
 

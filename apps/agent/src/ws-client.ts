@@ -2,6 +2,7 @@ import { AGENT_WS_ROUTE, type HostPayload, type TelemetryPayload } from "@prylad
 import WebSocket from "ws";
 
 const WS_CONNECT_TIMEOUT_MS = 30_000;
+const HUB_BOUND_CLOSE_CODE = 4403;
 
 const toWsUrl = (httpOrigin: string, path: string): string => {
   const url = new URL(httpOrigin);
@@ -14,13 +15,21 @@ const toWsUrl = (httpOrigin: string, path: string): string => {
 
 export type AgentWsClient = {
   sendUpdate: (host: HostPayload, telemetry?: TelemetryPayload) => void;
+  sendShutdown: (capturedAt: string) => Promise<void>;
   close: () => void;
+};
+
+export type AgentWsConnectResult = {
+  client: AgentWsClient;
+  hubBoundReject: Promise<never>;
 };
 
 export const connectAgentWs = (
   apiUrl: string,
   ingestSecret: string | undefined,
-): Promise<AgentWsClient> =>
+  agentId: string,
+  onDisconnect?: () => void,
+): Promise<AgentWsConnectResult> =>
   new Promise((resolve, reject) => {
     const headers: Record<string, string> = {};
     if (ingestSecret) {
@@ -33,15 +42,50 @@ export const connectAgentWs = (
       reject(new Error("Agent WebSocket connect timed out"));
     }, WS_CONNECT_TIMEOUT_MS);
 
+    let rejectHubBound: ((reason?: unknown) => void) | undefined;
+    const hubBoundPromise = new Promise<never>((_, reject) => {
+      rejectHubBound = reject;
+    });
+
+    socket.on("close", (code, reason) => {
+      if (code === HUB_BOUND_CLOSE_CODE) {
+        const detail = reason.toString() || "Hub already bound to another agent";
+        console.error(`[agent] ws closed (${code}): ${detail}`);
+        rejectHubBound?.(new Error(detail));
+        return;
+      }
+
+      if (code !== 1000) {
+        onDisconnect?.();
+      }
+    });
+
     socket.once("open", () => {
       clearTimeout(timeout);
       resolve({
-        sendUpdate: (host, telemetry) => {
-          socket.send(JSON.stringify({ type: "update", host, telemetry }));
+        client: {
+          sendUpdate: (host, telemetry) => {
+            socket.send(JSON.stringify({ type: "update", agentId, host, telemetry }));
+          },
+          sendShutdown: (capturedAt) =>
+            new Promise<void>((resolve, reject) => {
+              if (socket.readyState !== WebSocket.OPEN) {
+                resolve();
+                return;
+              }
+              socket.send(JSON.stringify({ type: "shutdown", agentId, capturedAt }), (error) => {
+                if (error) {
+                  reject(error);
+                  return;
+                }
+                resolve();
+              });
+            }),
+          close: () => {
+            socket.close();
+          },
         },
-        close: () => {
-          socket.close();
-        },
+        hubBoundReject: hubBoundPromise,
       });
     });
 

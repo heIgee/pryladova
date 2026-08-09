@@ -5,7 +5,7 @@ import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/componen
 import { formatPlaybackStatus } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-const artClassName = "size-24 shrink-0 rounded-lg object-cover";
+const artFrameClassName = "aspect-square h-full shrink-0 overflow-hidden rounded-lg";
 
 const coverArtAlt = (title: string, artist: string | null): string => {
   if (artist) {
@@ -24,13 +24,21 @@ const MediaArt = ({
   artist: string | null;
 }) => {
   if (thumbnailDataUrl) {
-    return <img src={thumbnailDataUrl} alt={coverArtAlt(title, artist)} className={artClassName} />;
+    return (
+      <div className={artFrameClassName}>
+        <img
+          src={thumbnailDataUrl}
+          alt={coverArtAlt(title, artist)}
+          className="size-full object-cover"
+        />
+      </div>
+    );
   }
 
   return (
     <div
       className={cn(
-        artClassName,
+        artFrameClassName,
         "flex items-center justify-center bg-muted text-muted-foreground ring-1 ring-border/60",
       )}
     >
@@ -49,7 +57,7 @@ export const MediaTile = ({
   const media = host?.media ?? null;
 
   return (
-    <Card size="sm" className={cn("h-fit self-start", className)}>
+    <Card size="sm" className={cn("h-full min-h-0", className)}>
       <CardHeader className="border-b">
         <CardTitle className="flex items-center gap-2 text-sm">
           <Music2 className="size-3.5 text-muted-foreground" />
@@ -61,9 +69,9 @@ export const MediaTile = ({
           </Badge>
         </CardAction>
       </CardHeader>
-      <CardContent className="flex min-w-0 flex-col gap-1">
+      <CardContent className="flex min-h-0 flex-1 basis-0 flex-col">
         {media ? (
-          <div className="flex gap-3">
+          <div className="flex min-h-0 flex-1 basis-0 items-stretch gap-3">
             <MediaArt
               thumbnailDataUrl={media.thumbnailDataUrl}
               title={media.title}

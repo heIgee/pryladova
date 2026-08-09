@@ -1,6 +1,11 @@
 import { SECURE_APP_NAME, SECURE_WINDOW_TITLE } from "@pryladova/shared";
 import { describe, expect, it } from "vitest";
-import { createBlockedAppsSet, sanitizeSnapshot, shouldOmitHostMedia } from "./privacy.js";
+import {
+  createBlockedAppsSet,
+  resolveAppName,
+  sanitizeSnapshot,
+  shouldOmitHostMedia,
+} from "./privacy.js";
 
 const snapshot = (title: string, name: string, path?: string) => ({
   title,
@@ -61,6 +66,19 @@ describe("sanitizeSnapshot", () => {
       appName: "Code",
       windowTitle: "app.tsx — pryladova",
     });
+  });
+
+  it("uses executable basename when process name is blank", () => {
+    const blocked = createBlockedAppsSet([]);
+    const result = sanitizeSnapshot(
+      snapshot("Task Switching", " ", "C:\\Windows\\System32\\SearchHost.exe"),
+      blocked,
+    );
+    expect(result.appName).toBe("SearchHost");
+  });
+
+  it("resolveAppName rejects whitespace-only names without a path fallback", () => {
+    expect(resolveAppName(snapshot("Title", "   "))).toBeNull();
   });
 
   it("matches blocklist via executable path token", () => {

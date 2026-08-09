@@ -65,20 +65,7 @@ export const useDashboard = () => {
           return;
         }
 
-        const preferred = readStoredClassificationEnabled();
-        setClassificationEnabled(preferred);
-        try {
-          await syncSettings(preferred);
-          if (active) {
-            setSettingsError(null);
-          }
-        } catch (syncError: unknown) {
-          const syncMessage = syncError instanceof Error ? syncError.message : "Unknown error";
-          console.error(`[web] ${syncMessage}`);
-          if (active) {
-            setSettingsError("Could not sync classification setting");
-          }
-        }
+        setSettingsError("Could not load classification setting");
       } finally {
         if (active) {
           setSettingsReady(true);
@@ -151,9 +138,12 @@ export const useDashboard = () => {
     setSettingsError(null);
 
     void syncSettings(enabled)
-      .then(() => {
-        setClassificationEnabled(enabled);
-        persistClassificationEnabled(enabled);
+      .then((result) => {
+        setClassificationEnabled(result.classificationEnabled);
+        persistClassificationEnabled(result.classificationEnabled);
+        if (!result.persisted) {
+          setSettingsError("Setting applied but not saved to database");
+        }
         refreshPanelPoll();
       })
       .catch((error: unknown) => {

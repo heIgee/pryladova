@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { hostname } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -9,6 +10,7 @@ if (existsSync(envPath)) {
 
 const DEFAULT_DEV_API_URL = "http://localhost:3000";
 const DEFAULT_POLL_INTERVAL_MS = 2000;
+const AGENT_ID_MAX_LENGTH = 253;
 
 type AgentProfile = "local" | "remote";
 
@@ -18,6 +20,7 @@ export type AgentConfig = {
   pollIntervalMs: number;
   blockedApps: string[];
   ingestSecret: string | undefined;
+  agentId: string;
 };
 
 const parseProfile = (): AgentProfile => {
@@ -56,12 +59,25 @@ const parseBlockedApps = (value: string | undefined): string[] => {
     .filter((entry) => entry.length > 0);
 };
 
+const resolveAgentId = (): string => {
+  const fromEnv = process.env.AGENT_ID?.trim();
+  const candidate = fromEnv && fromEnv.length > 0 ? fromEnv : hostname().trim();
+  if (!candidate) {
+    throw new Error("AGENT_ID must be a non-empty string");
+  }
+  if (candidate.length > AGENT_ID_MAX_LENGTH) {
+    throw new Error(`AGENT_ID must be at most ${AGENT_ID_MAX_LENGTH} characters`);
+  }
+  return candidate;
+};
+
 export const loadConfig = (): AgentConfig => {
   const profile = parseProfile();
   const apiUrl = resolveApiUrl(profile);
   const pollIntervalMs = Number(process.env.POLL_INTERVAL_MS ?? DEFAULT_POLL_INTERVAL_MS);
   const blockedApps = parseBlockedApps(process.env.BLOCKED_APPS);
   const ingestSecret = process.env.INGEST_SECRET?.trim() || undefined;
+  const agentId = resolveAgentId();
 
   if (!Number.isFinite(pollIntervalMs) || pollIntervalMs < 500) {
     throw new Error("POLL_INTERVAL_MS must be a number >= 500");
@@ -73,5 +89,5 @@ export const loadConfig = (): AgentConfig => {
     );
   }
 
-  return { profile, apiUrl, pollIntervalMs, blockedApps, ingestSecret };
+  return { profile, apiUrl, pollIntervalMs, blockedApps, ingestSecret, agentId };
 };

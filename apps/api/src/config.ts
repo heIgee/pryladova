@@ -16,6 +16,8 @@ export type ApiConfig = {
   sentryDsn: string | undefined;
   sessionSecret: string | undefined;
   panelPasswordHash: string | undefined;
+  supabaseUrl: string | undefined;
+  supabaseSecretKey: string | undefined;
 };
 
 export const requirePanelAuth = (
@@ -54,6 +56,15 @@ const readPanelPasswordHash = (): string | undefined => {
   return decodePanelPasswordHashB64(b64);
 };
 
+export const normalizeSupabaseUrl = (url: string | undefined): string | undefined => {
+  if (!url) {
+    return undefined;
+  }
+  const trimmed = url.replace(/\/+$/, "");
+  const withoutRestPath = trimmed.replace(/\/rest\/v1$/i, "");
+  return withoutRestPath || undefined;
+};
+
 export const loadConfig = (): ApiConfig => {
   const geminiApiKey = process.env.GEMINI_API_KEY?.trim() || undefined;
   const geminiModel = process.env.GEMINI_MODEL?.trim() || DEFAULT_GEMINI_MODEL;
@@ -61,8 +72,19 @@ export const loadConfig = (): ApiConfig => {
   const sentryDsn = process.env.SENTRY_DSN?.trim() || undefined;
   const sessionSecret = process.env.SESSION_SECRET?.trim() || undefined;
   const panelPasswordHash = readPanelPasswordHash();
+  const supabaseUrl = normalizeSupabaseUrl(process.env.SUPABASE_URL?.trim());
+  const supabaseSecretKey = process.env.SUPABASE_SECRET_KEY?.trim() || undefined;
 
-  return { geminiApiKey, geminiModel, ingestSecret, sentryDsn, sessionSecret, panelPasswordHash };
+  return {
+    geminiApiKey,
+    geminiModel,
+    ingestSecret,
+    sentryDsn,
+    sessionSecret,
+    panelPasswordHash,
+    supabaseUrl,
+    supabaseSecretKey,
+  };
 };
 
 export const assertPanelAuthConfig = (config: ApiConfig): void => {

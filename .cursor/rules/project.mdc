@@ -37,6 +37,14 @@ alwaysApply: true
 - Stay inside requested app/package.
 - Packages disagree → follow local package. Don't "standardize" unasked.
 
+## Simplicity
+
+- Prefer the fix with less code: delete or simplify before adding hooks, listeners, observers, or dependencies.
+- Optional presentation that misbehaves → remove it; do not add logic to preserve it.
+- A plan describes intent, not a mandatory design. A simpler approach that meets the goal is fine — note the change briefly.
+- New dependency or runtime machinery needs a concrete reason existing code cannot cover it. No good reason → do not add it.
+- Passing CI does not justify extra machinery. Correct and small beats correct and elaborate.
+
 ## Docs and comments
 
 - No session-specific fixes, version pins, workarounds, or chat context in repo files.

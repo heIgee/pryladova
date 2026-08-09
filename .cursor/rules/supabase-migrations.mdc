@@ -1,0 +1,13 @@
+---
+description: Supabase schema migration safety
+globs: supabase/migrations/**/*.sql
+alwaysApply: false
+---
+
+# Supabase migrations
+
+- Treat committed migrations as immutable; corrections use a new forward migration.
+- Do not run `supabase db push`, `supabase db reset`, or alter a remote schema unless explicitly requested.
+- Schema changes and database functions live in `supabase/migrations/`; do not make dashboard-only schema changes.
+- Migrations must be backward-compatible with the currently deployed API. Use expand → migrate → contract for destructive changes.
+- Never place Supabase access tokens, service/secret keys, or database URLs with credentials in tracked files.

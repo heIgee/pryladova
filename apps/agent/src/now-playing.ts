@@ -1,7 +1,7 @@
 import type { HostMedia } from "@pryladova/shared";
 import { mapMediaSession, pickCurrentSession } from "./now-playing-core.js";
 
-export { trackMediaKey } from "./now-playing-core.js";
+export { resolveHostMediaThumbnail, trackMediaKey } from "./now-playing-core.js";
 
 let smtcErrorLogged = false;
 

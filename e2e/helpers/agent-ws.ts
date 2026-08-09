@@ -36,7 +36,7 @@ export const sendAgentUpdate = (
     };
 
     socket.once("open", () => {
-      socket.send(JSON.stringify({ type: "update", host, telemetry }));
+      socket.send(JSON.stringify({ type: "update", agentId: "e2e-agent", host, telemetry }));
       socket.close();
     });
     socket.once("close", () => {

@@ -52,6 +52,7 @@ Server-side fetch + cache (minutes-scale TTL). Not agent OAuth except where OS a
 
 ## API / ops
 
+- **Horizontal scaling (multi-instance API)** — deferred. Current persistence assumes a single API container: in-process segment mutation serialization, debounced heartbeat writes, and the 60s stale-heartbeat sweep all break or duplicate work if multiple replicas run without coordination. Later options: Postgres advisory locks or `FOR UPDATE` on segment rows, a durable outbox drained by one worker, or a single designated writer role. Revisit when deploy moves beyond one VPS/container.
 - Panel Nest auth (done — session cookie; see `deploy/README.md`)
 - E2E coverage for production auth path (panel login + ingest secret) — partial in `e2e/panel*.spec.ts`
 - LLM classification treats window title and app name as untrusted input; trust boundary is the agent/OS

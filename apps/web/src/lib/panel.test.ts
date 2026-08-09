@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  applyPanelWsMessage,
   fetchSettings,
   getAgentLastSeenMs,
   isAgentStale,
@@ -25,6 +26,56 @@ const readyTelemetry = {
     capturedAt: "2026-01-01T12:00:02.000Z",
   },
 };
+
+describe("applyPanelWsMessage", () => {
+  it("ignores empty websocket messages while panel already has live state", () => {
+    const panel: PanelState = { status: "ready", telemetry: readyTelemetry };
+
+    expect(applyPanelWsMessage(panel, { type: "empty" })).toEqual(panel);
+  });
+
+  it("ignores host-only websocket updates while panel is still loading", () => {
+    const panel: PanelState = { status: "loading" };
+
+    const next = applyPanelWsMessage(panel, {
+      type: "host",
+      host: {
+        idleMs: 0,
+        cpuPercent: 55,
+        ramPercent: 20,
+        uptimeSec: 100,
+        media: null,
+        capturedAt: "2026-01-01T12:00:05.000Z",
+      },
+    });
+
+    expect(next).toEqual({ status: "loading" });
+  });
+
+  it("merges host-only websocket updates into ready panel state", () => {
+    const panel: PanelState = { status: "ready", telemetry: readyTelemetry };
+
+    const next = applyPanelWsMessage(panel, {
+      type: "host",
+      host: {
+        idleMs: 0,
+        cpuPercent: 55,
+        ramPercent: 20,
+        uptimeSec: 100,
+        media: null,
+        capturedAt: "2026-01-01T12:00:05.000Z",
+      },
+    });
+
+    expect(next).toEqual({
+      status: "ready",
+      telemetry: expect.objectContaining({
+        appName: "Code",
+        host: expect.objectContaining({ cpuPercent: 55 }),
+      }),
+    });
+  });
+});
 
 describe("fetchSettings", () => {
   it("returns parsed settings on success", async () => {

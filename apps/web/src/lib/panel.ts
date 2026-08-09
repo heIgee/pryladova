@@ -1,6 +1,9 @@
 import {
+  mergeTelemetryHost,
   type PanelWsMessage,
   SETTINGS_ROUTE,
+  type SettingsPutResponse,
+  settingsPutResponseSchema,
   settingsSchema,
   type TelemetryState,
 } from "@pryladova/shared";
@@ -37,7 +40,9 @@ export const fetchSettings = async (): Promise<{ classificationEnabled: boolean 
   return settingsSchema.parse(json);
 };
 
-export const syncSettings = async (classificationEnabled: boolean): Promise<void> => {
+export const syncSettings = async (
+  classificationEnabled: boolean,
+): Promise<SettingsPutResponse> => {
   const response = await apiFetch(SETTINGS_ROUTE, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
@@ -47,15 +52,29 @@ export const syncSettings = async (classificationEnabled: boolean): Promise<void
     throw new Error(`Settings error (${response.status})`);
   }
   const json: unknown = await response.json();
-  settingsSchema.parse(json);
+  return settingsPutResponseSchema.parse(json);
 };
 
-export const panelStateFromWsMessage = (message: PanelWsMessage): PanelState => {
+export const applyPanelWsMessage = (panel: PanelState, message: PanelWsMessage): PanelState => {
   if (message.type === "empty") {
+    if (panel.status === "ready") {
+      return panel;
+    }
     return { status: "empty" };
   }
 
-  return { status: "ready", telemetry: message.telemetry };
+  if (message.type === "state") {
+    return { status: "ready", telemetry: message.telemetry };
+  }
+
+  if (panel.status !== "ready") {
+    return panel;
+  }
+
+  return {
+    status: "ready",
+    telemetry: mergeTelemetryHost(panel.telemetry, message.host),
+  };
 };
 
 export const getAgentLastSeenMs = (panel: PanelState): number | null => {

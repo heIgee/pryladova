@@ -9,6 +9,7 @@ import {
   formatPresence,
   IDLE_ACTIVE_THRESHOLD_MS,
 } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 const StatBar = ({
   icon,
@@ -45,7 +46,7 @@ export const MachineTile = ({
   host: HostPayload | null;
   className?: string;
 }) => (
-  <Card size="sm" className={className}>
+  <Card size="sm" className={cn("h-full min-h-0", className)}>
     <CardHeader className="border-b">
       <CardTitle className="flex items-center gap-2 text-sm">
         <Server className="size-3.5 text-muted-foreground" />

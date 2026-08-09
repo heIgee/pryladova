@@ -4,8 +4,12 @@ globs: apps/web/**/*.tsx
 alwaysApply: false
 ---
 
-# Accessibility/UI
+# Web UI
 
 - Semantic HTML first. ARIA/keyboard only if native insufficient.
 - No default `tabindex`/`role`/`aria-*` on natively-working elements.
 - No wrapper `div`/`span` around a single child — use the semantic/interactive element directly, or flex/grid on the parent.
+
+## Layout stability
+
+No layout shift on state change. Optional adornments (badges, chips, actions): reserve fixed space always — hide with `invisible`/`opacity-0`, not `{cond && …}`. Async loading: skeleton matches final layout; no one-line stub replacing a list.

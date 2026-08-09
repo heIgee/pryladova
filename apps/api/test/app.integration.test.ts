@@ -16,6 +16,8 @@ const defaultConfig: ApiConfig = {
   sentryDsn: undefined,
   sessionSecret: "test-session-secret-at-least-32-characters",
   panelPasswordHash: testPanelPasswordHash,
+  supabaseUrl: undefined,
+  supabaseSecretKey: undefined,
 };
 
 const createApp = createHttpTestApp;
@@ -80,7 +82,7 @@ describe("App integration", () => {
       .send({ classificationEnabled: true })
       .expect(200);
 
-    expect(response.body).toEqual({ classificationEnabled: true });
+    expect(response.body).toEqual({ classificationEnabled: true, persisted: false });
   });
 
   it("PUT /api/settings returns formatted validation errors", async () => {
