@@ -94,6 +94,20 @@ describe("ClassificationService", () => {
     expect(generateObjectMock).toHaveBeenCalledTimes(1);
   });
 
+  it("uses cache across noisy title variants", async () => {
+    const { service, settingsService } = await createService();
+    settingsService.applySettings({ classificationEnabled: true });
+
+    await expect(service.classify("MyEditor", "notes.md - myrepo - MyEditor")).resolves.toEqual(
+      classification,
+    );
+    await expect(
+      service.classify("MyEditor", "NOTES.MD (Draft) (notes.md) — myrepo — MyEditor"),
+    ).resolves.toEqual(classification);
+
+    expect(generateObjectMock).toHaveBeenCalledTimes(1);
+  });
+
   it("uses db cache when memory is cold", async () => {
     const maybeSingle = vi.fn().mockResolvedValue({
       data: {

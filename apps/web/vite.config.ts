@@ -76,6 +76,21 @@ const apiProxy = {
   changeOrigin: true,
   ws: true,
   configure: (proxy: { on: (event: string, listener: (...args: never[]) => void) => void }) => {
+    proxy.on("error", (error: unknown, _req: unknown, res: unknown) => {
+      if (!isBenignDevProxyError(error)) {
+        return;
+      }
+      const response = res as {
+        headersSent?: boolean;
+        writeHead?: (status: number, headers: Record<string, string>) => void;
+        end?: (body: string) => void;
+      };
+      if (response.headersSent || !response.writeHead || !response.end) {
+        return;
+      }
+      response.writeHead(502, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ message: "API temporarily unavailable" }));
+    });
     proxy.on(
       "proxyReqWs",
       (_proxyReq, _req, socket: { on: (event: string, listener: () => void) => void }) => {

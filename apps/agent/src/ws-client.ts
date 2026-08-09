@@ -46,6 +46,7 @@ export const connectAgentWs = (
     const hubBoundPromise = new Promise<never>((_, reject) => {
       rejectHubBound = reject;
     });
+    let opened = false;
 
     socket.on("close", (code, reason) => {
       if (code === HUB_BOUND_CLOSE_CODE) {
@@ -55,12 +56,13 @@ export const connectAgentWs = (
         return;
       }
 
-      if (code !== 1000) {
+      if (opened && code !== 1000) {
         onDisconnect?.();
       }
     });
 
     socket.once("open", () => {
+      opened = true;
       clearTimeout(timeout);
       resolve({
         client: {

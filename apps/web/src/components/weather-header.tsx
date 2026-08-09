@@ -62,11 +62,13 @@ const popoverRowClassName =
 export const WeatherHeader = ({
   weather,
   locationLabel,
+  usingBrowserLocation = false,
   onLocationChange,
   onRefresh,
 }: {
   weather: WeatherResponse;
   locationLabel: string | null;
+  usingBrowserLocation?: boolean;
   onLocationChange: (location: WeatherLocation) => void;
   onRefresh: () => Promise<void>;
 }) => {
@@ -150,7 +152,7 @@ export const WeatherHeader = ({
   }, [open, query]);
 
   const handlePick = (result: GeocodeResult): void => {
-    onLocationChange({ lat: result.lat, lon: result.lon, label: result.label });
+    onLocationChange({ lat: result.lat, lon: result.lon, label: result.label, source: "search" });
     setOpen(false);
   };
 
@@ -160,7 +162,12 @@ export const WeatherHeader = ({
     void readBrowserLocation()
       .then(({ lat, lon }) => reverseGeocodeCity(lat, lon))
       .then((result) => {
-        onLocationChange({ lat: result.lat, lon: result.lon, label: result.label });
+        onLocationChange({
+          lat: result.lat,
+          lon: result.lon,
+          label: result.label,
+          source: "browser",
+        });
         setOpen(false);
       })
       .catch((error: unknown) => {
@@ -207,6 +214,8 @@ export const WeatherHeader = ({
         : "Set location";
 
   const Icon = weather.status === "ready" ? weatherCodeToIcon(weather.weatherCode) : MapPin;
+  const usingCurrentLocation = usingBrowserLocation || busy;
+  const locationButtonLabel = usingCurrentLocation ? "Using current location" : "Use my location";
 
   return (
     <div ref={rootRef} className="relative">
@@ -258,11 +267,15 @@ export const WeatherHeader = ({
           <button
             type="button"
             disabled={busy}
-            className={cn(popoverRowClassName, "mb-3 disabled:opacity-50")}
+            className={cn(
+              popoverRowClassName,
+              "mb-3 disabled:opacity-50",
+              usingCurrentLocation && "text-muted-foreground",
+            )}
             onClick={handleUseBrowserLocation}
           >
             <LocateFixed className="size-3.5 shrink-0" aria-hidden="true" />
-            Use my location
+            {locationButtonLabel}
           </button>
 
           {geoError ? <p className="mb-2 text-micro text-destructive">{geoError}</p> : null}

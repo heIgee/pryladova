@@ -265,11 +265,11 @@ describe("reverseGeocodeCity", () => {
       "fetch",
       vi.fn().mockResolvedValue({
         ok: false,
-        status: 502,
+        status: 500,
       }),
     );
 
-    await expect(reverseGeocodeCity(50.45, 30.52)).rejects.toThrow("Reverse geocoding HTTP 502");
+    await expect(reverseGeocodeCity(50.45, 30.52)).rejects.toThrow("Reverse geocoding HTTP 500");
     vi.unstubAllGlobals();
   });
 });

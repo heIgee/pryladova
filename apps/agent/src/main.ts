@@ -97,6 +97,24 @@ const buildHostPayload = async (
 const snapshotKey = (payload: TelemetryPayload): string =>
   `${payload.appName}|${payload.windowTitle}`;
 
+const CONNECT_RETRY_BASE_MS = 2_000;
+const CONNECT_RETRY_MAX_MS = 30_000;
+
+const formatConnectError = (error: unknown): string => {
+  if (error instanceof Error) {
+    const sys = error as NodeJS.ErrnoException;
+    if (sys.code) {
+      return sys.code;
+    }
+    const message = error.message.trim();
+    if (message) {
+      return message;
+    }
+    return error.name || "unknown error";
+  }
+  return String(error);
+};
+
 const watchHubBoundReject = (hubBoundReject: Promise<never>): void => {
   void hubBoundReject.catch((error: unknown) => {
     const message = error instanceof Error ? error.message : String(error);
@@ -111,15 +129,25 @@ const connectWithRetry = async (
   agentId: string,
   onDisconnect: () => void,
 ): Promise<AgentWsConnectResult> => {
+  let delayMs = CONNECT_RETRY_BASE_MS;
+  let loggedFailure = false;
+
   for (;;) {
     try {
-      return await connectAgentWs(apiUrl, ingestSecret, agentId, onDisconnect);
+      const connection = await connectAgentWs(apiUrl, ingestSecret, agentId, onDisconnect);
+      if (loggedFailure) {
+        console.log("[agent] ws connected");
+      }
+      return connection;
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.error(`[agent] ws connect failed: ${message}`);
+      if (!loggedFailure) {
+        console.error(`[agent] ws connect failed: ${formatConnectError(error)} (retrying)`);
+        loggedFailure = true;
+      }
       await new Promise((resolve) => {
-        setTimeout(resolve, 2_000);
+        setTimeout(resolve, delayMs);
       });
+      delayMs = Math.min(delayMs * 2, CONNECT_RETRY_MAX_MS);
     }
   }
 };
@@ -147,12 +175,14 @@ const run = async (): Promise<void> => {
     shuttingDown = true;
     void (async (): Promise<void> => {
       try {
-        await connection.client.sendShutdown(new Date().toISOString());
+        if (connection?.client) {
+          await connection.client.sendShutdown(new Date().toISOString());
+        }
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
         console.error(`[agent] shutdown send failed: ${message}`);
       }
-      connection.client.close();
+      connection?.client?.close();
       process.exit(0);
     })();
   };
@@ -194,7 +224,7 @@ const run = async (): Promise<void> => {
   };
 
   const runTick = async (): Promise<void> => {
-    if (tickInFlight || shuttingDown) {
+    if (tickInFlight || shuttingDown || reconnecting || !connection?.client) {
       return;
     }
 
@@ -211,7 +241,7 @@ const run = async (): Promise<void> => {
   };
 
   const onUnexpectedClose = (): void => {
-    if (shuttingDown || reconnecting) {
+    if (shuttingDown || reconnecting || !connection?.client) {
       return;
     }
 
@@ -225,7 +255,7 @@ const run = async (): Promise<void> => {
 
     reconnecting = true;
     try {
-      connection.client.close();
+      connection?.client?.close();
       connection = await connectWithRetry(
         config.apiUrl,
         config.ingestSecret,

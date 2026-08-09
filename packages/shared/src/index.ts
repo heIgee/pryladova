@@ -17,6 +17,8 @@ export const AUTH_SESSION_ROUTE = "/api/auth/session";
 export const WEATHER_ROUTE = "/api/weather";
 export const WEATHER_CITIES_ROUTE = "/api/weather/cities";
 export const WEATHER_REVERSE_ROUTE = "/api/weather/reverse";
+export const GITHUB_STATUS_ROUTE = "/api/integrations/github";
+export const STEAM_STATUS_ROUTE = "/api/integrations/steam";
 export const PANEL_WS_ROUTE = "/api/ws/panel";
 export const AGENT_WS_ROUTE = "/api/ws/agent";
 
@@ -162,6 +164,70 @@ export const weatherResponseSchema = z.discriminatedUnion("status", [
   z.object({ status: z.literal("unavailable") }),
 ]);
 
+export const ciCheckStatusSchema = z.enum([
+  "success",
+  "failure",
+  "pending",
+  "skipped",
+  "none",
+  "denied",
+  "unknown",
+]);
+
+export const githubCiCheckSchema = z.object({
+  repo: z.string().min(1),
+  status: ciCheckStatusSchema,
+});
+
+export const githubStatusReadySchema = z.object({
+  status: z.literal("ready"),
+  username: z.string().min(1),
+  avatarUrl: z.url().nullable(),
+  profileUrl: z.url().nullable(),
+  publicRepos: z.number().int().nonnegative(),
+  followers: z.number().int().nonnegative(),
+  commitsToday: z.number().int().nonnegative(),
+  openPullRequests: z.number().int().nonnegative(),
+  checks: z.array(githubCiCheckSchema),
+  fetchedAt: z.iso.datetime(),
+});
+
+export const githubStatusResponseSchema = z.discriminatedUnion("status", [
+  githubStatusReadySchema,
+  z.object({ status: z.literal("disabled") }),
+  z.object({ status: z.literal("unavailable") }),
+]);
+
+export const steamPersonaStateSchema = z.enum(["offline", "online", "away", "busy", "snooze"]);
+
+export const steamCurrentGameSchema = z.object({
+  name: z.string().min(1),
+  sessionSec: z.number().int().nonnegative(),
+});
+
+export const steamRecentlyPlayedSchema = z.object({
+  name: z.string().min(1),
+  playtime2WeeksMin: z.number().int().nonnegative(),
+  iconUrl: z.url().nullable(),
+});
+
+export const steamStatusReadySchema = z.object({
+  status: z.literal("ready"),
+  username: z.string().min(1),
+  personaState: steamPersonaStateSchema,
+  avatarUrl: z.url().nullable(),
+  profileUrl: z.url().nullable(),
+  currentGame: steamCurrentGameSchema.nullable(),
+  recentlyPlayed: z.array(steamRecentlyPlayedSchema),
+  fetchedAt: z.iso.datetime(),
+});
+
+export const steamStatusResponseSchema = z.discriminatedUnion("status", [
+  steamStatusReadySchema,
+  z.object({ status: z.literal("disabled") }),
+  z.object({ status: z.literal("unavailable") }),
+]);
+
 /** Identity key for a media track: same source data yields the same key regardless of case/whitespace. */
 export const trackMediaKey = (media: HostMedia): string =>
   [
@@ -232,6 +298,15 @@ export type PanelWsMessage = z.infer<typeof panelWsMessageSchema>;
 export type AgentWsInbound = z.infer<typeof agentWsInboundSchema>;
 export type WeatherReady = z.infer<typeof weatherReadySchema>;
 export type WeatherResponse = z.infer<typeof weatherResponseSchema>;
+export type CiCheckStatus = z.infer<typeof ciCheckStatusSchema>;
+export type GithubCiCheck = z.infer<typeof githubCiCheckSchema>;
+export type GithubStatusReady = z.infer<typeof githubStatusReadySchema>;
+export type GithubStatusResponse = z.infer<typeof githubStatusResponseSchema>;
+export type SteamPersonaState = z.infer<typeof steamPersonaStateSchema>;
+export type SteamCurrentGame = z.infer<typeof steamCurrentGameSchema>;
+export type SteamRecentlyPlayed = z.infer<typeof steamRecentlyPlayedSchema>;
+export type SteamStatusReady = z.infer<typeof steamStatusReadySchema>;
+export type SteamStatusResponse = z.infer<typeof steamStatusResponseSchema>;
 
 export const mergeHostPayload = (
   previous: HostPayload | null | undefined,
@@ -314,6 +389,12 @@ export const parseAuthSessionResponse = (response: unknown): AuthSessionResponse
 
 export const parseWeatherResponse = (response: unknown): WeatherResponse =>
   weatherResponseSchema.parse(response);
+
+export const parseGithubStatusResponse = (response: unknown): GithubStatusResponse =>
+  githubStatusResponseSchema.parse(response);
+
+export const parseSteamStatusResponse = (response: unknown): SteamStatusResponse =>
+  steamStatusResponseSchema.parse(response);
 
 export const parseGeocodeCitiesResponse = (response: unknown): GeocodeCity[] =>
   geocodeCitiesResponseSchema.parse(response);

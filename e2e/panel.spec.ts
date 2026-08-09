@@ -14,12 +14,13 @@ test.describe("panel", () => {
     await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
   });
 
-  test("shows empty state before ingest", async ({ page }) => {
+  test("shows dashboard before ingest", async ({ page }) => {
     await page.goto("/");
     await login(page);
     await expect(page.getByRole("heading", { name: "Pryladova", level: 1 })).toBeVisible();
-    await expect(page.getByText("Live desktop presence")).toBeVisible();
-    await expect(page.getByText(/…$/)).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText("GitHub", { exact: true })).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText("Steam", { exact: true })).toBeVisible();
+    await expect(page.getByText("Waiting for host metrics…")).toBeVisible();
   });
 
   test("shows ingested window after agent update", async ({ page }) => {

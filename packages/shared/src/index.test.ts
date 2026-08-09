@@ -1,15 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
   agentWsInboundSchema,
+  githubStatusResponseSchema,
   hostMediaSchema,
   hostPayloadForPanelWs,
   isRedactedTelemetry,
   mergeHostPayload,
   normalizeAppName,
   panelWsMessageSchema,
+  parseGithubStatusResponse,
+  parseSteamStatusResponse,
   SECURE_APP_NAME,
   SECURE_WINDOW_TITLE,
   settingsSchema,
+  steamStatusResponseSchema,
   telemetryPayloadSchema,
   weatherCodeToCondition,
   weatherResponseSchema,
@@ -214,6 +218,60 @@ describe("weatherResponseSchema", () => {
   it("parses disabled and unavailable", () => {
     expect(weatherResponseSchema.parse({ status: "disabled" }).status).toBe("disabled");
     expect(weatherResponseSchema.parse({ status: "unavailable" }).status).toBe("unavailable");
+  });
+});
+
+describe("githubStatusResponseSchema", () => {
+  it("parses ready response", () => {
+    const response = parseGithubStatusResponse({
+      status: "ready",
+      username: "octocat",
+      avatarUrl: "https://avatars.githubusercontent.com/u/1?v=4",
+      profileUrl: "https://github.com/octocat",
+      publicRepos: 12,
+      followers: 42,
+      commitsToday: 3,
+      openPullRequests: 2,
+      checks: [
+        { repo: "pryladova", status: "success" },
+        { repo: "other", status: "pending" },
+      ],
+      fetchedAt: "2026-01-01T12:00:00.000Z",
+    });
+    expect(response.status).toBe("ready");
+    if (response.status === "ready") {
+      expect(response.checks).toHaveLength(2);
+    }
+  });
+
+  it("parses disabled and unavailable", () => {
+    expect(githubStatusResponseSchema.parse({ status: "disabled" }).status).toBe("disabled");
+    expect(githubStatusResponseSchema.parse({ status: "unavailable" }).status).toBe("unavailable");
+  });
+});
+
+describe("steamStatusResponseSchema", () => {
+  it("parses ready response", () => {
+    const response = parseSteamStatusResponse({
+      status: "ready",
+      username: "example",
+      personaState: "online",
+      avatarUrl: "https://avatars.steamstatic.com/example.jpg",
+      profileUrl: "https://steamcommunity.com/id/example",
+      currentGame: { name: "Half-Life 2", sessionSec: 3600 },
+      recentlyPlayed: [{ name: "Portal", playtime2WeeksMin: 120, iconUrl: null }],
+      fetchedAt: "2026-01-01T12:00:00.000Z",
+    });
+    expect(response.status).toBe("ready");
+    if (response.status === "ready") {
+      expect(response.currentGame?.name).toBe("Half-Life 2");
+      expect(response.recentlyPlayed).toHaveLength(1);
+    }
+  });
+
+  it("parses disabled and unavailable", () => {
+    expect(steamStatusResponseSchema.parse({ status: "disabled" }).status).toBe("disabled");
+    expect(steamStatusResponseSchema.parse({ status: "unavailable" }).status).toBe("unavailable");
   });
 });
 

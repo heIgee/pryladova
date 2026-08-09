@@ -10,6 +10,7 @@ import { ConfigService } from "./config.service.js";
 
 const bootstrap = async (): Promise<void> => {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  app.enableShutdownHooks();
   // Host ingest may include base64 album-art thumbnails.
   app.useBodyParser("json", { limit: "2mb" });
   app.use(cookieParser());

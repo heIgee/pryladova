@@ -4,6 +4,18 @@ export const telemetryFixture = {
   capturedAt: "2026-01-01T12:00:00.000Z",
 };
 
+export const deadlockTelemetryFixture = {
+  appName: "deadlock.exe",
+  windowTitle: "Deadlock — Main Menu",
+  capturedAt: "2026-01-01T12:01:00.000Z",
+};
+
+export const deadlockTelemetryRefocusFixture = {
+  appName: "deadlock.exe",
+  windowTitle: "Deadlock — Main Menu",
+  capturedAt: "2026-01-01T12:02:00.000Z",
+};
+
 export const redactedTelemetryFixture = {
   appName: "Secure",
   windowTitle: "Redacted",

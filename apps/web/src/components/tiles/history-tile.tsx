@@ -1,22 +1,10 @@
 import type { HistoryEntry } from "@pryladova/shared";
 import { Clock3, RefreshCw } from "lucide-react";
-import { useMemo, useState } from "react";
 import { headerIconButtonClassName } from "@/components/layout/shell";
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Skeleton, skeletonSize } from "@/components/ui/skeleton";
 import type { HistoryState } from "@/hooks/use-history";
-import {
-  formatDurationSec,
-  HISTORY_VISIBLE_LIMIT,
-  partitionHistoryEntries,
-  summarizeHistoryEntries,
-} from "@/lib/history";
+import { formatDurationSec, summarizeHistoryEntries } from "@/lib/history";
 import { cn } from "@/lib/utils";
 
 const NOW_CHIP_CLASS =
@@ -69,17 +57,17 @@ const HistoryBarRow = ({
 const HISTORY_SKELETON_ROWS = ["one", "two", "three", "four"] as const;
 
 const HistoryLoadingSkeleton = () => (
-  <ul className="flex flex-col gap-3" aria-hidden="true">
+  <ul className="flex flex-col gap-3" aria-hidden="true" data-testid="history-tile-skeleton">
     {HISTORY_SKELETON_ROWS.map((rowKey) => (
       <li key={rowKey} className="flex flex-col gap-1">
         <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 flex-1 items-center gap-2">
-            <div className="h-4 max-w-[40%] flex-1 animate-pulse rounded bg-muted" />
+            <Skeleton className={cn(skeletonSize.caption, "max-w-[40%] flex-1")} />
             <NowChipSlot active={false} />
           </div>
-          <div className="h-4 w-10 shrink-0 animate-pulse rounded bg-muted" />
+          <Skeleton className={skeletonSize.duration} />
         </div>
-        <div className="h-2 animate-pulse rounded-full bg-muted" />
+        <Skeleton className={skeletonSize.bar} />
       </li>
     ))}
   </ul>
@@ -131,40 +119,7 @@ const HistoryReadyContent = ({
 }: {
   entries: HistoryEntry[];
   activeAppName?: string | null;
-}) => {
-  const [expanded, setExpanded] = useState(false);
-  const { visible, other } = useMemo(
-    () =>
-      partitionHistoryEntries(entries, {
-        activeAppName,
-        expanded,
-      }),
-    [activeAppName, entries, expanded],
-  );
-  const canExpand = entries.length > HISTORY_VISIBLE_LIMIT;
-
-  const bars = <HistoryBars entries={visible} other={other} activeAppName={activeAppName} />;
-
-  return (
-    <div className="flex flex-col gap-3">
-      <div className={cn("overflow-y-auto [scrollbar-gutter:stable]", !expanded && "max-h-72")}>
-        {bars}
-      </div>
-      {canExpand ? (
-        <button
-          type="button"
-          aria-expanded={expanded}
-          className="self-start text-caption text-muted-foreground transition-colors hover:text-foreground"
-          onClick={() => {
-            setExpanded((current) => !current);
-          }}
-        >
-          {expanded ? "Collapse" : "Expand"}
-        </button>
-      ) : null}
-    </div>
-  );
-};
+}) => <HistoryBars entries={entries} other={null} activeAppName={activeAppName} />;
 
 export const HistoryTile = ({
   history,
@@ -172,12 +127,14 @@ export const HistoryTile = ({
   refreshing = false,
   hasLoaded = false,
   onRefresh,
+  className,
 }: {
   history: HistoryState;
   activeAppName?: string | null;
   refreshing?: boolean;
   hasLoaded?: boolean;
   onRefresh?: () => void;
+  className?: string;
 }) => {
   const title =
     history.status === "loading"
@@ -187,27 +144,25 @@ export const HistoryTile = ({
         : "Today";
 
   const summary = history.status === "ready" ? summarizeHistoryEntries(history.entries) : null;
-  const readyFingerprint =
-    history.status === "ready"
-      ? `${history.entries.length}|${[...history.entries.map((entry) => entry.appName)].sort().join(",")}`
-      : null;
 
   const canRefresh = Boolean(onRefresh) && (hasLoaded || history.status !== "loading");
 
   return (
-    <Card size="sm">
-      <CardHeader className="border-b">
-        <CardTitle className="flex items-center gap-2 text-sm">
-          <Clock3 className="size-3.5 text-muted-foreground" />
-          {title}
-        </CardTitle>
-        {summary ? (
-          <CardDescription className="text-caption">
-            {formatDurationSec(summary.totalDurationSec)} tracked · {summary.appCount} apps
-          </CardDescription>
-        ) : null}
-        {onRefresh ? (
-          <CardAction>
+    <Card
+      size="sm"
+      className={cn("flex h-full min-h-0 flex-col", className)}
+      data-testid="history-tile"
+    >
+      <CardHeader className="shrink-0 border-b">
+        <div className="flex min-w-0 items-center gap-2">
+          <Clock3 className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <span className="shrink-0 text-sm font-medium mr-auto">{title}</span>
+          {summary ? (
+            <span className="min-w-0 truncate text-caption text-muted-foreground">
+              {formatDurationSec(summary.totalDurationSec)} tracked · {summary.appCount} apps
+            </span>
+          ) : null}
+          {onRefresh ? (
             <button
               type="button"
               disabled={!canRefresh || refreshing}
@@ -221,24 +176,22 @@ export const HistoryTile = ({
                 aria-hidden="true"
               />
             </button>
-          </CardAction>
-        ) : null}
+          ) : null}
+        </div>
       </CardHeader>
-      <CardContent>
-        {history.status === "loading" ? <HistoryLoadingSkeleton /> : null}
-        {history.status === "empty" ? (
-          <p className="text-caption text-muted-foreground">No recorded focus time yet today.</p>
-        ) : null}
-        {history.status === "error" ? (
-          <p className="text-caption text-destructive">{history.message}</p>
-        ) : null}
-        {history.status === "ready" ? (
-          <HistoryReadyContent
-            key={readyFingerprint}
-            entries={history.entries}
-            activeAppName={activeAppName}
-          />
-        ) : null}
+      <CardContent className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain">
+          {history.status === "loading" ? <HistoryLoadingSkeleton /> : null}
+          {history.status === "empty" ? (
+            <p className="text-caption text-muted-foreground">No recorded focus time yet today.</p>
+          ) : null}
+          {history.status === "error" ? (
+            <p className="text-caption text-destructive">{history.message}</p>
+          ) : null}
+          {history.status === "ready" ? (
+            <HistoryReadyContent entries={history.entries} activeAppName={activeAppName} />
+          ) : null}
+        </div>
       </CardContent>
     </Card>
   );

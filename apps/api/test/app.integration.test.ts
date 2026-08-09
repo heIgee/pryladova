@@ -18,6 +18,10 @@ const defaultConfig: ApiConfig = {
   panelPasswordHash: testPanelPasswordHash,
   supabaseUrl: undefined,
   supabaseSecretKey: undefined,
+  githubToken: undefined,
+  githubUsername: undefined,
+  steamApiKey: undefined,
+  steamId: undefined,
 };
 
 const createApp = createHttpTestApp;
@@ -149,5 +153,95 @@ describe("App integration weather", () => {
     expect(response.body.status).toBe("ready");
     expect(response.body.temperatureC).toBe(21.5);
     expect(response.body.condition).toBe("Clear");
+  });
+});
+
+describe("App integration integrations", () => {
+  let app: INestApplication;
+  let agent: Agent;
+
+  afterEach(async () => {
+    vi.unstubAllGlobals();
+    await app.close();
+  });
+
+  it("GET /api/integrations/github returns disabled without config", async () => {
+    app = await createApp(defaultConfig);
+    agent = request.agent(app.getHttpServer());
+    await loginPanel(agent);
+
+    await agent.get("/api/integrations/github").expect(200, { status: "disabled" });
+  });
+
+  it("GET /api/integrations/steam returns disabled without config", async () => {
+    app = await createApp(defaultConfig);
+    agent = request.agent(app.getHttpServer());
+    await loginPanel(agent);
+
+    await agent.get("/api/integrations/steam").expect(200, { status: "disabled" });
+  });
+
+  it("GET /api/integrations/github returns ready payload when configured", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes("/search/commits")) {
+          return { ok: true, json: async () => ({ total_count: 1 }) };
+        }
+        if (url === "https://api.github.com/graphql") {
+          return {
+            ok: true,
+            json: async () => ({
+              data: { viewer: { pullRequests: { totalCount: 0 } } },
+            }),
+          };
+        }
+        if (url.includes("/repos?")) {
+          return {
+            ok: true,
+            json: async () => [{ full_name: "octocat/pryladova", name: "pryladova" }],
+          };
+        }
+        if (url.includes("/users/octocat") && !url.includes("/repos")) {
+          return {
+            ok: true,
+            json: async () => ({
+              avatar_url: "https://avatars.githubusercontent.com/u/1?v=4",
+              html_url: "https://github.com/octocat",
+              public_repos: 8,
+              followers: 9001,
+            }),
+          };
+        }
+        if (url.includes("/actions/runs")) {
+          return {
+            ok: true,
+            json: async () => ({
+              workflow_runs: [{ conclusion: "success", status: "completed" }],
+            }),
+          };
+        }
+        throw new Error(`Unexpected fetch: ${url}`);
+      }),
+    );
+
+    app = await createApp({
+      ...defaultConfig,
+      githubToken: "ghp_test",
+      githubUsername: "octocat",
+    });
+    agent = request.agent(app.getHttpServer());
+    await loginPanel(agent);
+
+    const response = await agent.get("/api/integrations/github").expect(200);
+    expect(response.body.status).toBe("ready");
+    expect(response.body.commitsToday).toBe(1);
+    expect(response.body.checks).toEqual([{ repo: "pryladova", status: "success" }]);
+  });
+
+  it("POST /api/test/e2e/reset clears in-memory state in test env", async () => {
+    const response = await agent.post("/api/test/e2e/reset").expect(201);
+    expect(response.body).toEqual({ ok: true });
   });
 });

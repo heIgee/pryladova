@@ -18,6 +18,10 @@ export type ApiConfig = {
   panelPasswordHash: string | undefined;
   supabaseUrl: string | undefined;
   supabaseSecretKey: string | undefined;
+  githubToken: string | undefined;
+  githubUsername: string | undefined;
+  steamApiKey: string | undefined;
+  steamId: string | undefined;
 };
 
 export const requirePanelAuth = (
@@ -74,6 +78,10 @@ export const loadConfig = (): ApiConfig => {
   const panelPasswordHash = readPanelPasswordHash();
   const supabaseUrl = normalizeSupabaseUrl(process.env.SUPABASE_URL?.trim());
   const supabaseSecretKey = process.env.SUPABASE_SECRET_KEY?.trim() || undefined;
+  const githubToken = process.env.GITHUB_TOKEN?.trim() || undefined;
+  const githubUsername = process.env.GITHUB_USERNAME?.trim() || undefined;
+  const steamApiKey = process.env.STEAM_API_KEY?.trim() || undefined;
+  const steamId = process.env.STEAM_ID?.trim() || undefined;
 
   return {
     geminiApiKey,
@@ -84,6 +92,10 @@ export const loadConfig = (): ApiConfig => {
     panelPasswordHash,
     supabaseUrl,
     supabaseSecretKey,
+    githubToken,
+    githubUsername,
+    steamApiKey,
+    steamId,
   };
 };
 

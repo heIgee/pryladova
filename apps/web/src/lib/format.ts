@@ -14,6 +14,9 @@ export const formatDuration = (totalSeconds: number): string => {
   return remMinutes === 0 ? `${hours}h` : `${hours}h ${remMinutes}m`;
 };
 
+export const formatPlaytimeMinutes = (totalMinutes: number): string =>
+  formatDuration(Math.max(0, Math.floor(totalMinutes)) * 60);
+
 export const formatPresence = (idleMs: number): string => {
   if (idleMs < IDLE_ACTIVE_THRESHOLD_MS) {
     return "Active";

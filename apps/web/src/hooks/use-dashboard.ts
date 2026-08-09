@@ -1,8 +1,12 @@
 import type { WeatherResponse } from "@pryladova/shared";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import type { GithubTileStatus, SteamTileStatus } from "@/lib/integration-status";
+import { integrationLoading } from "@/lib/integration-status";
+import { fetchGithubStatus, fetchSteamStatus } from "@/lib/integrations";
 import {
   AGENT_HINT_AFTER_MS,
   fetchSettings,
+  INTEGRATIONS_POLL_INTERVAL_MS,
   isAgentStale,
   persistClassificationEnabled,
   readStoredClassificationEnabled,
@@ -33,6 +37,8 @@ export const useDashboard = () => {
   const [showAgentHint, setShowAgentHint] = useState(false);
   const [theme, setTheme] = useState<Theme>(() => resolveTheme());
   const [weather, setWeather] = useState<WeatherResponse>({ status: "disabled" });
+  const [githubStatus, setGithubStatus] = useState<GithubTileStatus>(integrationLoading);
+  const [steamStatus, setSteamStatus] = useState<SteamTileStatus>(integrationLoading);
   const [weatherLocation, setWeatherLocation] = useState<WeatherLocation | null>(() =>
     readStoredWeatherLocation(),
   );
@@ -100,6 +106,31 @@ export const useDashboard = () => {
       window.clearInterval(timer);
     };
   }, [weatherLocation]);
+
+  useEffect(() => {
+    let active = true;
+
+    const refreshIntegrations = async (refresh = false): Promise<void> => {
+      const [github, steam] = await Promise.all([
+        fetchGithubStatus({ refresh }),
+        fetchSteamStatus({ refresh }),
+      ]);
+      if (active) {
+        setGithubStatus(github);
+        setSteamStatus(steam);
+      }
+    };
+
+    void refreshIntegrations(true);
+    const timer = window.setInterval(() => {
+      void refreshIntegrations();
+    }, INTEGRATIONS_POLL_INTERVAL_MS);
+
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, []);
 
   useEffect(() => {
     if (panel.status === "loading") {
@@ -180,6 +211,8 @@ export const useDashboard = () => {
     theme,
     weather,
     weatherLocation,
+    githubStatus,
+    steamStatus,
     handleClassificationToggle,
     handleThemeChange,
     handleWeatherLocationChange,

@@ -1,90 +1,104 @@
 # Roadmap
 
-Future work — not scheduled. Current stack and deploy: [README.md](README.md), [deploy/README.md](deploy/README.md).
+Future work — not scheduled. Stack and deploy: [README.md](README.md), [deploy/README.md](deploy/README.md).
 
 ## Persistence and real-time UI
 
-**Supabase** as the system of record for window history. Live host metrics (CPU, RAM, uptime, media) stay ephemeral in the API — not a stored time series.
-
-- **Persist window segments, not polls** — the agent sends window telemetry only on focus change (WS ingest), so each focus-change message closes the open segment and opens the next
-- Aggregate on read (day view = time per app); no pre-rollup until query cost justifies one
-- **Persist settings** (classification toggle survives API restart)
-- Web reads history through the API first. **Supabase Realtime** direct to the browser comes after: it needs anon-key RLS policies, and the panel still depends on the API for ephemeral host state either way
-
-### Segment semantics
-
-- One open segment per agent, enforced by a partial unique index (`ended_at is null`) rather than application code
-- Both interval ends come from agent `capturedAt`, so durations do not inherit network latency
-- **Stale close** — host ticks (WS) refresh `last_seen_at`; after a gap (sleep, crash, network loss) the open segment closes at `last_seen_at`, not at wake, and records why it closed
-- Decide whether `idleMs` closes a segment or accrues inside it — **decided: accrues inside segment**
-- Redacted segments are stored as `Secure` / `Redacted`: accurate totals, no leaked titles
-- `agent_id` column from the first migration, before multi-agent needs it
-- Optional `eventId` on the telemetry payload with a unique constraint — required before the agent retry queue can replay without double-counting
-- Late arrivals (`capturedAt` older than the open segment) are ignored and logged
-- Migrations live in the repo, not in the Supabase dashboard
+- **Supabase Realtime** direct to the browser — needs anon-key RLS; panel still needs API for ephemeral host state
+- **`eventId` on telemetry** — unique constraint before agent retry queue can replay without double-counting
+- **Session lock** — decide whether lock closes a segment or accrues like idle
+- No pre-rollup for history aggregates until query cost justifies it
 
 ## Identity and config (self-hosted)
 
-Today: one hub — Nest **session cookie** for panel reads, shared **`INGEST_SECRET`** Bearer for agent ingest. No user accounts, no per-agent id, no integration token storage.
-
-**Security model:** Nest guards panel routes (`GET/PUT /api/settings`, weather) and panel WebSocket. Single password from env (`PANEL_PASSWORD_HASH`). Caddy = TLS + reverse proxy. API bound to localhost in Docker.
-
-- Per-agent identity in env → include in ingest; panel labels machines when multi-agent lands
-- **Integration keys on the server** — env-based secrets (same pattern as existing API keys): configure once, restart API
-- Optional **Settings → Integrations** in panel (behind existing auth): masked keys, docs links; full UI persistence waits on settings store
-- OAuth integrations only when API keys aren't enough — defer heavier flows until simpler tiles ship
+- Multi-agent panel UX — label/select machines (`AGENT_ID` already in ingest)
+- **Integration keys on the server** — env-based secrets; configure once, restart API
+- **Settings → Integrations** in panel — masked keys, docs links; full UI persistence waits on settings store
+- OAuth only when API keys aren't enough — defer until more env-key tiles ship
 
 ## Integrations (bento tiles)
 
-Server-side fetch + cache (minutes-scale TTL). Not agent OAuth except where OS already provides data.
+Server-side fetch + cache (minutes-scale TTL). Pattern: copy `integrations/weather.service.ts`. No API keys in the browser.
 
-### Server env keys
+### Env-key tiles (ship first)
 
-- **GitHub** — recent activity / contribution summary; infrequent poll
-- **Steam** — online / in-game / avatar; optional recently played
-- **Discord** — narrow scope: no clean friends-list API; own account or guild bot presence — defer or narrow
+- **Home Assistant** — room temp, humidity, or entity ON/OFF; local URL + long-lived token
+- **Service ping grid** — ICMP or HTTP checks from API cron (router, NAS, self)
+
+Shipped: **GitHub** (commits today, open PRs, latest CI on 3 recent repos) and **Steam** (presence, avatar, session playtime, recently played) — env keys in API, 5m cache, bento tiles beside history.
+
+### OAuth (later)
+
+- **Google Calendar** — "in meeting" badge + next event
+- **Last.fm** — recent 4–6 tracks grid (complements SMTC now-playing)
+- **Telegram bot** — unread count or last saved message
+
+### Narrow / defer
+
+- **Discord** — guild bot or own account only; no local RPC / voice state
+
+### Out of scope
+
+- WakaTime, Oura, Trakt, Strava
+- Mic/camera active indicators unless opt-in
+- Polling third-party APIs from the React frontend
 
 ### Bento layout
 
-- Group **online status** (Steam, Discord when wired) separately from window / machine / media
-- **Day strip** from aggregated segments — time per app/game, no productivity scoring or distraction alerts
-- Classification category chips optional; work/personal chips not a product direction
+- **Real CSS grid spans** — History left, integration tiles right (shipped for GitHub/Steam); widen further as tiles grow
+- **Status strip** — Discord when wired; separate from window / machine / media
+- **Day strip / timeline** — horizontal time-per-app view alongside bar chart
+- **History date picker** — not just "today"
+- **One live motion element** — network sparkline or CPU mini-chart from WS ticks
+- **Defer `react-grid-layout`** until tile set stabilizes
+- No productivity scoring, distraction alerts, or work/personal guilt chips
 
 ## API / ops
 
-- **Horizontal scaling (multi-instance API)** — deferred. Current persistence assumes a single API container: in-process segment mutation serialization, debounced heartbeat writes, and the 60s stale-heartbeat sweep all break or duplicate work if multiple replicas run without coordination. Later options: Postgres advisory locks or `FOR UPDATE` on segment rows, a durable outbox drained by one worker, or a single designated writer role. Revisit when deploy moves beyond one VPS/container.
-- Panel Nest auth (done — session cookie; see `deploy/README.md`)
-- E2E coverage for production auth path (panel login + ingest secret) — partial in `e2e/panel*.spec.ts`
-- LLM classification treats window title and app name as untrusted input; trust boundary is the agent/OS
-- Reject or sanitize non-raster `thumbnailDataUrl` at the API/shared boundary (SVG etc.)
+- **Horizontal scaling (multi-instance API)** — segment writes, heartbeat debounce, and stale sweep need coordination (advisory locks, outbox, or single writer)
+- E2E coverage for production auth path — partial in `e2e/panel*.spec.ts`
+- Reject non-raster `thumbnailDataUrl` at API/shared boundary (SVG etc.)
 - Contract tests: API responses satisfy shared Zod output schemas
+- **Integration health** — per-tile stale/error flags on panel
+- **Panel WS payload budgets** — as optional host fields (network, GPU) grow
+
+## Agent telemetry (extensions)
+
+Extend `hostPayloadSchema` in shared. Host metrics stay ephemeral — sparklines in API memory or client ring buffer, not Supabase. No WMI on the hot path.
+
+- **`GetIfTable2` network throughput** — upload/download MB/s from adapter byte counter deltas
+- **`GetSystemPowerStatus`** — AC / battery % / time remaining
+- **`SetWinEventHook` (`EVENT_SYSTEM_FOREGROUND`)** — event-driven foreground; drop poll-based `active-win`
+- **`WTSRegisterSessionNotification`** — locked/unlocked session badge
+- **Optional GPU via shared memory** — Afterburner / HWiNFO SHM when present
+- **Per-process network (defer)** — `GetExtendedTcpTable` + PID→name
 
 ## Agent privacy
 
 - Locale-specific blocklist rules
 - User-defined regex rules beyond `BLOCKED_APPS`
 - Blocklist matches executable tokens only (display name vs process name gaps)
-- Blocked-app dedup between two different secure apps (same snapshot key suppresses transition)
+- Blocked-app dedup between two different secure apps
 
 ## Agent hardening
 
 - **Circuit breaker** (`opossum`) around API calls
-- **Local retry queue** (`better-sqlite3`) for offline / API outage tolerance
-- **Node.js SEA** (Single Executable Application) for a distributable `.exe` — alternative to long-running Node + pm2
-- Graceful shutdown (clear poll interval on SIGINT/SIGTERM)
+- **Local retry queue** (`better-sqlite3`) — pairs with `eventId` for idempotent replay
+- **Node.js SEA** for distributable `.exe`
+- Graceful shutdown — `clearInterval` on SIGINT/SIGTERM (shutdown message exists; poll loop does not stop)
 - `pickCurrentSession` stable tie-breaking when multiple SMTC sessions share rank
 - Degrade gracefully when `active-win` fails — don't skip window telemetry after a successful host tick
-- Reset track/thumbnail cache when SMTC session clears (avoid stale re-fetch when media resumes)
+- Reset track/thumbnail cache when SMTC session clears
 
 ## Product and UX
 
-- Rich dashboard: history, timeline, aggregates (segment-based)
-- Multi-machine / multi-agent identity in payloads
+- **Multi-day history** — week view, app-switching patterns
+- **`close_reason` in timeline UI** — stale vs focus_change vs shutdown
 - Weather popover full a11y (arrow keys, focus trap, `aria-activedescendant`)
-- Consolidate WMO weather code → icon mapping in shared (web header duplicates text mapping today)
-- Host CPU/RAM/media can go stale if host ticks stop while window telemetry still updates
-- Use shared release from `GET /api/health` for deploy verification (web uses build-time `VITE_APP_RELEASE` today)
+- Consolidate WMO weather code → icon mapping in shared
+- Host CPU/RAM/media stale when host ticks stop but window telemetry still updates
+- Use release from `GET /api/health` for deploy verification (web uses build-time `VITE_APP_RELEASE` today)
 
 ## Internationalization
 
-- UI copy and documentation localization (English only today; Ukrainian target for local job market)
+- Ukrainian UI localization

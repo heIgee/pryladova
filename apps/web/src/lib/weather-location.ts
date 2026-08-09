@@ -1,9 +1,12 @@
 export const WEATHER_LOCATION_KEY = "pryladova.weatherLocation";
 
+export type WeatherLocationSource = "browser" | "search";
+
 export type WeatherLocation = {
   lat: number;
   lon: number;
   label: string;
+  source?: WeatherLocationSource;
 };
 
 export const readStoredWeatherLocation = (): WeatherLocation | null => {
@@ -32,7 +35,9 @@ export const readStoredWeatherLocation = (): WeatherLocation | null => {
     if (typeof label !== "string" || label.trim().length === 0) {
       return null;
     }
-    return { lat, lon, label: label.trim() };
+    const source = record.source;
+    const parsedSource = source === "browser" || source === "search" ? source : undefined;
+    return { lat, lon, label: label.trim(), source: parsedSource };
   } catch {
     return null;
   }

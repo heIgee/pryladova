@@ -113,8 +113,9 @@ export const sanitizeSnapshot = (
     };
   }
 
+  const appName = resolveAppName(snapshot);
   return {
-    appName: resolveAppName(snapshot)!,
+    appName: appName ?? "Unknown",
     windowTitle: redactWindowTitle(snapshot.title.trim()),
   };
 };

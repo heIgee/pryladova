@@ -34,7 +34,7 @@ export const Shell = ({
   <main className="flex min-h-screen flex-col bg-background">
     <div
       className={cn(
-        "mx-auto flex w-full max-w-4xl flex-1 flex-col gap-5 px-4",
+        "mx-auto flex w-full max-w-6xl flex-1 flex-col gap-5 px-4",
         centered ? "items-center justify-center py-8" : "py-8",
       )}
     >
@@ -58,15 +58,11 @@ export const PageHeader = ({ action, stale }: { action?: ReactNode; stale?: bool
   </header>
 );
 
-export const BentoGrid = ({ stale, children }: { stale: boolean; children: ReactNode }) => (
-  <div
-    className={cn(
-      "flex flex-col gap-5 transition-[opacity,filter] duration-300",
-      stale && "opacity-45 grayscale",
-    )}
-  >
-    {children}
-  </div>
+export const agentStaleClassName = (stale: boolean) =>
+  cn("transition-[opacity,filter] duration-300", stale && "opacity-45 grayscale");
+
+export const BentoGrid = ({ children }: { children: ReactNode }) => (
+  <div className="flex flex-col gap-5">{children}</div>
 );
 
 export const ThemeToggle = ({

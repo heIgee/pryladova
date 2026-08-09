@@ -10,13 +10,10 @@
     },
     "apps/web": {
       "project": "src/**/*.{ts,tsx}",
-      "ignoreExportsUsedInFile": true,
-      "ignore": ["src/components/ui/**"]
+      "ignoreExportsUsedInFile": true
     },
     "apps/agent": {
-      "project": "src/**/*.ts",
-      "ignoreDependencies": ["tsx", "typescript"],
-      "ignoreBinaries": ["tsx", "tsc"]
+      "project": "src/**/*.ts"
     }
   }
 }

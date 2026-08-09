@@ -3,7 +3,8 @@
 import { PANEL_WS_ROUTE, parsePanelWsMessage } from "@pryladova/shared";
 import { applyPanelWsMessage, type PanelState } from "./panel.js";
 
-const RECONNECT_MS = 2_000;
+const RECONNECT_BASE_MS = 500;
+const RECONNECT_MAX_MS = 8_000;
 const STOP_GRACE_MS = 500;
 
 type PanelStreamStore = {
@@ -11,6 +12,7 @@ type PanelStreamStore = {
   listeners: Set<() => void>;
   socket: WebSocket | null;
   reconnectTimer: number | null;
+  reconnectDelayMs: number;
   shouldRun: boolean;
   connectGeneration: number;
 };
@@ -20,6 +22,7 @@ const createStore = (): PanelStreamStore => ({
   listeners: new Set(),
   socket: null,
   reconnectTimer: null,
+  reconnectDelayMs: RECONNECT_BASE_MS,
   shouldRun: false,
   connectGeneration: 0,
 });
@@ -91,7 +94,8 @@ const scheduleReconnect = (store: PanelStreamStore): void => {
   store.reconnectTimer = window.setTimeout(() => {
     store.reconnectTimer = null;
     connect(store);
-  }, RECONNECT_MS);
+    store.reconnectDelayMs = Math.min(store.reconnectDelayMs * 2, RECONNECT_MAX_MS);
+  }, store.reconnectDelayMs);
 };
 
 const connect = (store: PanelStreamStore): void => {
@@ -113,6 +117,7 @@ const connect = (store: PanelStreamStore): void => {
       return;
     }
     clearReconnect(store);
+    store.reconnectDelayMs = RECONNECT_BASE_MS;
   };
 
   socket.onmessage = (event: MessageEvent<string>) => {
@@ -176,6 +181,7 @@ const start = (store: PanelStreamStore): void => {
 const stop = (store: PanelStreamStore): void => {
   store.shouldRun = false;
   store.connectGeneration += 1;
+  store.reconnectDelayMs = RECONNECT_BASE_MS;
   clearReconnect(store);
   abandonSocket(store.socket);
   store.socket = null;

@@ -81,6 +81,12 @@ describe("sanitizeSnapshot", () => {
     expect(resolveAppName(snapshot("Title", "   "))).toBeNull();
   });
 
+  it("falls back to Unknown when app name cannot be resolved", () => {
+    const blocked = createBlockedAppsSet([]);
+    const result = sanitizeSnapshot(snapshot("Title", "   "), blocked);
+    expect(result.appName).toBe("Unknown");
+  });
+
   it("matches blocklist via executable path token", () => {
     const blocked = createBlockedAppsSet([]);
     const result = sanitizeSnapshot(

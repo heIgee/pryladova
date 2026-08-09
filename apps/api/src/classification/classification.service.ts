@@ -10,7 +10,11 @@ import { ConfigService } from "../config.service.js";
 import { formatPersistenceError, isSchemaMissingError } from "../persistence/persistence-error.js";
 import { SupabaseService } from "../persistence/supabase.service.js";
 import { SettingsService } from "../settings/settings.service.js";
-import { parseClassificationCacheRow } from "./classification-cache.logic.js";
+import {
+  normalizeClassificationCacheTitle,
+  parseClassificationCacheRow,
+} from "./classification-cache.logic.js";
+import { e2eClassificationStub, readE2eClassificationDelayMs } from "./e2e-classification.stub.js";
 
 const CACHE_MAX_ENTRIES = 256;
 
@@ -34,6 +38,13 @@ export class ClassificationService {
     return Boolean(this.configService.config.geminiApiKey);
   }
 
+  resetMemoryCacheForE2e(): void {
+    if (process.env.NODE_ENV !== "test") {
+      return;
+    }
+    this.cache.clear();
+  }
+
   async classify(appName: string, windowTitle: string): Promise<WindowClassification | null> {
     if (!this.settingsService.isClassificationEnabled()) {
       return null;
@@ -43,7 +54,8 @@ export class ClassificationService {
       return null;
     }
 
-    const cacheKey = `${appName}|${windowTitle}`;
+    const cacheTitle = normalizeClassificationCacheTitle(appName, windowTitle);
+    const cacheKey = `${appName}|${cacheTitle}`;
     const memoryCached = this.readMemoryCache(cacheKey);
     if (memoryCached) {
       console.log(
@@ -52,13 +64,23 @@ export class ClassificationService {
       return memoryCached;
     }
 
-    const dbCached = await this.readDbCache(appName, windowTitle);
+    const dbCached = await this.readDbCache(appName, cacheTitle);
     if (dbCached) {
       this.writeMemoryCache(cacheKey, dbCached);
       console.log(
         `[api] classification cache hit db category=${dbCached.category} workRelated=${dbCached.workRelated}`,
       );
       return dbCached;
+    }
+
+    const e2eDelayMs = readE2eClassificationDelayMs();
+    if (e2eDelayMs !== null) {
+      if (e2eDelayMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, e2eDelayMs));
+      }
+      const stub = e2eClassificationStub(appName, windowTitle);
+      this.writeMemoryCache(cacheKey, stub);
+      return stub;
     }
 
     const { config } = this.configService;
@@ -90,7 +112,7 @@ For workRelated: use "yes" only when clearly work/dev; "no" when clearly persona
 
       const elapsedMs = Math.round(performance.now() - started);
       this.writeMemoryCache(cacheKey, object);
-      void this.writeDbCache(appName, windowTitle, object);
+      void this.writeDbCache(appName, cacheTitle, object);
       console.log(
         `[api] classification gemini ${elapsedMs}ms model=${config.geminiModel} category=${object.category} workRelated=${object.workRelated}`,
       );

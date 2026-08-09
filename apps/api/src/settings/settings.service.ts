@@ -1,5 +1,6 @@
 import { Injectable, Logger, type OnModuleInit } from "@nestjs/common";
 import type { Settings, SettingsPutResponse } from "@pryladova/shared";
+import { readE2eClassificationEnabled } from "../classification/e2e-classification.stub.js";
 import {
   formatPersistenceError,
   isPermissionDeniedError,
@@ -19,6 +20,9 @@ export class SettingsService implements OnModuleInit {
 
   async onModuleInit(): Promise<void> {
     await this.loadFromDatabase();
+    if (readE2eClassificationEnabled()) {
+      this.classificationEnabled = true;
+    }
   }
 
   getSettings(): Settings {

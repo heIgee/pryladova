@@ -1,8 +1,13 @@
 import { AUTH_LOGIN_ROUTE, AUTH_SESSION_ROUTE, parseAuthSessionResponse } from "@pryladova/shared";
-import { apiFetch } from "./api-fetch.js";
+import { ApiUnavailableError, apiFetch } from "./api-fetch.js";
+
+const TRANSIENT_STATUSES = new Set([502, 504]);
 
 export const checkSession = async (): Promise<boolean> => {
   const response = await apiFetch(AUTH_SESSION_ROUTE);
+  if (TRANSIENT_STATUSES.has(response.status)) {
+    throw new ApiUnavailableError();
+  }
   if (!response.ok) {
     return false;
   }
@@ -20,6 +25,10 @@ export const login = async (password: string): Promise<void> => {
 
   if (response.status === 401) {
     throw new Error("Invalid password");
+  }
+
+  if (TRANSIENT_STATUSES.has(response.status)) {
+    throw new ApiUnavailableError();
   }
 
   if (!response.ok) {

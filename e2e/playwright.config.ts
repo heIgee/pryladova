@@ -9,7 +9,7 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
-      testMatch: "**/panel.spec.ts",
+      testMatch: ["**/panel.spec.ts", "**/skeleton.spec.ts"],
       use: {
         ...devices["Desktop Chrome"],
         baseURL: "http://127.0.0.1:5173",
@@ -39,6 +39,9 @@ export default defineConfig({
         SESSION_SECRET: "e2e-session-secret-at-least-32-characters-long",
         PANEL_PASSWORD_HASH: "$2b$10$TtcGsCYSJ53WtzGpi0k7lOXLR3yY2n2jrjAnw0grKQFPV9sCEtQuq",
         INGEST_SECRET: ingestSecret,
+        GEMINI_API_KEY: "e2e-stub",
+        E2E_CLASSIFICATION_ENABLED: "1",
+        E2E_CLASSIFICATION_DELAY_MS: "3000",
       },
     },
     {

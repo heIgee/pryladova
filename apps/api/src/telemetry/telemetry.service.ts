@@ -207,6 +207,17 @@ export class TelemetryService {
     return this.state;
   }
 
+  resetForE2e(): void {
+    if (process.env.NODE_ENV !== "test") {
+      return;
+    }
+    this.state = null;
+    this.pendingHost = null;
+    this.ingestGeneration = 0;
+    this.publishQueued = false;
+    this.publishHostQueued = false;
+  }
+
   reclassifyCurrentWindow(): void {
     if (!this.state) {
       return;
