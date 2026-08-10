@@ -171,10 +171,6 @@ const start = (store: PanelStreamStore): void => {
   }
 
   store.shouldRun = true;
-  if (store.panel.status !== "ready") {
-    store.panel = { status: "loading" };
-    notify(store);
-  }
   connect(store);
 };
 

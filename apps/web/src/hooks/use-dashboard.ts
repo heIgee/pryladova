@@ -6,10 +6,10 @@ import { fetchGithubStatus, fetchSteamStatus } from "@/lib/integrations";
 import {
   fetchSettings,
   INTEGRATIONS_POLL_INTERVAL_MS,
-  isAgentStale,
+  isAgentLive,
   persistClassificationEnabled,
-  readAgentHintAfterMs,
   readStoredClassificationEnabled,
+  resolveShowAgentHint,
   syncSettings,
   WEATHER_POLL_INTERVAL_MS,
 } from "@/lib/panel";
@@ -34,7 +34,7 @@ export const useDashboard = () => {
   const [settingsError, setSettingsError] = useState<string | null>(null);
   const [settingsSyncing, setSettingsSyncing] = useState(false);
   const [settingsReady, setSettingsReady] = useState(false);
-  const [showAgentHint, setShowAgentHint] = useState(false);
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const [theme, setTheme] = useState<Theme>(() => resolveTheme());
   const [weather, setWeather] = useState<WeatherResponse>({ status: "disabled" });
   const [githubStatus, setGithubStatus] = useState<GithubTileStatus>(integrationLoading);
@@ -133,32 +133,21 @@ export const useDashboard = () => {
   }, []);
 
   useEffect(() => {
-    if (panel.status === "loading") {
-      setShowAgentHint(false);
+    if (panel.status !== "ready") {
       return;
     }
 
-    if (panel.status === "error" || panel.status === "empty") {
-      const timer = window.setTimeout(() => {
-        setShowAgentHint(true);
-      }, readAgentHintAfterMs());
-
-      return () => {
-        window.clearTimeout(timer);
-      };
-    }
-
-    const evaluate = (): void => {
-      setShowAgentHint(isAgentStale(panel));
-    };
-
-    evaluate();
-    const timer = window.setInterval(evaluate, 1_000);
+    const timer = window.setInterval(() => {
+      setNowMs(Date.now());
+    }, 1_000);
 
     return () => {
       window.clearInterval(timer);
     };
-  }, [panel]);
+  }, [panel.status]);
+
+  const showAgentHint = resolveShowAgentHint(panel, nowMs);
+  const agentLive = isAgentLive(panel, nowMs);
 
   const handleClassificationToggle = (enabled: boolean): void => {
     if (settingsSyncing) {
@@ -208,6 +197,7 @@ export const useDashboard = () => {
     settingsSyncing,
     settingsReady,
     showAgentHint,
+    agentLive,
     theme,
     weather,
     weatherLocation,

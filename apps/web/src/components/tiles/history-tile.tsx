@@ -183,7 +183,7 @@ export const HistoryTile = ({
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain">
           {history.status === "loading" ? <HistoryLoadingSkeleton /> : null}
           {history.status === "empty" ? (
-            <p className="text-caption text-muted-foreground">No recorded focus time yet today.</p>
+            <p className="text-caption text-muted-foreground">No recorded app time yet today.</p>
           ) : null}
           {history.status === "error" ? (
             <p className="text-caption text-destructive">{history.message}</p>

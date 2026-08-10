@@ -3,8 +3,10 @@ import {
   applyPanelWsMessage,
   fetchSettings,
   getAgentLastSeenMs,
+  isAgentLive,
   isAgentStale,
   type PanelState,
+  resolveShowAgentHint,
   shouldShowMediaTile,
   syncSettings,
 } from "./panel.js";
@@ -182,6 +184,34 @@ describe("isAgentStale", () => {
     const panel: PanelState = { status: "ready", telemetry: readyTelemetry };
     const now = Date.parse("2026-01-01T12:00:02.000Z") + 10_000;
     expect(isAgentStale(panel, now)).toBe(true);
+  });
+});
+
+describe("isAgentLive", () => {
+  it("is false when the panel is empty", () => {
+    expect(isAgentLive({ status: "empty" })).toBe(false);
+  });
+
+  it("is true when ready telemetry is fresh", () => {
+    const panel: PanelState = { status: "ready", telemetry: readyTelemetry };
+    const now = Date.parse("2026-01-01T12:00:02.000Z") + 5_000;
+    expect(isAgentLive(panel, now)).toBe(true);
+  });
+});
+
+describe("resolveShowAgentHint", () => {
+  it("is false while the panel stream is loading", () => {
+    expect(resolveShowAgentHint({ status: "loading" })).toBe(false);
+  });
+
+  it("is true when the agent has never connected", () => {
+    expect(resolveShowAgentHint({ status: "empty" })).toBe(true);
+  });
+
+  it("is true when ready telemetry is stale", () => {
+    const panel: PanelState = { status: "ready", telemetry: readyTelemetry };
+    const now = Date.parse("2026-01-01T12:00:02.000Z") + 10_000;
+    expect(resolveShowAgentHint(panel, now)).toBe(true);
   });
 });
 

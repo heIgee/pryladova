@@ -9,7 +9,8 @@ pre-commit:
   commands:
     biome:
       glob: "*.{ts,tsx,json}"
-      run: pnpm biome check --write --staged --no-errors-on-unmatched --files-ignore-unknown=true --colors=off
+      run: pnpm biome check --write --no-errors-on-unmatched --files-ignore-unknown=true --colors=off {staged_files}
+      stage_fixed: true
       skip_output: true
     typecheck:
       run: pnpm --filter @pryladova/shared build && pnpm -r typecheck

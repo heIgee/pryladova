@@ -109,5 +109,20 @@ export const isAgentStale = (panel: PanelState, nowMs = Date.now()): boolean => 
   return nowMs - lastSeenMs >= readAgentHintAfterMs();
 };
 
+export const isAgentLive = (panel: PanelState, nowMs = Date.now()): boolean =>
+  panel.status === "ready" && !isAgentStale(panel, nowMs);
+
+export const resolveShowAgentHint = (panel: PanelState, nowMs = Date.now()): boolean => {
+  if (panel.status === "loading") {
+    return false;
+  }
+
+  if (panel.status === "error" || panel.status === "empty") {
+    return true;
+  }
+
+  return isAgentStale(panel, nowMs);
+};
+
 export const shouldShowMediaTile = (host: TelemetryState["host"] | undefined): boolean =>
   host != null && host.media != null;

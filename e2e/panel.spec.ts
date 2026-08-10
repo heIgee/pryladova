@@ -2,6 +2,7 @@ import { expect, type Page, test } from "@playwright/test";
 import { apiBase, ingestSecret, panelPassword } from "./constants.js";
 import { hostFixture, redactedTelemetryFixture, telemetryFixture } from "./fixtures/telemetry.js";
 import { sendAgentUpdate } from "./helpers/agent-ws.js";
+import { resetE2eApiState } from "./helpers/skeleton-layout.js";
 
 const login = async (page: Page): Promise<void> => {
   await page.getByLabel("Password").fill(panelPassword);
@@ -9,6 +10,12 @@ const login = async (page: Page): Promise<void> => {
 };
 
 test.describe("panel", () => {
+  test.beforeEach(async ({ page }) => {
+    await resetE2eApiState(page);
+    const response = await page.request.post(`${apiBase}/api/test/e2e/classification/release`);
+    expect(response.ok()).toBeTruthy();
+  });
+
   test("shows login before authenticated", async ({ page }) => {
     await page.goto("/");
     await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
@@ -19,19 +26,18 @@ test.describe("panel", () => {
     await login(page);
 
     await expect(page.getByRole("heading", { name: "Pryladova", level: 1 })).toBeVisible();
-    await expect(page.getByText("Live desktop presence")).toBeVisible();
+    await expect(
+      page.getByText("Not receiving updates. Check that the agent is running."),
+    ).toBeVisible();
     await expect(page.getByTestId("window-tile-placeholder")).toContainText("No active window");
     await expect(page.getByTestId("machine-tile-empty")).toContainText(
       "Metrics appear when the agent connects.",
     );
-    await expect(page.getByTestId("history-tile")).toContainText(
-      "No recorded focus time yet today.",
-    );
+    await expect(page.getByTestId("history-tile")).toBeVisible();
     await expect(page.getByText("GitHub", { exact: true })).toBeVisible({ timeout: 5_000 });
     await expect(page.getByText("Steam", { exact: true })).toBeVisible();
 
     await expect(page.getByText("agentId is required")).toHaveCount(0);
-    await expect(page.getByText("Check that the agent is running.")).toHaveCount(0);
     await expect(page.getByText(/^(Evaporating|Waiting for host)/)).toHaveCount(0);
   });
 
@@ -39,20 +45,11 @@ test.describe("panel", () => {
     await page.goto("/");
     await login(page);
 
-    await expect(page.getByText("Live desktop presence")).toBeVisible();
     await expect(
       page.getByText("Not receiving updates. Check that the agent is running."),
-    ).toHaveCount(0);
-
-    await expect(
-      page.getByText("Not receiving updates. Check that the agent is running."),
-    ).toBeVisible({
-      timeout: 2_000,
-    });
+    ).toBeVisible();
     await expect(page.getByText("Check that the agent is running.")).toHaveCount(1);
-    await expect(page.getByTestId("history-tile")).toContainText(
-      "No recorded focus time yet today.",
-    );
+    await expect(page.getByTestId("history-tile")).toBeVisible();
     await expect(page.getByText("agentId is required")).toHaveCount(0);
   });
 
@@ -61,10 +58,11 @@ test.describe("panel", () => {
     await login(page);
 
     await sendAgentUpdate(apiBase, hostFixture, telemetryFixture, ingestSecret);
+    const release = await page.request.post(`${apiBase}/api/test/e2e/classification/release`);
+    expect(release.ok()).toBeTruthy();
 
-    await expect(page.getByRole("heading", { name: "Code", level: 2 })).toBeVisible({
-      timeout: 5_000,
-    });
+    await expect(page.getByTestId("window-tile")).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByTestId("window-tile-title-slot")).toContainText("Code");
     await expect(page.getByText("app.tsx — pryladova")).toBeVisible();
   });
 

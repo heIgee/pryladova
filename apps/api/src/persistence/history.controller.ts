@@ -12,8 +12,10 @@ import {
   historyQuerySchema,
   historyResponseSchema,
 } from "@pryladova/shared";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { AgentBindingService } from "../ingest/agent-binding.service.js";
+import { readLatestPersistedAgentId } from "./agent-resolution.js";
 import { formatPersistenceError, persistenceFailureMessage } from "./persistence-error.js";
 import { mapIntervalSummaryRows, parseIntervalSummaryRpcResult } from "./segment.logic.js";
 import { SupabaseService } from "./supabase.service.js";
@@ -39,16 +41,15 @@ export class HistoryController {
       throw new BadRequestException(z.formatError(parsed.error));
     }
 
-    const agentId = parsed.data.agentId ?? this.agentBindingService.getBoundAgentId();
-    if (!agentId) {
-      return historyResponseSchema.parse({ entries: [] });
-    }
-
     if (!this.supabaseService.isConfigured()) {
       throw new ServiceUnavailableException("History is not available");
     }
 
     const client = this.supabaseService.getClient();
+    const agentId = await this.resolveHistoryAgentId(client, parsed.data.agentId);
+    if (!agentId) {
+      return historyResponseSchema.parse({ entries: [] });
+    }
     const { data, error } = await client.rpc("get_interval_summary", {
       p_agent_id: agentId,
       p_range_start: parsed.data.from,
@@ -66,5 +67,33 @@ export class HistoryController {
     const entries = mapIntervalSummaryRows(parseIntervalSummaryRpcResult(data));
 
     return historyResponseSchema.parse({ entries });
+  }
+
+  private async resolveHistoryAgentId(
+    client: SupabaseClient,
+    explicitAgentId?: string,
+  ): Promise<string | null> {
+    if (explicitAgentId) {
+      return explicitAgentId;
+    }
+
+    const boundAgentId = this.agentBindingService.getBoundAgentId();
+    if (boundAgentId) {
+      return boundAgentId;
+    }
+
+    try {
+      const persistedAgentId = await readLatestPersistedAgentId(client);
+      if (persistedAgentId) {
+        this.agentBindingService.rememberAgentId(persistedAgentId);
+      }
+      return persistedAgentId;
+    } catch (error: unknown) {
+      const detail = formatPersistenceError(error);
+      this.logger.warn(`[persistence] agent_heartbeats lookup failed: ${detail}`);
+      throw new ServiceUnavailableException(
+        persistenceFailureMessage(detail, "History agent lookup failed"),
+      );
+    }
   }
 }

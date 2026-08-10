@@ -14,4 +14,12 @@ describe("AgentBindingService", () => {
     expect(service.assertAgent("desk-a")).toBe("ok");
     expect(service.assertAgent("desk-b")).toBe("rejected");
   });
+
+  it("remembers an agent id without ingest", () => {
+    const service = new AgentBindingService();
+    service.rememberAgentId("desk-a");
+    expect(service.getBoundAgentId()).toBe("desk-a");
+    service.rememberAgentId("desk-b");
+    expect(service.getBoundAgentId()).toBe("desk-a");
+  });
 });

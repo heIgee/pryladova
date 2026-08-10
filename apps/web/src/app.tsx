@@ -17,7 +17,13 @@ import { useHistory } from "@/hooks/use-history";
 import { resolveHistoryLiveCapMs } from "@/lib/history-live";
 import { getAgentLastSeenMs, type PanelState, shouldShowMediaTile } from "@/lib/panel";
 
-const AgentPresencePlaceholder = ({ panel }: { panel: PanelState }) => (
+const AgentPresencePlaceholder = ({
+  panel,
+  stale = false,
+}: {
+  panel: PanelState;
+  stale?: boolean;
+}) => (
   <Card size="sm" data-testid="window-tile-placeholder">
     <CardHeader className="border-b">
       <CardTitle className="flex items-center gap-2 text-sm">
@@ -29,7 +35,7 @@ const AgentPresencePlaceholder = ({ panel }: { panel: PanelState }) => (
       {panel.status === "loading" ? (
         <p className="text-caption text-muted-foreground">Connecting…</p>
       ) : null}
-      {panel.status === "empty" ? (
+      {stale || panel.status === "empty" ? (
         <p className="text-caption text-muted-foreground">No active window</p>
       ) : null}
       {panel.status === "error" ? (
@@ -49,6 +55,7 @@ const Dashboard = () => {
     settingsSyncing,
     settingsReady,
     showAgentHint,
+    agentLive,
     theme,
     weather,
     weatherLocation,
@@ -59,19 +66,18 @@ const Dashboard = () => {
     handleWeatherLocationChange,
     handleWeatherRefresh,
   } = useDashboard();
-  const agentReady = panel.status === "ready";
-  const telemetry = agentReady ? panel.telemetry : null;
-  const host = telemetry?.host ?? null;
-  const agentLastSeenMs = agentReady ? getAgentLastSeenMs(panel) : null;
+  const readyPanel = panel.status === "ready" ? panel : null;
+  const liveTelemetry = agentLive && readyPanel ? readyPanel.telemetry : null;
+  const host = readyPanel?.telemetry.host ?? null;
+  const agentLastSeenMs = readyPanel ? getAgentLastSeenMs(readyPanel) : null;
   const historyLiveCapMs = resolveHistoryLiveCapMs(host, agentLastSeenMs, showAgentHint);
-  const historyEnabled = agentReady;
   const { history, refreshHistory, refreshing, hasLoaded } = useHistory(
-    historyEnabled,
-    telemetry,
+    true,
+    liveTelemetry,
     historyLiveCapMs,
   );
   const sideColumnRef = useRef<HTMLDivElement>(null);
-  const sideColumnHeight = useElementHeight(sideColumnRef, agentReady);
+  const sideColumnHeight = useElementHeight(sideColumnRef, true);
 
   const headerAction = (
     <div className="flex items-center gap-2">
@@ -93,10 +99,10 @@ const Dashboard = () => {
       <PageHeader action={headerAction} stale={showAgentHint} />
       <BentoGrid>
         <div className="flex flex-col gap-5">
-          {agentReady && telemetry ? (
+          {agentLive && readyPanel ? (
             <>
               <WindowTile
-                telemetry={telemetry}
+                telemetry={readyPanel.telemetry}
                 classificationEnabled={classificationEnabled}
                 settingsError={settingsError}
                 settingsSyncing={settingsSyncing}
@@ -112,7 +118,7 @@ const Dashboard = () => {
             </>
           ) : (
             <>
-              <AgentPresencePlaceholder panel={panel} />
+              <AgentPresencePlaceholder panel={panel} stale={readyPanel != null && showAgentHint} />
               <MachineTile host={null} />
             </>
           )}
@@ -125,7 +131,7 @@ const Dashboard = () => {
             <HistoryTile
               className="h-full min-h-0"
               history={history}
-              activeAppName={telemetry?.appName ?? null}
+              activeAppName={liveTelemetry?.appName ?? null}
               refreshing={refreshing}
               hasLoaded={hasLoaded}
               onRefresh={() => {

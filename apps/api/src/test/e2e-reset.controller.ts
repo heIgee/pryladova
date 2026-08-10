@@ -1,7 +1,11 @@
 import { Controller, NotFoundException, Post } from "@nestjs/common";
 import { Public } from "../auth/public.decorator.js";
 import { ClassificationService } from "../classification/classification.service.js";
-import { releaseE2eClassificationGate } from "../classification/e2e-classification.gate.js";
+import {
+  releaseE2eClassificationGate,
+  resetE2eClassificationGate,
+} from "../classification/e2e-classification.gate.js";
+import { AgentBindingService } from "../ingest/agent-binding.service.js";
 import { TelemetryService } from "../telemetry/telemetry.service.js";
 
 @Controller()
@@ -9,6 +13,7 @@ export class E2eResetController {
   constructor(
     private readonly classificationService: ClassificationService,
     private readonly telemetryService: TelemetryService,
+    private readonly agentBindingService: AgentBindingService,
   ) {}
 
   @Public()
@@ -20,6 +25,8 @@ export class E2eResetController {
 
     this.classificationService.resetMemoryCacheForE2e();
     this.telemetryService.resetForE2e();
+    this.agentBindingService.resetForE2e();
+    resetE2eClassificationGate();
     return { ok: true };
   }
 
