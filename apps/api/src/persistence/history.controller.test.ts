@@ -82,14 +82,15 @@ describe("HistoryController", () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it("requires a connected agent when agentId is omitted", async () => {
-    const { controller } = await createController({ boundAgentId: null });
+  it("returns empty entries when no agent is bound", async () => {
+    const { controller, rpc } = await createController({ boundAgentId: null });
     await expect(
       controller.getHistory({
         from: "2026-08-08T00:00:00.000Z",
         to: "2026-08-08T01:00:00.000Z",
       }),
-    ).rejects.toBeInstanceOf(BadRequestException);
+    ).resolves.toEqual({ entries: [] });
+    expect(rpc).not.toHaveBeenCalled();
   });
 
   it("returns 503 when Supabase is not configured", async () => {

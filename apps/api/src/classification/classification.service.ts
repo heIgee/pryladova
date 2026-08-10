@@ -14,7 +14,11 @@ import {
   normalizeClassificationCacheTitle,
   parseClassificationCacheRow,
 } from "./classification-cache.logic.js";
-import { e2eClassificationStub, readE2eClassificationDelayMs } from "./e2e-classification.stub.js";
+import {
+  resetE2eClassificationGate,
+  waitForE2eClassificationRelease,
+} from "./e2e-classification.gate.js";
+import { e2eClassificationStub, readE2eClassificationEnabled } from "./e2e-classification.stub.js";
 
 const CACHE_MAX_ENTRIES = 256;
 
@@ -43,6 +47,7 @@ export class ClassificationService {
       return;
     }
     this.cache.clear();
+    resetE2eClassificationGate();
   }
 
   async classify(appName: string, windowTitle: string): Promise<WindowClassification | null> {
@@ -73,10 +78,11 @@ export class ClassificationService {
       return dbCached;
     }
 
-    const e2eDelayMs = readE2eClassificationDelayMs();
-    if (e2eDelayMs !== null) {
-      if (e2eDelayMs > 0) {
-        await new Promise((resolve) => setTimeout(resolve, e2eDelayMs));
+    if (readE2eClassificationEnabled()) {
+      try {
+        await waitForE2eClassificationRelease();
+      } catch {
+        return null;
       }
       const stub = e2eClassificationStub(appName, windowTitle);
       this.writeMemoryCache(cacheKey, stub);

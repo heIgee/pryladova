@@ -51,6 +51,24 @@ export const resetE2eApiState = async (page: Page): Promise<void> => {
   expect(response.ok()).toBeTruthy();
 };
 
+const releaseE2eClassification = async (page: Page): Promise<void> => {
+  const response = await page.request.post(`${apiBase}/api/test/e2e/classification/release`);
+  expect(response.ok()).toBeTruthy();
+};
+
+const waitForWindowClassification = async (page: Page, appName: string): Promise<void> => {
+  const titleSlot = page.getByTestId("window-tile-title-slot");
+  await expect(page.getByRole("heading", { name: appName, level: 2 })).toBeVisible({
+    timeout: 10_000,
+  });
+  await expect(titleSlot).not.toHaveAttribute("aria-busy", "true");
+};
+
+export const settleWindowClassification = async (page: Page, appName: string): Promise<void> => {
+  await releaseE2eClassification(page);
+  await waitForWindowClassification(page, appName);
+};
+
 export const hangRoute = async (page: Page, urlPattern: string | RegExp): Promise<void> => {
   await page.route(urlPattern, async () => {
     await new Promise<void>(() => {});

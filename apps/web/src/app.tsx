@@ -1,13 +1,6 @@
-import { pickRandomSpinnerVerb } from "@pryladova/shared";
 import { Monitor } from "lucide-react";
-import { useMemo, useRef } from "react";
-import {
-  agentStaleClassName,
-  BentoGrid,
-  PageHeader,
-  Shell,
-  ThemeToggle,
-} from "@/components/layout/shell";
+import { useRef } from "react";
+import { BentoGrid, PageHeader, Shell, ThemeToggle } from "@/components/layout/shell";
 import { LoginForm } from "@/components/login-form";
 import { GithubStatusTile } from "@/components/tiles/github-status-tile";
 import { HistoryTile } from "@/components/tiles/history-tile";
@@ -23,43 +16,26 @@ import { useElementHeight } from "@/hooks/use-element-height";
 import { useHistory } from "@/hooks/use-history";
 import { resolveHistoryLiveCapMs } from "@/lib/history-live";
 import { getAgentLastSeenMs, type PanelState, shouldShowMediaTile } from "@/lib/panel";
-import { cn } from "@/lib/utils";
 
-const AgentHint = ({ className }: { className?: string }) => (
-  <p className={cn("text-caption text-destructive", className)}>Check that the agent is running.</p>
-);
-
-const AgentPresencePlaceholder = ({
-  panel,
-  loadingVerb,
-  waitingVerb,
-  showAgentHint,
-}: {
-  panel: PanelState;
-  loadingVerb: string;
-  waitingVerb: string;
-  showAgentHint: boolean;
-}) => (
-  <Card size="sm">
+const AgentPresencePlaceholder = ({ panel }: { panel: PanelState }) => (
+  <Card size="sm" data-testid="window-tile-placeholder">
     <CardHeader className="border-b">
       <CardTitle className="flex items-center gap-2 text-sm">
         <Monitor className="size-3.5 text-muted-foreground" />
         Window
       </CardTitle>
     </CardHeader>
-    <CardContent className="text-muted-foreground">
-      {panel.status === "loading" ? <p>{loadingVerb}…</p> : null}
+    <CardContent>
+      {panel.status === "loading" ? (
+        <p className="text-caption text-muted-foreground">Connecting…</p>
+      ) : null}
       {panel.status === "empty" ? (
-        <>
-          <p>{waitingVerb}…</p>
-          {showAgentHint ? <AgentHint className="mt-2" /> : null}
-        </>
+        <p className="text-caption text-muted-foreground">No active window</p>
       ) : null}
       {panel.status === "error" ? (
-        <>
-          <p className="text-destructive">Agent telemetry unavailable: {panel.message}</p>
-          {showAgentHint ? <AgentHint className="mt-2" /> : null}
-        </>
+        <p className="text-caption text-destructive">
+          Agent telemetry unavailable: {panel.message}
+        </p>
       ) : null}
     </CardContent>
   </Card>
@@ -88,7 +64,7 @@ const Dashboard = () => {
   const host = telemetry?.host ?? null;
   const agentLastSeenMs = agentReady ? getAgentLastSeenMs(panel) : null;
   const historyLiveCapMs = resolveHistoryLiveCapMs(host, agentLastSeenMs, showAgentHint);
-  const historyEnabled = panel.status !== "loading";
+  const historyEnabled = agentReady;
   const { history, refreshHistory, refreshing, hasLoaded } = useHistory(
     historyEnabled,
     telemetry,
@@ -96,9 +72,6 @@ const Dashboard = () => {
   );
   const sideColumnRef = useRef<HTMLDivElement>(null);
   const sideColumnHeight = useElementHeight(sideColumnRef, agentReady);
-
-  const loadingVerb = useMemo(() => pickRandomSpinnerVerb(), []);
-  const waitingVerb = useMemo(() => pickRandomSpinnerVerb(), []);
 
   const headerAction = (
     <div className="flex items-center gap-2">
@@ -119,7 +92,7 @@ const Dashboard = () => {
     <Shell>
       <PageHeader action={headerAction} stale={showAgentHint} />
       <BentoGrid>
-        <div className={cn("flex flex-col gap-5", agentStaleClassName(showAgentHint))}>
+        <div className="flex flex-col gap-5">
           {agentReady && telemetry ? (
             <>
               <WindowTile
@@ -139,19 +112,14 @@ const Dashboard = () => {
             </>
           ) : (
             <>
-              <AgentPresencePlaceholder
-                panel={panel}
-                loadingVerb={loadingVerb}
-                waitingVerb={waitingVerb}
-                showAgentHint={showAgentHint}
-              />
+              <AgentPresencePlaceholder panel={panel} />
               <MachineTile host={null} />
             </>
           )}
         </div>
         <div className="flex flex-col gap-4 md:flex-row md:items-start">
           <div
-            className={cn("md:min-h-0 md:min-w-0 md:flex-[3]", agentStaleClassName(showAgentHint))}
+            className="md:min-h-0 md:min-w-0 md:flex-[3]"
             style={sideColumnHeight === undefined ? undefined : { height: sideColumnHeight }}
           >
             <HistoryTile

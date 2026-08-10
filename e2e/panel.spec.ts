@@ -14,13 +14,46 @@ test.describe("panel", () => {
     await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
   });
 
-  test("shows dashboard before ingest", async ({ page }) => {
+  test("shows clean dashboard before agent connects", async ({ page }) => {
     await page.goto("/");
     await login(page);
+
     await expect(page.getByRole("heading", { name: "Pryladova", level: 1 })).toBeVisible();
+    await expect(page.getByText("Live desktop presence")).toBeVisible();
+    await expect(page.getByTestId("window-tile-placeholder")).toContainText("No active window");
+    await expect(page.getByTestId("machine-tile-empty")).toContainText(
+      "Metrics appear when the agent connects.",
+    );
+    await expect(page.getByTestId("history-tile")).toContainText(
+      "No recorded focus time yet today.",
+    );
     await expect(page.getByText("GitHub", { exact: true })).toBeVisible({ timeout: 5_000 });
     await expect(page.getByText("Steam", { exact: true })).toBeVisible();
-    await expect(page.getByText("Waiting for host metrics…")).toBeVisible();
+
+    await expect(page.getByText("agentId is required")).toHaveCount(0);
+    await expect(page.getByText("Check that the agent is running.")).toHaveCount(0);
+    await expect(page.getByText(/^(Evaporating|Waiting for host)/)).toHaveCount(0);
+  });
+
+  test("shows single stale hint after agent disconnect window", async ({ page }) => {
+    await page.goto("/");
+    await login(page);
+
+    await expect(page.getByText("Live desktop presence")).toBeVisible();
+    await expect(
+      page.getByText("Not receiving updates. Check that the agent is running."),
+    ).toHaveCount(0);
+
+    await expect(
+      page.getByText("Not receiving updates. Check that the agent is running."),
+    ).toBeVisible({
+      timeout: 2_000,
+    });
+    await expect(page.getByText("Check that the agent is running.")).toHaveCount(1);
+    await expect(page.getByTestId("history-tile")).toContainText(
+      "No recorded focus time yet today.",
+    );
+    await expect(page.getByText("agentId is required")).toHaveCount(0);
   });
 
   test("shows ingested window after agent update", async ({ page }) => {

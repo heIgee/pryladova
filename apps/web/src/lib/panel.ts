@@ -12,6 +12,15 @@ import { apiFetch } from "./api-fetch.js";
 export const WEATHER_POLL_INTERVAL_MS = 1_800_000;
 export const INTEGRATIONS_POLL_INTERVAL_MS = 600_000;
 export const AGENT_HINT_AFTER_MS = 10_000;
+
+export const readAgentHintAfterMs = (): number => {
+  const raw = import.meta.env.VITE_AGENT_HINT_AFTER_MS;
+  if (typeof raw !== "string" || raw.length === 0) {
+    return AGENT_HINT_AFTER_MS;
+  }
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : AGENT_HINT_AFTER_MS;
+};
 export const CLASSIFICATION_ENABLED_KEY = "pryladova.classificationEnabled";
 
 export type PanelState =
@@ -97,7 +106,7 @@ export const isAgentStale = (panel: PanelState, nowMs = Date.now()): boolean => 
     return false;
   }
 
-  return nowMs - lastSeenMs >= AGENT_HINT_AFTER_MS;
+  return nowMs - lastSeenMs >= readAgentHintAfterMs();
 };
 
 export const shouldShowMediaTile = (host: TelemetryState["host"] | undefined): boolean =>

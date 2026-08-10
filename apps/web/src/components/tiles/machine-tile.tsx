@@ -62,7 +62,7 @@ export const MachineTile = ({
                 : "outline"
           }
         >
-          {host ? formatPresence(host.idleMs) : "Waiting"}
+          {host ? formatPresence(host.idleMs) : "Offline"}
         </Badge>
       </CardAction>
     </CardHeader>
@@ -90,7 +90,9 @@ export const MachineTile = ({
           </div>
         </>
       ) : (
-        <p className="text-caption text-muted-foreground">Waiting for host metrics…</p>
+        <p className="text-caption text-muted-foreground" data-testid="machine-tile-empty">
+          Metrics appear when the agent connects.
+        </p>
       )}
     </CardContent>
   </Card>

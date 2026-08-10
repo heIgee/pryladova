@@ -244,4 +244,9 @@ describe("App integration integrations", () => {
     const response = await agent.post("/api/test/e2e/reset").expect(201);
     expect(response.body).toEqual({ ok: true });
   });
+
+  it("POST /api/test/e2e/classification/release resolves a gated classify", async () => {
+    const response = await agent.post("/api/test/e2e/classification/release").expect(201);
+    expect(response.body).toEqual({ released: 0 });
+  });
 });

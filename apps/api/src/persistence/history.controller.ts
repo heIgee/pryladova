@@ -41,7 +41,7 @@ export class HistoryController {
 
     const agentId = parsed.data.agentId ?? this.agentBindingService.getBoundAgentId();
     if (!agentId) {
-      throw new BadRequestException("agentId is required when no agent is connected");
+      return historyResponseSchema.parse({ entries: [] });
     }
 
     if (!this.supabaseService.isConfigured()) {

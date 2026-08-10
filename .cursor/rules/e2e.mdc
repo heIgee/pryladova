@@ -1,0 +1,36 @@
+---
+description: E2E and API test harness conventions (Playwright, isolation, loading states)
+globs: e2e/**,apps/api/src/test/**,apps/api/src/classification/e2e-*
+alwaysApply: false
+---
+
+# E2E & test harness
+
+## No fixed waits
+
+Async assertions only — `expect(…).toBeVisible()`, `toHaveAttribute()`. No `page.waitForTimeout`, no `sleep`, no `setTimeout` / `E2E_*_DELAY_MS` in the API stub. A loading state that resolves before assertions can run is a harness bug; fix the harness.
+
+Hold loading states with gates instead:
+
+- Browser-fetchable (GitHub, Steam, history) — `hangRoute` in `e2e/helpers/skeleton-layout.ts`.
+- Server-internal (classification) — gate in the API, released by `settleWindowClassification` via `POST /api/test/e2e/classification/release`.
+
+A gate must latch, so the test may release before or after `classify()` blocks.
+
+## Shared API isolation
+
+One API process per Playwright run (`workers: 1`), so in-memory state persists across tests. Every spec calls `resetE2eApiState(page)` in `beforeEach` (clears cache + gate + telemetry); specs must pass in any order, not just the order they happen to run in. Test cache-hit behavior within a test after a cold classify — never by relying on a prior test's leftovers.
+
+## Test shape
+
+- Merge scenarios sharing one setup and UI phase: one ingest, many DOM assertions.
+- Split when setup diverges or assertions contradict. Sequential acts in one lifecycle (cold skeleton, then cache-hit without skeleton) are fine; contradictory parallel asserts are not.
+- Prefer geometry and attribute assertions over PNG snapshots — cross-platform.
+
+## Env
+
+API runs with `NODE_ENV=test` and `E2E_CLASSIFICATION_ENABLED=1`, classification answered by `e2e-classification.stub.ts`. Test-only endpoints live in `apps/api/src/test/`, `@Public()`, and 404 unless `NODE_ENV === "test"`.
+
+## Speed
+
+Don't duplicate login/goto/reset when one session covers the assertions. Don't rebuild what CI already built unless the Playwright `webServer` needs it.

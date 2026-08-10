@@ -20,8 +20,7 @@ test.describe("panel production bundle", () => {
 
     const shellMarker = page
       .getByText("Live desktop presence")
-      .or(page.getByText("Not receiving updates. Check that the agent is running."))
-      .or(page.getByText(/…$/));
+      .or(page.getByText("Not receiving updates. Check that the agent is running."));
     await expect(shellMarker.first()).toBeVisible({ timeout: 5_000 });
 
     const clientErrors = consoleErrors.filter((line) => line.includes("[web:client-error]"));

@@ -54,8 +54,6 @@ jobs:
 
   e2e:
     runs-on: ubuntu-latest
-    container:
-      image: mcr.microsoft.com/playwright:v1.62.0-noble
     steps:
       - uses: actions/checkout@v4
 
@@ -66,9 +64,25 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
 
-      - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: Restore Playwright browsers
+        id: playwright-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            playwright-chromium-
 
       - run: pnpm install --frozen-lockfile --filter "!agent"
+
+      - run: pnpm exec playwright install chromium
+
+      - name: Save Playwright browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ hashFiles('pnpm-lock.yaml') }}
 
       - run: pnpm test:e2e
 

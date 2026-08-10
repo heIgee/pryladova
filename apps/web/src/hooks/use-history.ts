@@ -58,6 +58,8 @@ export const useHistory = (
 
       if (options?.manual) {
         setRefreshing(true);
+      } else {
+        setState({ status: "loading" });
       }
 
       labelRef.current = formatLocalDayLabel();
@@ -98,7 +100,7 @@ export const useHistory = (
     if (!enabled) {
       sessionRef.current = null;
       setHasLoaded(false);
-      setState({ status: "loading" });
+      setState({ status: "empty", label: formatLocalDayLabel() });
       return;
     }
 

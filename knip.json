@@ -1,6 +1,10 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "workspaces": {
+    ".": {
+      "entry": ["e2e/run.mjs", "e2e/playwright.config.ts", "e2e/**/*.spec.ts"],
+      "project": ["e2e/**/*.{ts,mjs}"]
+    },
     "packages/shared": {
       "project": "src/**/*.ts"
     },

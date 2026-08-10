@@ -41,7 +41,6 @@ export default defineConfig({
         INGEST_SECRET: ingestSecret,
         GEMINI_API_KEY: "e2e-stub",
         E2E_CLASSIFICATION_ENABLED: "1",
-        E2E_CLASSIFICATION_DELAY_MS: "3000",
       },
     },
     {
@@ -49,6 +48,9 @@ export default defineConfig({
       url: "http://127.0.0.1:5173",
       cwd: "..",
       reuseExistingServer: !process.env.CI,
+      env: {
+        VITE_AGENT_HINT_AFTER_MS: "500",
+      },
     },
     {
       command:

@@ -4,11 +4,11 @@ import type { GithubTileStatus, SteamTileStatus } from "@/lib/integration-status
 import { integrationLoading } from "@/lib/integration-status";
 import { fetchGithubStatus, fetchSteamStatus } from "@/lib/integrations";
 import {
-  AGENT_HINT_AFTER_MS,
   fetchSettings,
   INTEGRATIONS_POLL_INTERVAL_MS,
   isAgentStale,
   persistClassificationEnabled,
+  readAgentHintAfterMs,
   readStoredClassificationEnabled,
   syncSettings,
   WEATHER_POLL_INTERVAL_MS,
@@ -141,7 +141,7 @@ export const useDashboard = () => {
     if (panel.status === "error" || panel.status === "empty") {
       const timer = window.setTimeout(() => {
         setShowAgentHint(true);
-      }, AGENT_HINT_AFTER_MS);
+      }, readAgentHintAfterMs());
 
       return () => {
         window.clearTimeout(timer);

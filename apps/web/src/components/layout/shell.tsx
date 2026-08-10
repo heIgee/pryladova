@@ -58,9 +58,6 @@ export const PageHeader = ({ action, stale }: { action?: ReactNode; stale?: bool
   </header>
 );
 
-export const agentStaleClassName = (stale: boolean) =>
-  cn("transition-[opacity,filter] duration-300", stale && "opacity-45 grayscale");
-
 export const BentoGrid = ({ children }: { children: ReactNode }) => (
   <div className="flex flex-col gap-5">{children}</div>
 );

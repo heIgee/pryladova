@@ -19,7 +19,7 @@
     "knip:agent": "knip --workspace agent",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "test:e2e": "pnpm exec turbo run build --filter=@pryladova/shared --filter=api && playwright test -c e2e/playwright.config.ts",
+    "test:e2e": "pnpm exec turbo run build --filter=@pryladova/shared --filter=api && node e2e/run.mjs",
     "dev": "pnpm --filter @pryladova/shared build && concurrently -k \"pnpm --filter api dev\" \"wait-on tcp:127.0.0.1:3000 && pnpm --filter agent dev\" \"wait-on tcp:127.0.0.1:3000 && pnpm --filter web dev\"",
     "dev:api": "pnpm --filter @pryladova/shared build && pnpm --filter api dev",
     "dev:agent": "pnpm --filter @pryladova/shared build && pnpm --filter agent dev",
@@ -37,7 +37,7 @@
     "knip": "^6.23.0",
     "lefthook": "^2.1.9",
     "supabase": "^2.113.0",
-    "turbo": "^2.10.0",
+    "turbo": "^2.10.9",
     "vitest": "^4.1.10",
     "wait-on": "^9.0.10",
     "ws": "^8.21.3"
