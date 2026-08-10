@@ -22,6 +22,11 @@ const defaultConfig: ApiConfig = {
   githubUsername: undefined,
   steamApiKey: undefined,
   steamId: undefined,
+  googleClientId: undefined,
+  googleClientSecret: undefined,
+  googleRedirectUri: undefined,
+  googleRefreshToken: undefined,
+  integrationEncryptionKey: undefined,
 };
 
 const createApp = createHttpTestApp;
@@ -179,6 +184,118 @@ describe("App integration integrations", () => {
     await loginPanel(agent);
 
     await agent.get("/api/integrations/steam").expect(200, { status: "disabled" });
+  });
+
+  it("GET /api/integrations/google/calendar returns disabled without config", async () => {
+    app = await createApp(defaultConfig);
+    agent = request.agent(app.getHttpServer());
+    await loginPanel(agent);
+
+    await agent.get("/api/integrations/google/calendar").expect(200, { status: "disabled" });
+  });
+
+  it("GET /api/integrations/google/calendar returns ready when env token is configured", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes("/calendars/primary/events")) {
+          return {
+            ok: true,
+            json: async () => ({
+              items: [
+                {
+                  summary: "Planning",
+                  start: { dateTime: "2026-08-10T14:00:00.000Z", timeZone: "UTC" },
+                  end: { dateTime: "2026-08-10T15:00:00.000Z", timeZone: "UTC" },
+                },
+              ],
+            }),
+          };
+        }
+        if (url.includes("oauth2.googleapis.com/token")) {
+          return {
+            ok: true,
+            json: async () => ({ access_token: "access-token", expires_in: 3600 }),
+          };
+        }
+        throw new Error(`Unexpected fetch: ${url}`);
+      }),
+    );
+
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-10T10:00:00.000Z"));
+
+    app = await createApp({
+      ...defaultConfig,
+      googleClientId: "google-client-id",
+      googleClientSecret: "google-client-secret",
+      googleRedirectUri: "http://localhost:5173/api/integrations/google/callback",
+      googleRefreshToken: "env-refresh-token",
+      integrationEncryptionKey: Buffer.from("0123456789abcdef0123456789abcdef").toString("base64"),
+    });
+    agent = request.agent(app.getHttpServer());
+    await loginPanel(agent);
+
+    const response = await agent.get("/api/integrations/google/calendar").expect(200);
+    expect(response.body.status).toBe("ready");
+    expect(response.body.upcomingEvents[0].title).toBe("Planning");
+
+    vi.useRealTimers();
+  });
+
+  it("GET /api/integrations/google/tasks returns disabled without config", async () => {
+    app = await createApp(defaultConfig);
+    agent = request.agent(app.getHttpServer());
+    await loginPanel(agent);
+
+    await agent.get("/api/integrations/google/tasks").expect(200, { status: "disabled" });
+  });
+
+  it("GET /api/integrations/google/tasks returns ready when env token is configured", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes("tasks.googleapis.com/tasks/v1/lists")) {
+          return {
+            ok: true,
+            json: async () => ({
+              items: [
+                { title: "Review PR", status: "needsAction", due: "2026-08-10T00:00:00.000Z" },
+              ],
+            }),
+          };
+        }
+        if (url.includes("oauth2.googleapis.com/token")) {
+          return {
+            ok: true,
+            json: async () => ({ access_token: "access-token", expires_in: 3600 }),
+          };
+        }
+        throw new Error(`Unexpected fetch: ${url}`);
+      }),
+    );
+
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-10T10:00:00.000Z"));
+
+    app = await createApp({
+      ...defaultConfig,
+      googleClientId: "google-client-id",
+      googleClientSecret: "google-client-secret",
+      googleRedirectUri: "http://localhost:5173/api/integrations/google/callback",
+      googleRefreshToken: "env-refresh-token",
+      integrationEncryptionKey: Buffer.from("0123456789abcdef0123456789abcdef").toString("base64"),
+    });
+    agent = request.agent(app.getHttpServer());
+    await loginPanel(agent);
+
+    const response = await agent.get("/api/integrations/google/tasks").expect(200);
+    expect(response.body.status).toBe("ready");
+    expect(response.body.tasks[0].title).toBe("Review PR");
+
+    vi.useRealTimers();
   });
 
   it("GET /api/integrations/github returns ready payload when configured", async () => {

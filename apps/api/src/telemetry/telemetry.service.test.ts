@@ -384,6 +384,66 @@ describe("TelemetryService", () => {
     );
   });
 
+  it("publishes full state when a new track arrives with a different thumbnail", async () => {
+    const { telemetryService } = await createService();
+    const broadcastState = vi.fn();
+    const broadcastHost = vi.fn();
+    (
+      telemetryService as unknown as {
+        realtimeService: {
+          broadcastPanelState: typeof broadcastState;
+          broadcastPanelHost: typeof broadcastHost;
+        };
+      }
+    ).realtimeService = {
+      broadcastPanelState: broadcastState,
+      broadcastPanelHost: broadcastHost,
+    };
+
+    telemetryService.setState(telemetryPayload);
+    telemetryService.setHost({
+      idleMs: 0,
+      cpuPercent: 10,
+      ramPercent: 20,
+      uptimeSec: 100,
+      media: {
+        title: "Track A",
+        artist: "Artist",
+        albumTitle: null,
+        appName: "Player",
+        playbackStatus: "playing",
+        thumbnailDataUrl: "data:image/jpeg;base64,aaa",
+      },
+      capturedAt: "2026-01-01T12:00:01.000Z",
+    });
+    await Promise.resolve();
+    broadcastState.mockClear();
+    broadcastHost.mockClear();
+
+    telemetryService.setHost({
+      idleMs: 0,
+      cpuPercent: 12,
+      ramPercent: 22,
+      uptimeSec: 101,
+      media: {
+        title: "Track B",
+        artist: "Artist",
+        albumTitle: null,
+        appName: "Player",
+        playbackStatus: "playing",
+        thumbnailDataUrl: "data:image/jpeg;base64,bbb",
+      },
+      capturedAt: "2026-01-01T12:00:02.000Z",
+    });
+
+    await Promise.resolve();
+    expect(broadcastState).toHaveBeenCalledTimes(1);
+    expect(broadcastHost).not.toHaveBeenCalled();
+    expect(telemetryService.getState()?.host?.media?.thumbnailDataUrl).toBe(
+      "data:image/jpeg;base64,bbb",
+    );
+  });
+
   it("publishes host-only panel updates without full telemetry", async () => {
     const { telemetryService } = await createService();
     const broadcastState = vi.fn();

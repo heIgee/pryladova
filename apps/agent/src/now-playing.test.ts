@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  advanceThumbnailBustState,
+  createThumbnailBustState,
   mapMediaSession,
   pickCurrentSession,
   resolveHostMediaThumbnail,
+  shouldRunThumbnailBust,
+  THUMBNAIL_BUST_DELAYS_MS,
+  thumbnailBustDelayMs,
   trackMediaKey,
 } from "./now-playing-core.js";
 
@@ -105,6 +110,47 @@ describe("resolveHostMediaThumbnail", () => {
       cachedThumbnail: "data:image/jpeg;base64,abc",
       thumbnailDataUrl: "data:image/jpeg;base64,abc",
     });
+  });
+});
+
+describe("thumbnail bust scheduling", () => {
+  it("retries at increasing delays", () => {
+    expect(THUMBNAIL_BUST_DELAYS_MS).toEqual([1_500, 4_000, 8_000]);
+    expect(thumbnailBustDelayMs(0)).toBe(1_500);
+    expect(thumbnailBustDelayMs(1)).toBe(4_000);
+    expect(thumbnailBustDelayMs(2)).toBe(8_000);
+    expect(thumbnailBustDelayMs(3)).toBeNull();
+  });
+
+  it("starts a new bust chain for a new track", () => {
+    const state = createThumbnailBustState("song|artist|album|app");
+    expect(shouldRunThumbnailBust(state, "other|track||app")).toBe(true);
+  });
+
+  it("advances until attempts are exhausted", () => {
+    let state = createThumbnailBustState("song|artist|album|app");
+    expect(shouldRunThumbnailBust(state, state.trackKey)).toBe(true);
+
+    const second = advanceThumbnailBustState(state);
+    expect(second).not.toBeNull();
+    if (!second) {
+      return;
+    }
+    state = second;
+    expect(state.nextAttemptIndex).toBe(1);
+    expect(shouldRunThumbnailBust(state, state.trackKey)).toBe(true);
+
+    const third = advanceThumbnailBustState(state);
+    expect(third).not.toBeNull();
+    if (!third) {
+      return;
+    }
+    state = third;
+    expect(state.nextAttemptIndex).toBe(2);
+    expect(shouldRunThumbnailBust(state, state.trackKey)).toBe(true);
+
+    expect(advanceThumbnailBustState(state)).toBeNull();
+    expect(shouldRunThumbnailBust(null, state.trackKey)).toBe(true);
   });
 });
 

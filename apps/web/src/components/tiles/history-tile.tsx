@@ -1,7 +1,10 @@
 import type { HistoryEntry } from "@pryladova/shared";
 import { Clock3, RefreshCw } from "lucide-react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { headerIconButtonClassName } from "@/components/layout/shell";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { BentoTileHeader } from "@/components/tiles/bento-tile-header";
+import { bentoTileLucideIconClassName } from "@/components/tiles/bento-tile-header-layout";
+import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton, skeletonSize } from "@/components/ui/skeleton";
 import type { HistoryState } from "@/hooks/use-history";
 import { formatDurationSec, summarizeHistoryEntries } from "@/lib/history";
@@ -146,6 +149,29 @@ export const HistoryTile = ({
   const summary = history.status === "ready" ? summarizeHistoryEntries(history.entries) : null;
 
   const canRefresh = Boolean(onRefresh) && (hasLoaded || history.status !== "loading");
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const [scrollable, setScrollable] = useState(false);
+
+  useLayoutEffect(() => {
+    const el = bodyRef.current;
+    if (!el) {
+      return;
+    }
+
+    const sync = () => {
+      setScrollable(el.scrollHeight > el.clientHeight);
+    };
+
+    sync();
+    const resizeObserver = new ResizeObserver(sync);
+    resizeObserver.observe(el);
+    const mutationObserver = new MutationObserver(sync);
+    mutationObserver.observe(el, { childList: true, subtree: true, characterData: true });
+    return () => {
+      resizeObserver.disconnect();
+      mutationObserver.disconnect();
+    };
+  }, []);
 
   return (
     <Card
@@ -153,16 +179,17 @@ export const HistoryTile = ({
       className={cn("flex h-full min-h-0 flex-col", className)}
       data-testid="history-tile"
     >
-      <CardHeader className="shrink-0 border-b">
-        <div className="flex min-w-0 items-center gap-2">
-          <Clock3 className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-          <span className="shrink-0 text-sm font-medium mr-auto">{title}</span>
-          {summary ? (
-            <span className="min-w-0 truncate text-caption text-muted-foreground">
-              {formatDurationSec(summary.totalDurationSec)} tracked · {summary.appCount} apps
-            </span>
-          ) : null}
-          {onRefresh ? (
+      <BentoTileHeader
+        testId="history-tile-header"
+        icon={<Clock3 className={bentoTileLucideIconClassName} aria-hidden="true" />}
+        title={title}
+        detail={
+          summary
+            ? `${formatDurationSec(summary.totalDurationSec)} tracked · ${summary.appCount} apps`
+            : null
+        }
+        action={
+          onRefresh ? (
             <button
               type="button"
               disabled={!canRefresh || refreshing}
@@ -176,11 +203,11 @@ export const HistoryTile = ({
                 aria-hidden="true"
               />
             </button>
-          ) : null}
-        </div>
-      </CardHeader>
+          ) : null
+        }
+      />
       <CardContent className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain">
+        <div ref={bodyRef} className={cn("min-h-0 flex-1", scrollable && "overflow-y-auto")}>
           {history.status === "loading" ? <HistoryLoadingSkeleton /> : null}
           {history.status === "empty" ? (
             <p className="text-caption text-muted-foreground">No recorded app time yet today.</p>

@@ -49,6 +49,9 @@ alwaysApply: true
 
 - No session-specific fixes, version pins, workarounds, or chat context in repo files.
 - Docs state what to run and where config lives — not how we debugged it once.
+- Behavior, deploy, env, or CI changes → update `README.md` and/or `deploy/README.md` in the **same change** when relevant. Do not wait to be asked.
+- README edits stay **concise**: onboarding, commands, where config lives. No overspecific facts — point to `.env.example`, migrations, or code instead.
+- `ROADMAP.md` for planned work only; remove or move items when shipped.
 - Comments: why non-obvious, not what the code already says.
 
 ## Monorepo discipline

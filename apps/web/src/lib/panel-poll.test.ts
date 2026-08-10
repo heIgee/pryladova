@@ -41,6 +41,7 @@ describe("panel stream store", () => {
     const second = getPanelPollSnapshot();
 
     expect(first).toBe(second);
+    expect(first.panel).toBe(second.panel);
 
     unsubscribe();
   });
@@ -51,7 +52,7 @@ describe("panel stream store", () => {
     const { getPanelPollSnapshot, subscribePanelPoll } = await import("./panel-poll.js");
     const states: string[] = [];
     const unsubscribe = subscribePanelPoll(() => {
-      states.push(getPanelPollSnapshot().status);
+      states.push(getPanelPollSnapshot().panel.status);
     });
 
     const socket = MockWebSocket.instances[0];
@@ -70,7 +71,7 @@ describe("panel stream store", () => {
       }),
     } as MessageEvent<string>);
 
-    expect(getPanelPollSnapshot()).toEqual({
+    expect(getPanelPollSnapshot().panel).toEqual({
       status: "ready",
       telemetry: expect.objectContaining({ appName: "Code" }),
     });
@@ -122,7 +123,7 @@ describe("panel stream store", () => {
       }),
     } as MessageEvent<string>);
 
-    expect(getPanelPollSnapshot()).toEqual({
+    expect(getPanelPollSnapshot().panel).toEqual({
       status: "ready",
       telemetry: expect.objectContaining({
         appName: "Code",
@@ -139,7 +140,7 @@ describe("panel stream store", () => {
     const { getPanelPollSnapshot, subscribePanelPoll } = await import("./panel-poll.js");
     const unsubscribe = subscribePanelPoll(() => {});
 
-    expect(getPanelPollSnapshot()).toEqual({ status: "loading" });
+    expect(getPanelPollSnapshot().panel).toEqual({ status: "loading" });
 
     const socket = MockWebSocket.instances[0];
     socket.onmessage?.({
@@ -156,7 +157,7 @@ describe("panel stream store", () => {
       }),
     } as MessageEvent<string>);
 
-    expect(getPanelPollSnapshot()).toEqual({ status: "loading" });
+    expect(getPanelPollSnapshot().panel).toEqual({ status: "loading" });
 
     unsubscribe();
   });
@@ -183,11 +184,12 @@ describe("panel stream store", () => {
       }),
     } as MessageEvent<string>);
 
-    expect(getPanelPollSnapshot().status).toBe("ready");
+    expect(getPanelPollSnapshot().panel.status).toBe("ready");
 
     socket.close();
 
-    expect(getPanelPollSnapshot().status).toBe("ready");
+    expect(getPanelPollSnapshot().panel.status).toBe("ready");
+    expect(getPanelPollSnapshot().streamConnected).toBe(false);
 
     unsubscribe();
   });

@@ -78,7 +78,10 @@ export const hangRoute = async (page: Page, urlPattern: string | RegExp): Promis
 const readBox = async (locator: Locator): Promise<{ width: number; height: number }> => {
   const box = await locator.boundingBox();
   expect(box).not.toBeNull();
-  return { width: Math.round(box!.width), height: Math.round(box!.height) };
+  if (!box) {
+    throw new Error("boundingBox is null");
+  }
+  return { width: Math.round(box.width), height: Math.round(box.height) };
 };
 
 export const readBoxHeight = async (locator: Locator): Promise<number> => {
@@ -141,5 +144,19 @@ export const expectHistorySkeletonGeometry = async (tile: Locator): Promise<void
     await expectExactHeight(blocks.nth(1), skeletonBlockHeightPx.duration);
     await expectExactHeight(blocks.nth(2), skeletonBlockHeightPx.bar);
     await expectExactHeight(row, skeletonBlockHeightPx.stat + skeletonBlockHeightPx.bar + 4);
+  }
+};
+
+export const expectUniformBentoHeaderHeights = async (page: Page): Promise<void> => {
+  const headers = page.locator('[data-testid$="-tile-header"]');
+  const count = await headers.count();
+  expect(count).toBeGreaterThan(2);
+
+  const heights = await headers.evaluateAll((elements) =>
+    elements.map((element) => Math.round(element.getBoundingClientRect().height)),
+  );
+  const expectedHeight = heights[0];
+  for (const height of heights) {
+    expect(height).toBe(expectedHeight);
   }
 };

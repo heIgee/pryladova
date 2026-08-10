@@ -19,6 +19,11 @@ export const WEATHER_CITIES_ROUTE = "/api/weather/cities";
 export const WEATHER_REVERSE_ROUTE = "/api/weather/reverse";
 export const GITHUB_STATUS_ROUTE = "/api/integrations/github";
 export const STEAM_STATUS_ROUTE = "/api/integrations/steam";
+export const GOOGLE_CALENDAR_STATUS_ROUTE = "/api/integrations/google/calendar";
+export const GOOGLE_TASKS_STATUS_ROUTE = "/api/integrations/google/tasks";
+export const GOOGLE_CONNECT_ROUTE = "/api/integrations/google/connect";
+export const GOOGLE_CALLBACK_ROUTE = "/api/integrations/google/callback";
+export const GOOGLE_DISCONNECT_ROUTE = "/api/integrations/google/disconnect";
 export const PANEL_WS_ROUTE = "/api/ws/panel";
 export const AGENT_WS_ROUTE = "/api/ws/agent";
 
@@ -228,6 +233,57 @@ export const steamStatusResponseSchema = z.discriminatedUnion("status", [
   z.object({ status: z.literal("unavailable") }),
 ]);
 
+export const calendarEventSchema = z.object({
+  title: z.string().min(1),
+  startAt: z.iso.datetime(),
+  endAt: z.iso.datetime(),
+  allDay: z.boolean(),
+  /** YYYY-MM-DD from Google for all-day events — display without timezone shift. */
+  date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+});
+
+export const googleCalendarStatusReadySchema = z.object({
+  status: z.literal("ready"),
+  accountEmail: z.string().email().nullable(),
+  inMeeting: z.boolean(),
+  currentEvent: calendarEventSchema.nullable(),
+  upcomingEvents: z.array(calendarEventSchema).max(5),
+  fetchedAt: z.iso.datetime(),
+});
+
+export const googleCalendarStatusResponseSchema = z.discriminatedUnion("status", [
+  googleCalendarStatusReadySchema,
+  z.object({ status: z.literal("disabled") }),
+  z.object({ status: z.literal("needs_auth") }),
+  z.object({ status: z.literal("unavailable") }),
+  z.object({ status: z.literal("misconfigured") }),
+]);
+
+export const googleTaskItemSchema = z.object({
+  title: z.string().min(1),
+  dueAt: z.iso.datetime().nullable(),
+});
+
+export const googleTasksStatusReadySchema = z.object({
+  status: z.literal("ready"),
+  accountEmail: z.string().email().nullable(),
+  openCount: z.number().int().nonnegative(),
+  dueTodayCount: z.number().int().nonnegative(),
+  tasks: z.array(googleTaskItemSchema),
+  fetchedAt: z.iso.datetime(),
+});
+
+export const googleTasksStatusResponseSchema = z.discriminatedUnion("status", [
+  googleTasksStatusReadySchema,
+  z.object({ status: z.literal("disabled") }),
+  z.object({ status: z.literal("needs_auth") }),
+  z.object({ status: z.literal("unavailable") }),
+  z.object({ status: z.literal("misconfigured") }),
+]);
+
 /** Identity key for a media track: same source data yields the same key regardless of case/whitespace. */
 export const trackMediaKey = (media: HostMedia): string =>
   [
@@ -307,6 +363,12 @@ export type SteamCurrentGame = z.infer<typeof steamCurrentGameSchema>;
 export type SteamRecentlyPlayed = z.infer<typeof steamRecentlyPlayedSchema>;
 export type SteamStatusReady = z.infer<typeof steamStatusReadySchema>;
 export type SteamStatusResponse = z.infer<typeof steamStatusResponseSchema>;
+export type CalendarEvent = z.infer<typeof calendarEventSchema>;
+export type GoogleCalendarStatusReady = z.infer<typeof googleCalendarStatusReadySchema>;
+export type GoogleCalendarStatusResponse = z.infer<typeof googleCalendarStatusResponseSchema>;
+export type GoogleTaskItem = z.infer<typeof googleTaskItemSchema>;
+export type GoogleTasksStatusReady = z.infer<typeof googleTasksStatusReadySchema>;
+export type GoogleTasksStatusResponse = z.infer<typeof googleTasksStatusResponseSchema>;
 
 export const mergeHostPayload = (
   previous: HostPayload | null | undefined,
@@ -358,6 +420,15 @@ export const mergeTelemetryHost = (
   host: mergeHostPayload(telemetry.host, incomingHost),
 });
 
+/** Reconnect snapshots replace window telemetry but should keep cached host media art. */
+export const mergeTelemetryState = (
+  previous: TelemetryState,
+  incoming: TelemetryState,
+): TelemetryState => ({
+  ...incoming,
+  host: incoming.host ? mergeHostPayload(previous.host, incoming.host) : previous.host,
+});
+
 export const geocodeCitySchema = z.object({
   label: z.string().min(1),
   lat: z.number(),
@@ -395,6 +466,13 @@ export const parseGithubStatusResponse = (response: unknown): GithubStatusRespon
 
 export const parseSteamStatusResponse = (response: unknown): SteamStatusResponse =>
   steamStatusResponseSchema.parse(response);
+
+export const parseGoogleCalendarStatusResponse = (
+  response: unknown,
+): GoogleCalendarStatusResponse => googleCalendarStatusResponseSchema.parse(response);
+
+export const parseGoogleTasksStatusResponse = (response: unknown): GoogleTasksStatusResponse =>
+  googleTasksStatusResponseSchema.parse(response);
 
 export const parseGeocodeCitiesResponse = (response: unknown): GeocodeCity[] =>
   geocodeCitiesResponseSchema.parse(response);

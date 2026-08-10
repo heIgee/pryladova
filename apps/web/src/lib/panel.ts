@@ -1,5 +1,6 @@
 import {
   mergeTelemetryHost,
+  mergeTelemetryState,
   type PanelWsMessage,
   SETTINGS_ROUTE,
   type SettingsPutResponse,
@@ -74,6 +75,12 @@ export const applyPanelWsMessage = (panel: PanelState, message: PanelWsMessage):
   }
 
   if (message.type === "state") {
+    if (panel.status === "ready") {
+      return {
+        status: "ready",
+        telemetry: mergeTelemetryState(panel.telemetry, message.telemetry),
+      };
+    }
     return { status: "ready", telemetry: message.telemetry };
   }
 
@@ -122,6 +129,24 @@ export const resolveShowAgentHint = (panel: PanelState, nowMs = Date.now()): boo
   }
 
   return isAgentStale(panel, nowMs);
+};
+
+export type PanelSubtitle = "live" | "api-unavailable" | "agent-unavailable";
+
+export const resolvePanelSubtitle = (
+  panel: PanelState,
+  streamConnected: boolean,
+  nowMs = Date.now(),
+): PanelSubtitle => {
+  if (!streamConnected) {
+    return "api-unavailable";
+  }
+
+  if (resolveShowAgentHint(panel, nowMs)) {
+    return "agent-unavailable";
+  }
+
+  return "live";
 };
 
 export const shouldShowMediaTile = (host: TelemetryState["host"] | undefined): boolean =>

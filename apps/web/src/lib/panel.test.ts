@@ -6,6 +6,7 @@ import {
   isAgentLive,
   isAgentStale,
   type PanelState,
+  resolvePanelSubtitle,
   resolveShowAgentHint,
   shouldShowMediaTile,
   syncSettings,
@@ -74,6 +75,70 @@ describe("applyPanelWsMessage", () => {
       telemetry: expect.objectContaining({
         appName: "Code",
         host: expect.objectContaining({ cpuPercent: 55 }),
+      }),
+    });
+  });
+
+  it("preserves thumbnail when a reconnect state snapshot omits it for the same track", () => {
+    const panel: PanelState = {
+      status: "ready",
+      telemetry: {
+        ...readyTelemetry,
+        host: {
+          idleMs: 0,
+          cpuPercent: 10,
+          ramPercent: 20,
+          uptimeSec: 100,
+          capturedAt: "2026-01-01T12:00:02.000Z",
+          media: {
+            title: "Track",
+            artist: "Artist",
+            albumTitle: null,
+            appName: "Player",
+            playbackStatus: "playing",
+            thumbnailDataUrl: "data:image/jpeg;base64,abc",
+          },
+        },
+      },
+    };
+
+    const next = applyPanelWsMessage(panel, {
+      type: "state",
+      telemetry: {
+        appName: "Code",
+        windowTitle: "app.tsx",
+        capturedAt: "2026-01-01T12:00:06.000Z",
+        receivedAt: "2026-01-01T12:00:06.000Z",
+        classification: null,
+        classificationStatus: "disabled",
+        host: {
+          idleMs: 0,
+          cpuPercent: 55,
+          ramPercent: 20,
+          uptimeSec: 110,
+          capturedAt: "2026-01-01T12:00:06.000Z",
+          media: {
+            title: "Track",
+            artist: "Artist",
+            albumTitle: null,
+            appName: "Player",
+            playbackStatus: "playing",
+            thumbnailDataUrl: null,
+          },
+        },
+      },
+    });
+
+    expect(next).toEqual({
+      status: "ready",
+      telemetry: expect.objectContaining({
+        appName: "Code",
+        host: expect.objectContaining({
+          cpuPercent: 55,
+          media: expect.objectContaining({
+            thumbnailDataUrl: "data:image/jpeg;base64,abc",
+          }),
+        }),
       }),
     });
   });
@@ -196,6 +261,25 @@ describe("isAgentLive", () => {
     const panel: PanelState = { status: "ready", telemetry: readyTelemetry };
     const now = Date.parse("2026-01-01T12:00:02.000Z") + 5_000;
     expect(isAgentLive(panel, now)).toBe(true);
+  });
+});
+
+describe("resolvePanelSubtitle", () => {
+  it("reports api-unavailable when the panel stream is disconnected", () => {
+    expect(resolvePanelSubtitle({ status: "loading" }, false)).toBe("api-unavailable");
+    expect(resolvePanelSubtitle({ status: "ready", telemetry: readyTelemetry }, false)).toBe(
+      "api-unavailable",
+    );
+  });
+
+  it("reports agent-unavailable when the stream is connected but the agent is missing", () => {
+    expect(resolvePanelSubtitle({ status: "empty" }, true)).toBe("agent-unavailable");
+  });
+
+  it("reports live when the stream is connected and telemetry is fresh", () => {
+    const panel: PanelState = { status: "ready", telemetry: readyTelemetry };
+    const now = Date.parse("2026-01-01T12:00:02.000Z") + 5_000;
+    expect(resolvePanelSubtitle(panel, true, now)).toBe("live");
   });
 });
 

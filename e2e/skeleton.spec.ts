@@ -12,6 +12,7 @@ import {
   expectHistorySkeletonGeometry,
   expectIntegrationSkeletonGeometry,
   expectSkeletonOverlayFillsSlot,
+  expectUniformBentoHeaderHeights,
   hangRoute,
   login,
   prepareClassificationDashboard,
@@ -101,5 +102,15 @@ test.describe("skeleton layout", () => {
     await expectIntegrationSkeletonGeometry(page.getByTestId("github-tile"));
     await expectIntegrationSkeletonGeometry(page.getByTestId("steam-tile"));
     await expectHistorySkeletonGeometry(page.getByTestId("history-tile"));
+  });
+
+  test("bento tile headers share one height", async ({ page }) => {
+    await page.goto("/");
+    await login(page);
+    await sendAgentUpdate(apiBase, hostFixture, telemetryFixture, ingestSecret);
+    await waitForWindowTile(page);
+    await settleWindowClassification(page, "Code");
+
+    await expectUniformBentoHeaderHeights(page);
   });
 });

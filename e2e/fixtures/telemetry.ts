@@ -30,3 +30,15 @@ export const hostFixture = {
   media: null,
   capturedAt: "2026-01-01T12:00:00.000Z",
 };
+
+export const hostWithMediaFixture = {
+  ...hostFixture,
+  media: {
+    title: "Test Track",
+    artist: "Test Artist",
+    albumTitle: null,
+    appName: "Spotify",
+    playbackStatus: "paused" as const,
+    thumbnailDataUrl: null,
+  },
+};

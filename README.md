@@ -1,6 +1,6 @@
 # Pryladova
 
-Real-time desktop telemetry: a Windows agent reports the active window to a NestJS 12 (ESM) API; a React web panel displays the latest state.
+Real-time desktop telemetry: a Windows agent streams active-window and host metrics to a NestJS API; a React web panel shows live state, activity history, and optional integration tiles (GitHub, Steam, Google Calendar/Tasks, weather).
 
 Future work: [ROADMAP.md](ROADMAP.md).
 
@@ -42,13 +42,12 @@ pnpm dev:api
 
 Optional env — copy `apps/api/.env.example` to `apps/api/.env`:
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `GEMINI_API_KEY` | — | Google AI Studio key; without it classification is disabled |
-| `GEMINI_MODEL` | `gemini-3.1-flash-lite` | Gemini model id for window classification |
-| `INGEST_SECRET` | — | Shared secret for agent WebSocket (`Authorization: Bearer …`); required in production |
-| `SESSION_SECRET` | (see `.env.example`) | Signs panel session cookies; required |
-| `PANEL_PASSWORD_HASH` | (see `.env.example`) | Bcrypt hash for panel login (`caddy hash-password`); required |
+- **Panel auth** (required): `SESSION_SECRET`, `PANEL_PASSWORD_HASH`
+- **Classification** (optional): `GEMINI_API_KEY`, `GEMINI_MODEL`
+- **Agent ingest** (production): `INGEST_SECRET`
+- **Persistence & integrations** (optional): `SUPABASE_*`, GitHub/Steam/Google vars, `INTEGRATION_ENCRYPTION_KEY` — see `.env.example`
+
+Supabase holds activity history, classification cache, and hub settings (including encrypted Google OAuth tokens). After pulling schema changes, run `pnpm db:push`. Google Calendar/Tasks: set OAuth vars, push migrations, then connect from the panel tiles.
 
 When `GEMINI_API_KEY` is missing or the LLM call fails, telemetry is still stored with `classificationStatus: "failed"`.
 
@@ -85,7 +84,7 @@ Optional env — copy `apps/agent/.env.example` to `apps/agent/.env` (not commit
 pnpm dev:web
 ```
 
-Open the web URL and sign in (dev password in `apps/api/.env.example`). Telemetry appears after the agent connects. The panel streams state over WebSocket; login uses the session cookie on `/api/auth/*`. Click the weather chip to use browser location or search a city; choice is saved in the browser.
+Open the web URL and sign in (dev password in `apps/api/.env.example`). Telemetry appears after the agent connects. The panel streams state over WebSocket; login uses the session cookie on `/api/auth/*`. Integration tiles show when the API has the matching config. Click the weather chip to use browser location or search a city; choice is saved in the browser.
 
 ## Scripts
 
@@ -96,6 +95,7 @@ Open the web URL and sign in (dev password in `apps/api/.env.example`). Telemetr
 | `pnpm dev:agent` | Telemetry agent (local API) |
 | `pnpm dev:agent:remote` | Telemetry agent (remote VPS API) |
 | `pnpm dev:web` | Vite dev server |
+| `pnpm db:push` | Apply Supabase migrations (linked project) |
 | `pnpm check` | Typecheck + lint + build (turbo) |
 | `pnpm verify` | Full CI locally (same gates as GitHub Actions) |
 | `pnpm build` | Build all packages (turbo) |
@@ -170,8 +170,9 @@ Local `apps/api/.env` is for `pnpm dev` only.
 
 ```
 apps/agent   # Windows telemetry client
-apps/api     # NestJS 12 API (ESM, in-memory state)
+apps/api     # NestJS API (ESM, Supabase-backed persistence)
 apps/web     # React + Vite + Tailwind v4
 packages/shared   # Shared types and Zod schemas
 deploy/           # runbook, bootstrap, Caddyfile, env examples
+supabase/         # SQL migrations
 ```

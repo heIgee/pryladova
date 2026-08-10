@@ -1,11 +1,14 @@
 import type { HostPayload } from "@pryladova/shared";
 import { Music2 } from "lucide-react";
+import { BentoTileHeader } from "@/components/tiles/bento-tile-header";
+import { bentoTileLucideIconClassName } from "@/components/tiles/bento-tile-header-layout";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { formatPlaybackStatus } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-const artFrameClassName = "aspect-square h-full shrink-0 overflow-hidden rounded-lg";
+const artFrameClassName =
+  "aspect-square size-32 shrink-0 overflow-hidden rounded-lg md:h-full md:w-auto";
 
 const coverArtAlt = (title: string, artist: string | null): string => {
   if (artist) {
@@ -42,7 +45,7 @@ const MediaArt = ({
         "flex items-center justify-center bg-muted text-muted-foreground ring-1 ring-border/60",
       )}
     >
-      <Music2 className="size-6" aria-hidden="true" />
+      <Music2 className="size-8" aria-hidden="true" />
     </div>
   );
 };
@@ -57,21 +60,20 @@ export const MediaTile = ({
   const media = host?.media ?? null;
 
   return (
-    <Card size="sm" className={cn("h-full min-h-0", className)}>
-      <CardHeader className="border-b">
-        <CardTitle className="flex items-center gap-2 text-sm">
-          <Music2 className="size-3.5 text-muted-foreground" />
-          Media
-        </CardTitle>
-        <CardAction>
+    <Card size="sm" className={cn("min-h-0 md:h-full", className)} data-testid="media-tile">
+      <BentoTileHeader
+        testId="media-tile-header"
+        icon={<Music2 className={bentoTileLucideIconClassName} aria-hidden="true" />}
+        title="Media"
+        action={
           <Badge variant={media?.playbackStatus === "playing" ? "default" : "outline"}>
             {media ? formatPlaybackStatus(media.playbackStatus) : "Idle"}
           </Badge>
-        </CardAction>
-      </CardHeader>
-      <CardContent className="flex min-h-0 flex-1 basis-0 flex-col">
+        }
+      />
+      <CardContent className="flex flex-col md:min-h-0 md:flex-1 md:basis-0">
         {media ? (
-          <div className="flex min-h-0 flex-1 basis-0 items-stretch gap-3">
+          <div className="flex items-stretch gap-3 md:min-h-0 md:flex-1 md:basis-0">
             <MediaArt
               thumbnailDataUrl={media.thumbnailDataUrl}
               title={media.title}

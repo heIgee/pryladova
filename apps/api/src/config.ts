@@ -22,6 +22,11 @@ export type ApiConfig = {
   githubUsername: string | undefined;
   steamApiKey: string | undefined;
   steamId: string | undefined;
+  googleClientId: string | undefined;
+  googleClientSecret: string | undefined;
+  googleRedirectUri: string | undefined;
+  googleRefreshToken: string | undefined;
+  integrationEncryptionKey: string | undefined;
 };
 
 export const requirePanelAuth = (
@@ -82,6 +87,11 @@ export const loadConfig = (): ApiConfig => {
   const githubUsername = process.env.GITHUB_USERNAME?.trim() || undefined;
   const steamApiKey = process.env.STEAM_API_KEY?.trim() || undefined;
   const steamId = process.env.STEAM_ID?.trim() || undefined;
+  const googleClientId = process.env.GOOGLE_CLIENT_ID?.trim() || undefined;
+  const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim() || undefined;
+  const googleRedirectUri = process.env.GOOGLE_REDIRECT_URI?.trim() || undefined;
+  const googleRefreshToken = process.env.GOOGLE_REFRESH_TOKEN?.trim() || undefined;
+  const integrationEncryptionKey = process.env.INTEGRATION_ENCRYPTION_KEY?.trim() || undefined;
 
   return {
     geminiApiKey,
@@ -96,6 +106,11 @@ export const loadConfig = (): ApiConfig => {
     githubUsername,
     steamApiKey,
     steamId,
+    googleClientId,
+    googleClientSecret,
+    googleRedirectUri,
+    googleRefreshToken,
+    integrationEncryptionKey,
   };
 };
 

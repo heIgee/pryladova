@@ -2,9 +2,10 @@ import type { CiCheckStatus } from "@pryladova/shared";
 import { GitCommitHorizontal, GitPullRequest, Users } from "lucide-react";
 import type { ReactNode } from "react";
 import { GithubIcon } from "@/components/brand-icons";
+import { BentoTileHeader } from "@/components/tiles/bento-tile-header";
 import { IntegrationTileSkeleton } from "@/components/tiles/integration-tile-skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import type { GithubTileStatus } from "@/lib/integration-status";
 import { isIntegrationLoading } from "@/lib/integration-status";
 
@@ -45,12 +46,11 @@ export const GithubStatusTile = ({
   className?: string;
 }) => (
   <Card size="sm" className={className} data-testid="github-tile">
-    <CardHeader className="border-b py-2">
-      <CardTitle className="flex items-center gap-2 text-sm">
-        <GithubIcon />
-        GitHub
-      </CardTitle>
-    </CardHeader>
+    <BentoTileHeader
+      testId="github-tile-header"
+      icon={<GithubIcon className="size-3.5 shrink-0" />}
+      title="GitHub"
+    />
     <CardContent className="grid gap-2.5 py-2.5">
       {isIntegrationLoading(status) ? <IntegrationTileSkeleton /> : null}
       {status.status === "disabled" ? (

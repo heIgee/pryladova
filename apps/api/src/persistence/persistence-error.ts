@@ -24,7 +24,7 @@ export const formatPersistenceError = (error: unknown): string => {
 };
 
 export const isSchemaMissingError = (detail: string): boolean =>
-  detail.includes("PGRST205") || detail.includes("PGRST202");
+  detail.includes("PGRST205") || detail.includes("PGRST202") || detail.includes("PGRST204");
 
 export const isPermissionDeniedError = (detail: string): boolean =>
   detail.includes("42501") || detail.toLowerCase().includes("permission denied");

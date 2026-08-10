@@ -1,6 +1,11 @@
 import { expect, type Page, test } from "@playwright/test";
 import { apiBase, ingestSecret, panelPassword } from "./constants.js";
-import { hostFixture, redactedTelemetryFixture, telemetryFixture } from "./fixtures/telemetry.js";
+import {
+  hostFixture,
+  hostWithMediaFixture,
+  redactedTelemetryFixture,
+  telemetryFixture,
+} from "./fixtures/telemetry.js";
 import { sendAgentUpdate } from "./helpers/agent-ws.js";
 import { resetE2eApiState } from "./helpers/skeleton-layout.js";
 
@@ -36,6 +41,8 @@ test.describe("panel", () => {
     await expect(page.getByTestId("history-tile")).toBeVisible();
     await expect(page.getByText("GitHub", { exact: true })).toBeVisible({ timeout: 5_000 });
     await expect(page.getByText("Steam", { exact: true })).toBeVisible();
+    await expect(page.getByText("Calendar", { exact: true })).toBeVisible();
+    await expect(page.getByText("Tasks", { exact: true })).toBeVisible();
 
     await expect(page.getByText("agentId is required")).toHaveCount(0);
     await expect(page.getByText(/^(Evaporating|Waiting for host)/)).toHaveCount(0);
@@ -76,5 +83,19 @@ test.describe("panel", () => {
       timeout: 5_000,
     });
     await expect(page.getByText("Redacted")).toBeVisible();
+  });
+
+  test("shows media tile content on mobile viewport", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/");
+    await login(page);
+
+    await sendAgentUpdate(apiBase, hostWithMediaFixture, telemetryFixture, ingestSecret);
+
+    const mediaTile = page.getByTestId("media-tile");
+    await expect(mediaTile).toBeVisible({ timeout: 5_000 });
+    await expect(mediaTile).toContainText("Test Track");
+    await expect(mediaTile).toContainText("Test Artist");
+    await expect(mediaTile).toContainText("Paused");
   });
 });

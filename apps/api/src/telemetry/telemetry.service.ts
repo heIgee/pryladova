@@ -174,8 +174,8 @@ export class TelemetryService {
     const previousHost = this.state?.host ?? this.pendingHost;
     const previousThumbnail = previousHost?.media?.thumbnailDataUrl ?? null;
     const merged = this.mergeHostPayload(previousHost, payload);
-    const thumbnailNewlyAvailable =
-      merged.media?.thumbnailDataUrl != null && previousThumbnail == null;
+    const mergedThumbnail = merged.media?.thumbnailDataUrl ?? null;
+    const thumbnailChanged = mergedThumbnail != null && mergedThumbnail !== previousThumbnail;
 
     if (agentId) {
       void this.segmentService.onHostTick(agentId, payload.capturedAt, { idleMs: payload.idleMs });
@@ -191,7 +191,7 @@ export class TelemetryService {
       host: merged,
     });
 
-    if (thumbnailNewlyAvailable) {
+    if (thumbnailChanged) {
       this.publishState();
       return;
     }

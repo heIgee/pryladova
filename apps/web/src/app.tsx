@@ -2,13 +2,17 @@ import { Monitor } from "lucide-react";
 import { useRef } from "react";
 import { BentoGrid, PageHeader, Shell, ThemeToggle } from "@/components/layout/shell";
 import { LoginForm } from "@/components/login-form";
+import { BentoTileHeader } from "@/components/tiles/bento-tile-header";
+import { bentoTileLucideIconClassName } from "@/components/tiles/bento-tile-header-layout";
 import { GithubStatusTile } from "@/components/tiles/github-status-tile";
+import { GoogleCalendarTile } from "@/components/tiles/google-calendar-tile";
+import { GoogleTasksTile } from "@/components/tiles/google-tasks-tile";
 import { HistoryTile } from "@/components/tiles/history-tile";
 import { MachineTile } from "@/components/tiles/machine-tile";
 import { MediaTile } from "@/components/tiles/media-tile";
 import { SteamStatusTile } from "@/components/tiles/steam-status-tile";
 import { WindowTile } from "@/components/tiles/window-tile";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { WeatherHeader } from "@/components/weather-header";
 import { useAuth } from "@/hooks/use-auth";
 import { useDashboard } from "@/hooks/use-dashboard";
@@ -19,26 +23,30 @@ import { getAgentLastSeenMs, type PanelState, shouldShowMediaTile } from "@/lib/
 
 const AgentPresencePlaceholder = ({
   panel,
+  streamConnected,
   stale = false,
 }: {
   panel: PanelState;
+  streamConnected: boolean;
   stale?: boolean;
 }) => (
   <Card size="sm" data-testid="window-tile-placeholder">
-    <CardHeader className="border-b">
-      <CardTitle className="flex items-center gap-2 text-sm">
-        <Monitor className="size-3.5 text-muted-foreground" />
-        Window
-      </CardTitle>
-    </CardHeader>
+    <BentoTileHeader
+      testId="window-tile-header"
+      icon={<Monitor className={bentoTileLucideIconClassName} aria-hidden="true" />}
+      title="Window"
+    />
     <CardContent>
-      {panel.status === "loading" ? (
+      {!streamConnected ? (
+        <p className="text-caption text-destructive">Cannot reach the API</p>
+      ) : null}
+      {streamConnected && panel.status === "loading" ? (
         <p className="text-caption text-muted-foreground">Connecting…</p>
       ) : null}
-      {stale || panel.status === "empty" ? (
+      {streamConnected && (stale || panel.status === "empty") ? (
         <p className="text-caption text-muted-foreground">No active window</p>
       ) : null}
-      {panel.status === "error" ? (
+      {streamConnected && panel.status === "error" ? (
         <p className="text-caption text-destructive">
           Agent telemetry unavailable: {panel.message}
         </p>
@@ -54,13 +62,17 @@ const Dashboard = () => {
     settingsError,
     settingsSyncing,
     settingsReady,
+    panelSubtitle,
     showAgentHint,
     agentLive,
+    streamConnected,
     theme,
     weather,
     weatherLocation,
     githubStatus,
     steamStatus,
+    googleCalendarStatus,
+    googleTasksStatus,
     handleClassificationToggle,
     handleThemeChange,
     handleWeatherLocationChange,
@@ -70,7 +82,11 @@ const Dashboard = () => {
   const liveTelemetry = agentLive && readyPanel ? readyPanel.telemetry : null;
   const host = readyPanel?.telemetry.host ?? null;
   const agentLastSeenMs = readyPanel ? getAgentLastSeenMs(readyPanel) : null;
-  const historyLiveCapMs = resolveHistoryLiveCapMs(host, agentLastSeenMs, showAgentHint);
+  const historyLiveCapMs = resolveHistoryLiveCapMs(
+    host,
+    agentLastSeenMs,
+    showAgentHint || panelSubtitle === "api-unavailable",
+  );
   const { history, refreshHistory, refreshing, hasLoaded } = useHistory(
     true,
     liveTelemetry,
@@ -96,7 +112,7 @@ const Dashboard = () => {
 
   return (
     <Shell>
-      <PageHeader action={headerAction} stale={showAgentHint} />
+      <PageHeader action={headerAction} subtitle={panelSubtitle} />
       <BentoGrid>
         <div className="flex flex-col gap-5">
           {agentLive && readyPanel ? (
@@ -118,7 +134,11 @@ const Dashboard = () => {
             </>
           ) : (
             <>
-              <AgentPresencePlaceholder panel={panel} stale={readyPanel != null && showAgentHint} />
+              <AgentPresencePlaceholder
+                panel={panel}
+                streamConnected={streamConnected}
+                stale={readyPanel != null && showAgentHint}
+              />
               <MachineTile host={null} />
             </>
           )}
@@ -142,6 +162,8 @@ const Dashboard = () => {
           <div ref={sideColumnRef} className="grid w-full gap-4 md:w-auto md:min-w-0 md:flex-[2]">
             <GithubStatusTile status={githubStatus} />
             <SteamStatusTile status={steamStatus} />
+            <GoogleCalendarTile status={googleCalendarStatus} />
+            <GoogleTasksTile status={googleTasksStatus} />
           </div>
         </div>
       </BentoGrid>

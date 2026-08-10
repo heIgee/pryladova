@@ -1,15 +1,10 @@
 import { pickSpinnerVerb, type TelemetryState } from "@pryladova/shared";
 import { Monitor } from "lucide-react";
 import type { ReactNode } from "react";
+import { BentoTileHeader } from "@/components/tiles/bento-tile-header";
+import { bentoTileLucideIconClassName } from "@/components/tiles/bento-tile-header-layout";
 import { Badge } from "@/components/ui/badge";
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { useClassificationDisplay } from "@/hooks/use-classification-display";
@@ -109,14 +104,16 @@ export const WindowTile = ({
 
   return (
     <Card size="sm" data-testid="window-tile">
-      <CardHeader className="border-b" data-testid="window-tile-header">
-        <CardTitle className="flex items-center gap-2 text-sm">
-          <Monitor className="size-3.5 text-muted-foreground" />
-          Window
-        </CardTitle>
-        {classificationEnabled || showClassificationChips ? (
-          <CardAction data-testid="window-tile-header-chips">
-            <div className="flex min-h-5 max-w-full flex-wrap justify-end gap-1.5">
+      <BentoTileHeader
+        testId="window-tile-header"
+        icon={<Monitor className={bentoTileLucideIconClassName} aria-hidden="true" />}
+        title="Window"
+        action={
+          classificationEnabled || showClassificationChips ? (
+            <div
+              className="flex h-5 max-w-full items-center gap-1.5 overflow-hidden"
+              data-testid="window-tile-header-chips"
+            >
               {showCategory ? <Badge>{badgeClassification?.category}</Badge> : null}
               {showWorkChip ? (
                 <Badge>{badgeClassification?.workRelated === "yes" ? "Work" : "Personal"}</Badge>
@@ -148,9 +145,9 @@ export const WindowTile = ({
                 </span>
               ) : null}
             </div>
-          </CardAction>
-        ) : null}
-      </CardHeader>
+          ) : null
+        }
+      />
       <CardContent className="flex flex-col gap-2">
         <div className="grid gap-2" data-testid="window-tile-names">
           <h2
@@ -163,11 +160,11 @@ export const WindowTile = ({
               {layoutName.trim().length > 0 ? layoutName : "\u00a0"}
             </span>
             {showNameSkeleton ? (
-              <Skeleton className={WINDOW_TITLE_SKELETON_CLASS} aria-hidden="true" />
+              <Skeleton as="span" className={WINDOW_TITLE_SKELETON_CLASS} aria-hidden="true" />
             ) : null}
           </h2>
           {showSubtitleSlot ? (
-            <p
+            <div
               className={cn(WINDOW_SUBTITLE_CLASS, "relative line-clamp-3 text-muted-foreground")}
               data-testid="window-tile-subtitle-slot"
             >
@@ -179,9 +176,9 @@ export const WindowTile = ({
                   : windowSubtitle}
               </span>
               {showNameSkeleton ? (
-                <Skeleton className={WINDOW_SUBTITLE_SKELETON_CLASS} aria-hidden="true" />
+                <Skeleton as="span" className={WINDOW_SUBTITLE_SKELETON_CLASS} aria-hidden="true" />
               ) : null}
-            </p>
+            </div>
           ) : null}
         </div>
       </CardContent>

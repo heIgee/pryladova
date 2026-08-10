@@ -20,8 +20,12 @@ export const skeletonSize = {
   duration: "h-4 w-10 shrink-0",
 } as const;
 
-function Skeleton({ className, ...props }: React.ComponentProps<"div">) {
-  return <div className={cn("animate-pulse rounded-md bg-muted", className)} {...props} />;
+function Skeleton({
+  className,
+  as: Tag = "div",
+  ...props
+}: React.ComponentProps<"div"> & { as?: "div" | "span" }) {
+  return <Tag className={cn("animate-pulse rounded-md bg-muted", className)} {...props} />;
 }
 
 export { Skeleton };

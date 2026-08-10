@@ -1,7 +1,11 @@
 import type { HostPayload, TelemetryPayload } from "@pryladova/shared";
 import { loadConfig } from "./config.js";
 import { initHostMetrics, readHostMetrics } from "./host-metrics.js";
-import { readNowPlaying, resolveHostMediaThumbnail } from "./now-playing.js";
+import {
+  readNowPlaying,
+  resolveHostMediaThumbnail,
+  setNowPlayingThumbnailListener,
+} from "./now-playing.js";
 import {
   createBlockedAppsSet,
   type RawWindowSnapshot,
@@ -239,6 +243,10 @@ const run = async (): Promise<void> => {
       tickInFlight = false;
     }
   };
+
+  setNowPlayingThumbnailListener(() => {
+    void runTick();
+  });
 
   const onUnexpectedClose = (): void => {
     if (shuttingDown || reconnecting || !connection?.client) {

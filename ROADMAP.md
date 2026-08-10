@@ -4,7 +4,6 @@ Future work — not scheduled. Stack and deploy: [README.md](README.md), [deploy
 
 ## Persistence and real-time UI
 
-- **Supabase Realtime** direct to the browser — needs anon-key RLS; panel still needs API for ephemeral host state
 - **`eventId` on telemetry** — unique constraint before agent retry queue can replay without double-counting
 - **Session lock** — decide whether lock closes a segment or accrues like idle
 - No pre-rollup for history aggregates until query cost justifies it
@@ -14,32 +13,30 @@ Future work — not scheduled. Stack and deploy: [README.md](README.md), [deploy
 - Multi-agent panel UX — label/select machines (`AGENT_ID` already in ingest)
 - **Integration keys on the server** — env-based secrets; configure once, restart API
 - **Settings → Integrations** in panel — masked keys, docs links; full UI persistence waits on settings store
-- OAuth only when API keys aren't enough — defer until more env-key tiles ship
 
 ## Integrations (bento tiles)
 
 Server-side fetch + cache (minutes-scale TTL). Pattern: copy `integrations/weather.service.ts`. No API keys in the browser.
 
-### Env-key tiles (ship first)
+### Env-key tiles
 
-- **Home Assistant** — room temp, humidity, or entity ON/OFF; local URL + long-lived token
 - **Service ping grid** — ICMP or HTTP checks from API cron (router, NAS, self)
 
-Shipped: **GitHub** (commits today, open PRs, latest CI on 3 recent repos) and **Steam** (presence, avatar, session playtime, recently played) — env keys in API, 5m cache, bento tiles beside history.
+Shipped: **GitHub**, **Steam**, **Google Calendar** (in-meeting + next event), and **Google Tasks** (open + due today) — env keys or OAuth in API, 5m cache, bento tiles beside history.
 
 ### OAuth (later)
 
-- **Google Calendar** — "in meeting" badge + next event
-- **Last.fm** — recent 4–6 tracks grid (complements SMTC now-playing)
+- **Gmail metadata** — unread badge in status strip (re-consent)
 - **Telegram bot** — unread count or last saved message
 
 ### Narrow / defer
 
+- **Home Assistant** — room temp/humidity; homelab-only
 - **Discord** — guild bot or own account only; no local RPC / voice state
 
 ### Out of scope
 
-- WakaTime, Oura, Trakt, Strava
+- WakaTime, Oura, Trakt, Strava, Last.fm
 - Mic/camera active indicators unless opt-in
 - Polling third-party APIs from the React frontend
 

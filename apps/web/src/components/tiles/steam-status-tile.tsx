@@ -1,9 +1,10 @@
 import type { SteamPersonaState } from "@pryladova/shared";
 import { Clock3, UserRound } from "lucide-react";
 import { SteamIcon } from "@/components/brand-icons";
+import { BentoTileHeader } from "@/components/tiles/bento-tile-header";
 import { IntegrationTileSkeleton } from "@/components/tiles/integration-tile-skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { formatDuration, formatPlaytimeMinutes } from "@/lib/format";
 import type { SteamTileStatus } from "@/lib/integration-status";
 import { isIntegrationLoading } from "@/lib/integration-status";
@@ -53,12 +54,11 @@ export const SteamStatusTile = ({
   className?: string;
 }) => (
   <Card size="sm" className={className} data-testid="steam-tile">
-    <CardHeader className="border-b py-2">
-      <CardTitle className="flex items-center gap-2 text-sm">
-        <SteamIcon />
-        Steam
-      </CardTitle>
-      <CardAction>
+    <BentoTileHeader
+      testId="steam-tile-header"
+      icon={<SteamIcon className="size-3.5 shrink-0" />}
+      title="Steam"
+      action={
         <Badge
           variant={status.status === "ready" ? headerBadgeVariant(status) : "outline"}
           className={status.status !== "ready" ? "invisible" : "max-w-36 truncate"}
@@ -68,8 +68,8 @@ export const SteamStatusTile = ({
         >
           {status.status === "ready" ? headerBadgeLabel(status) : "Offline"}
         </Badge>
-      </CardAction>
-    </CardHeader>
+      }
+    />
     <CardContent className="grid gap-2.5 py-2.5">
       {isIntegrationLoading(status) ? <IntegrationTileSkeleton /> : null}
       {status.status === "disabled" ? (

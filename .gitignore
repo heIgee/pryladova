@@ -85,6 +85,7 @@ yarn.lock
 *.local
 *.pem
 .vercel
+.tmp-*
 
 # Markdown — ignore by default
 *.md

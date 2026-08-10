@@ -122,10 +122,27 @@ nano ~/pryladova/.env
 # Required: PANEL_PASSWORD_HASH_B64=<output of: caddy hash-password | base64 -w0>
 # Optional: GEMINI_API_KEY, GEMINI_MODEL
 # Optional: SENTRY_DSN=<real DSN from Sentry project settings>
+# Optional Google OAuth: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI,
+#   INTEGRATION_ENCRYPTION_KEY (32 random bytes, base64), optional GOOGLE_REFRESH_TOKEN override
 # SENTRY_RELEASE is injected by deploy (git sha); do not set manually.
 ```
 
 Sign in with the **plaintext password** you typed into `caddy hash-password`, not the hash or base64 string.
+
+### Google OAuth (Calendar + Tasks, optional)
+
+Requires a Google Cloud OAuth **Web** client with **Google Calendar API** and **Google Tasks API** enabled. Scopes: `calendar.events.readonly`, `tasks.readonly`. Prod redirect URI: `https://<PRYLADOVA_DOMAIN>/api/integrations/google/callback` — must match `GOOGLE_REDIRECT_URI` byte-for-byte.
+
+**Testing mode (typical for homelab):** GCP OAuth apps start in **Testing**. Only Google accounts added as **test users** on the consent screen can connect; everyone else gets access denied. Refresh tokens expire after **7 days** — use **Reconnect with consent** when tiles go stale. Staying in Testing avoids Google OAuth app verification (required for production use of sensitive scopes).
+
+**Production:** Publishing the consent screen allows any Google user and long-lived refresh tokens, but these scopes trigger verification (privacy policy, app homepage, review). Only pursue if others will connect — not needed for a solo panel.
+
+1. Set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, and `INTEGRATION_ENCRYPTION_KEY` in `~/pryladova/.env`. Run `supabase db push` so `hub_settings.google_refresh_token_encrypted` exists.
+2. Open the panel → Calendar or Tasks tile → **Connect Google**. Requires Supabase configured; tokens persist encrypted in `hub_settings`.
+3. After adding Tasks scope to an existing connect, use **Reconnect with consent** so the refresh token includes both APIs.
+4. Optional: set `GOOGLE_REFRESH_TOKEN` in env to override DB storage (invalid value → tile shows misconfigured; DB token preserved).
+5. Rotating `INTEGRATION_ENCRYPTION_KEY` orphans stored DB tokens — reconnect or paste a new env refresh token.
+6. Two Connect tabs race on one OAuth state cookie — last write wins; retry if callback fails.
 
 ### 3. Caddy edge config
 
@@ -405,3 +422,6 @@ curl -s https://<PRYLADOVA_DOMAIN>/api/health
 | Panel 401 | Sign in at `/`; check `SESSION_SECRET` and `PANEL_PASSWORD_HASH_B64` in `~/pryladova/.env` |
 | Caddy fails to start | `sudo caddy validate --config /etc/caddy/Caddyfile --envfile /etc/caddy/pryladova.env`; env vars set? |
 | `docker pull` 403 | GHCR package visibility; deploy workflow logs in via `GITHUB_TOKEN` |
+| Google connect: access denied | Account not on OAuth consent screen test users (Testing mode) |
+| Google connect: redirect error | `GOOGLE_REDIRECT_URI` must match the Web client redirect URI exactly |
+| Calendar tile stale after ~7 days | Testing-mode refresh token expired — **Reconnect** on the tile |

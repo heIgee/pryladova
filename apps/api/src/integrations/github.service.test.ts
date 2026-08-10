@@ -17,6 +17,11 @@ const githubConfig: ApiConfig = {
   githubUsername: "octocat",
   steamApiKey: undefined,
   steamId: undefined,
+  googleClientId: undefined,
+  googleClientSecret: undefined,
+  googleRedirectUri: undefined,
+  googleRefreshToken: undefined,
+  integrationEncryptionKey: undefined,
 };
 
 const createService = async (): Promise<GithubService> => {

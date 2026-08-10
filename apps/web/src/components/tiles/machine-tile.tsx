@@ -1,8 +1,10 @@
 import type { HostPayload } from "@pryladova/shared";
 import { Cpu, MemoryStick, Server, Timer } from "lucide-react";
 import type { ReactNode } from "react";
+import { BentoTileHeader } from "@/components/tiles/bento-tile-header";
+import { bentoTileLucideIconClassName } from "@/components/tiles/bento-tile-header-layout";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   formatDuration,
   formatPercent,
@@ -47,12 +49,11 @@ export const MachineTile = ({
   className?: string;
 }) => (
   <Card size="sm" className={cn("h-full min-h-0", className)}>
-    <CardHeader className="border-b">
-      <CardTitle className="flex items-center gap-2 text-sm">
-        <Server className="size-3.5 text-muted-foreground" />
-        Machine
-      </CardTitle>
-      <CardAction>
+    <BentoTileHeader
+      testId="machine-tile-header"
+      icon={<Server className={bentoTileLucideIconClassName} aria-hidden="true" />}
+      title="Machine"
+      action={
         <Badge
           variant={
             host && host.idleMs < IDLE_ACTIVE_THRESHOLD_MS
@@ -64,8 +65,8 @@ export const MachineTile = ({
         >
           {host ? formatPresence(host.idleMs) : "Offline"}
         </Badge>
-      </CardAction>
-    </CardHeader>
+      }
+    />
     <CardContent className="grid gap-3">
       {host ? (
         <>

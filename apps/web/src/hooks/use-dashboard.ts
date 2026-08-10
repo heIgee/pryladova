@@ -1,15 +1,25 @@
 import type { WeatherResponse } from "@pryladova/shared";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
-import type { GithubTileStatus, SteamTileStatus } from "@/lib/integration-status";
+import type {
+  GithubTileStatus,
+  GoogleCalendarTileStatus,
+  GoogleTasksTileStatus,
+  SteamTileStatus,
+} from "@/lib/integration-status";
 import { integrationLoading } from "@/lib/integration-status";
-import { fetchGithubStatus, fetchSteamStatus } from "@/lib/integrations";
+import {
+  fetchGithubStatus,
+  fetchGoogleCalendarStatus,
+  fetchGoogleTasksStatus,
+  fetchSteamStatus,
+} from "@/lib/integrations";
 import {
   fetchSettings,
   INTEGRATIONS_POLL_INTERVAL_MS,
   isAgentLive,
   persistClassificationEnabled,
   readStoredClassificationEnabled,
-  resolveShowAgentHint,
+  resolvePanelSubtitle,
   syncSettings,
   WEATHER_POLL_INTERVAL_MS,
 } from "@/lib/panel";
@@ -23,7 +33,7 @@ import {
 } from "@/lib/weather-location";
 
 export const useDashboard = () => {
-  const panel = useSyncExternalStore(
+  const { panel, streamConnected } = useSyncExternalStore(
     subscribePanelPoll,
     getPanelPollSnapshot,
     getPanelPollSnapshot,
@@ -39,6 +49,10 @@ export const useDashboard = () => {
   const [weather, setWeather] = useState<WeatherResponse>({ status: "disabled" });
   const [githubStatus, setGithubStatus] = useState<GithubTileStatus>(integrationLoading);
   const [steamStatus, setSteamStatus] = useState<SteamTileStatus>(integrationLoading);
+  const [googleCalendarStatus, setGoogleCalendarStatus] =
+    useState<GoogleCalendarTileStatus>(integrationLoading);
+  const [googleTasksStatus, setGoogleTasksStatus] =
+    useState<GoogleTasksTileStatus>(integrationLoading);
   const [weatherLocation, setWeatherLocation] = useState<WeatherLocation | null>(() =>
     readStoredWeatherLocation(),
   );
@@ -111,13 +125,17 @@ export const useDashboard = () => {
     let active = true;
 
     const refreshIntegrations = async (refresh = false): Promise<void> => {
-      const [github, steam] = await Promise.all([
+      const [github, steam, googleCalendar, googleTasks] = await Promise.all([
         fetchGithubStatus({ refresh }),
         fetchSteamStatus({ refresh }),
+        fetchGoogleCalendarStatus({ refresh }),
+        fetchGoogleTasksStatus({ refresh }),
       ]);
       if (active) {
         setGithubStatus(github);
         setSteamStatus(steam);
+        setGoogleCalendarStatus(googleCalendar);
+        setGoogleTasksStatus(googleTasks);
       }
     };
 
@@ -146,8 +164,9 @@ export const useDashboard = () => {
     };
   }, [panel.status]);
 
-  const showAgentHint = resolveShowAgentHint(panel, nowMs);
-  const agentLive = isAgentLive(panel, nowMs);
+  const panelSubtitle = resolvePanelSubtitle(panel, streamConnected, nowMs);
+  const showAgentHint = panelSubtitle === "agent-unavailable";
+  const agentLive = streamConnected && isAgentLive(panel, nowMs);
 
   const handleClassificationToggle = (enabled: boolean): void => {
     if (settingsSyncing) {
@@ -196,13 +215,17 @@ export const useDashboard = () => {
     settingsError,
     settingsSyncing,
     settingsReady,
+    panelSubtitle,
     showAgentHint,
     agentLive,
+    streamConnected,
     theme,
     weather,
     weatherLocation,
     githubStatus,
     steamStatus,
+    googleCalendarStatus,
+    googleTasksStatus,
     handleClassificationToggle,
     handleThemeChange,
     handleWeatherLocationChange,

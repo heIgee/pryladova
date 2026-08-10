@@ -119,3 +119,37 @@ export const resolveHostMediaThumbnail = (
       : null,
   };
 };
+
+/** GSMTC often exposes metadata before art; the bundled backend caches null reads per track key. */
+export const THUMBNAIL_BUST_DELAYS_MS = [1_500, 4_000, 8_000] as const;
+
+export type ThumbnailBustState = {
+  trackKey: string;
+  nextAttemptIndex: number;
+};
+
+export const thumbnailBustDelayMs = (attemptIndex: number): number | null =>
+  THUMBNAIL_BUST_DELAYS_MS[attemptIndex] ?? null;
+
+export const createThumbnailBustState = (trackKey: string): ThumbnailBustState => ({
+  trackKey,
+  nextAttemptIndex: 0,
+});
+
+export const shouldRunThumbnailBust = (
+  state: ThumbnailBustState | null,
+  trackKey: string,
+): boolean => {
+  if (state === null || state.trackKey !== trackKey) {
+    return true;
+  }
+  return thumbnailBustDelayMs(state.nextAttemptIndex) !== null;
+};
+
+export const advanceThumbnailBustState = (state: ThumbnailBustState): ThumbnailBustState | null => {
+  const nextAttemptIndex = state.nextAttemptIndex + 1;
+  if (thumbnailBustDelayMs(nextAttemptIndex) === null) {
+    return null;
+  }
+  return { trackKey: state.trackKey, nextAttemptIndex };
+};

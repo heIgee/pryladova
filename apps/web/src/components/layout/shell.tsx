@@ -44,14 +44,29 @@ export const Shell = ({
   </main>
 );
 
-export const PageHeader = ({ action, stale }: { action?: ReactNode; stale?: boolean }) => (
+const PANEL_SUBTITLES = {
+  live: "Live desktop presence",
+  "api-unavailable": "Cannot reach the API. Check that the server is running.",
+  "agent-unavailable": "Not receiving updates. Check that the agent is running.",
+} as const;
+
+export const PageHeader = ({
+  action,
+  subtitle = "live",
+}: {
+  action?: ReactNode;
+  subtitle?: keyof typeof PANEL_SUBTITLES;
+}) => (
   <header className="flex items-center justify-between gap-4">
     <div>
       <h1 className="font-heading text-2xl font-medium tracking-tight">Pryladova</h1>
-      <p className={cn("text-caption", stale ? "text-destructive" : "text-muted-foreground")}>
-        {stale
-          ? "Not receiving updates. Check that the agent is running."
-          : "Live desktop presence"}
+      <p
+        className={cn(
+          "text-caption",
+          subtitle === "live" ? "text-muted-foreground" : "text-destructive",
+        )}
+      >
+        {PANEL_SUBTITLES[subtitle]}
       </p>
     </div>
     {action}

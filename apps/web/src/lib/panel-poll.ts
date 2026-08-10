@@ -7,8 +7,15 @@ const RECONNECT_BASE_MS = 500;
 const RECONNECT_MAX_MS = 8_000;
 const STOP_GRACE_MS = 500;
 
+export type PanelPollSnapshot = {
+  panel: PanelState;
+  streamConnected: boolean;
+};
+
 type PanelStreamStore = {
   panel: PanelState;
+  streamConnected: boolean;
+  snapshot: PanelPollSnapshot;
   listeners: Set<() => void>;
   socket: WebSocket | null;
   reconnectTimer: number | null;
@@ -17,15 +24,20 @@ type PanelStreamStore = {
   connectGeneration: number;
 };
 
-const createStore = (): PanelStreamStore => ({
-  panel: { status: "loading" },
-  listeners: new Set(),
-  socket: null,
-  reconnectTimer: null,
-  reconnectDelayMs: RECONNECT_BASE_MS,
-  shouldRun: false,
-  connectGeneration: 0,
-});
+const createStore = (): PanelStreamStore => {
+  const panel: PanelState = { status: "loading" };
+  return {
+    panel,
+    streamConnected: false,
+    snapshot: { panel, streamConnected: false },
+    listeners: new Set(),
+    socket: null,
+    reconnectTimer: null,
+    reconnectDelayMs: RECONNECT_BASE_MS,
+    shouldRun: false,
+    connectGeneration: 0,
+  };
+};
 
 let moduleStore: PanelStreamStore | undefined;
 let stopTimer: number | null = null;
@@ -50,7 +62,12 @@ const buildPanelWsUrl = (): string => {
   return `${protocol}//${window.location.host}${PANEL_WS_ROUTE}`;
 };
 
+const refreshSnapshot = (store: PanelStreamStore): void => {
+  store.snapshot = { panel: store.panel, streamConnected: store.streamConnected };
+};
+
 const notify = (store: PanelStreamStore): void => {
+  refreshSnapshot(store);
   for (const listener of store.listeners) {
     listener();
   }
@@ -118,6 +135,8 @@ const connect = (store: PanelStreamStore): void => {
     }
     clearReconnect(store);
     store.reconnectDelayMs = RECONNECT_BASE_MS;
+    store.streamConnected = true;
+    notify(store);
   };
 
   socket.onmessage = (event: MessageEvent<string>) => {
@@ -140,6 +159,8 @@ const connect = (store: PanelStreamStore): void => {
       return;
     }
 
+    store.streamConnected = false;
+    notify(store);
     scheduleReconnect(store);
   };
 
@@ -178,6 +199,7 @@ const stop = (store: PanelStreamStore): void => {
   store.shouldRun = false;
   store.connectGeneration += 1;
   store.reconnectDelayMs = RECONNECT_BASE_MS;
+  store.streamConnected = false;
   clearReconnect(store);
   abandonSocket(store.socket);
   store.socket = null;
@@ -197,7 +219,7 @@ export const subscribePanelPoll = (listener: () => void): (() => void) => {
   };
 };
 
-export const getPanelPollSnapshot = (): PanelState => getStore().panel;
+export const getPanelPollSnapshot = (): PanelPollSnapshot => getStore().snapshot;
 
 export const refreshPanelPoll = (): void => {
   const store = getStore();
@@ -205,9 +227,15 @@ export const refreshPanelPoll = (): void => {
     return;
   }
 
+  store.connectGeneration += 1;
+  clearReconnect(store);
+  abandonSocket(store.socket);
+  store.socket = null;
   connect(store);
 };
 
 if (import.meta.hot) {
-  import.meta.hot.accept();
+  import.meta.hot.accept(() => {
+    refreshPanelPoll();
+  });
 }

@@ -17,6 +17,11 @@ const steamConfig: ApiConfig = {
   githubUsername: undefined,
   steamApiKey: "steam-key",
   steamId: "76561198000000000",
+  googleClientId: undefined,
+  googleClientSecret: undefined,
+  googleRedirectUri: undefined,
+  googleRefreshToken: undefined,
+  integrationEncryptionKey: undefined,
 };
 
 const createService = async (): Promise<SteamService> => {
