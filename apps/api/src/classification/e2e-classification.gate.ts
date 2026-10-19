@@ -5,11 +5,11 @@ type GateWaiter = {
   reject: (error: Error) => void;
 };
 
-let latched = false;
+let open = false;
 let waiters: GateWaiter[] = [];
 
 export const resetE2eClassificationGate = (): void => {
-  latched = false;
+  open = false;
   for (const waiter of waiters) {
     waiter.reject(new Error("e2e classification gate reset"));
   }
@@ -21,8 +21,7 @@ export const waitForE2eClassificationRelease = (): Promise<void> => {
     return Promise.resolve();
   }
 
-  if (latched) {
-    latched = false;
+  if (open) {
     return Promise.resolve();
   }
 
@@ -31,14 +30,13 @@ export const waitForE2eClassificationRelease = (): Promise<void> => {
   });
 };
 
-/** Opens the gate for the next classify, or resolves one already waiting. */
+/** Lets every current and later classify through until the next reset. */
 export const releaseE2eClassificationGate = (): number => {
-  const waiter = waiters.shift();
-  if (waiter) {
+  open = true;
+  const pending = waiters;
+  waiters = [];
+  for (const waiter of pending) {
     waiter.resolve();
-    return 1;
   }
-
-  latched = true;
-  return 0;
+  return pending.length;
 };

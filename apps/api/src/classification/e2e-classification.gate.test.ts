@@ -27,11 +27,25 @@ describe("e2eClassificationGate", () => {
     expect(settled).toBe(true);
   });
 
+  it("resolves every waiter already blocked", async () => {
+    vi.stubEnv("NODE_ENV", "test");
+    vi.stubEnv("E2E_CLASSIFICATION_ENABLED", "1");
+
+    const pending = Promise.all([
+      waitForE2eClassificationRelease(),
+      waitForE2eClassificationRelease(),
+    ]);
+
+    expect(releaseE2eClassificationGate()).toBe(2);
+    await expect(pending).resolves.toEqual([undefined, undefined]);
+  });
+
   it("opens the latch when release runs before classify blocks", async () => {
     vi.stubEnv("NODE_ENV", "test");
     vi.stubEnv("E2E_CLASSIFICATION_ENABLED", "1");
 
     expect(releaseE2eClassificationGate()).toBe(0);
+    await expect(waitForE2eClassificationRelease()).resolves.toBeUndefined();
     await expect(waitForE2eClassificationRelease()).resolves.toBeUndefined();
   });
 

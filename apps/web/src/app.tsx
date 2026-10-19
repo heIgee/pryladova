@@ -1,59 +1,39 @@
-import { Monitor } from "lucide-react";
-import { useRef } from "react";
-import { BentoGrid, PageHeader, Shell, ThemeToggle } from "@/components/layout/shell";
+import { DashboardGrid } from "@/components/layout/dashboard-grid";
+import { DashboardTileShell } from "@/components/layout/dashboard-tile-shell";
+import { LayoutResetButton, PageHeader, Shell, ThemeToggle } from "@/components/layout/shell";
 import { LoginForm } from "@/components/login-form";
-import { BentoTileHeader } from "@/components/tiles/bento-tile-header";
-import { bentoTileLucideIconClassName } from "@/components/tiles/bento-tile-header-layout";
-import { GithubStatusTile } from "@/components/tiles/github-status-tile";
-import { GoogleCalendarTile } from "@/components/tiles/google-calendar-tile";
-import { GoogleTasksTile } from "@/components/tiles/google-tasks-tile";
-import { HistoryTile } from "@/components/tiles/history-tile";
-import { MachineTile } from "@/components/tiles/machine-tile";
-import { MediaTile } from "@/components/tiles/media-tile";
-import { SteamStatusTile } from "@/components/tiles/steam-status-tile";
-import { WindowTile } from "@/components/tiles/window-tile";
-import { Card, CardContent } from "@/components/ui/card";
 import { WeatherHeader } from "@/components/weather-header";
 import { useAuth } from "@/hooks/use-auth";
 import { useDashboard } from "@/hooks/use-dashboard";
-import { useElementHeight } from "@/hooks/use-element-height";
+import { useDashboardLayout } from "@/hooks/use-dashboard-layout";
 import { useHistory } from "@/hooks/use-history";
+import {
+  anchorsForFreeDrop,
+  anchorsFromPlacements,
+  buildTilePlacements,
+  canApplyRowSpanOverrides,
+  canStepTileRowSpan,
+  type DashboardTileId,
+  filterVisibleTileOrder,
+  findBottomGapNeighbor,
+  findLeftGapNeighbor,
+  findRightGapNeighbor,
+  findTopGapNeighbor,
+  listRowBands,
+  type RowBand,
+  resolveEffectiveRowSpan,
+  resolveEffectiveSpan,
+  resolveResizeHandleEdges,
+  resolveSavedRowSpan,
+  resolveSavedSpan,
+  stepRowBandSpans,
+  swapTileOrder,
+  type TileAnchor,
+  tryColGrowWithPush,
+} from "@/lib/dashboard-layout";
 import { resolveHistoryLiveCapMs } from "@/lib/history-live";
-import { getAgentLastSeenMs, type PanelState, shouldShowMediaTile } from "@/lib/panel";
-
-const AgentPresencePlaceholder = ({
-  panel,
-  streamConnected,
-  stale = false,
-}: {
-  panel: PanelState;
-  streamConnected: boolean;
-  stale?: boolean;
-}) => (
-  <Card size="sm" data-testid="window-tile-placeholder">
-    <BentoTileHeader
-      testId="window-tile-header"
-      icon={<Monitor className={bentoTileLucideIconClassName} aria-hidden="true" />}
-      title="Window"
-    />
-    <CardContent>
-      {!streamConnected ? (
-        <p className="text-caption text-destructive">Cannot reach the API</p>
-      ) : null}
-      {streamConnected && panel.status === "loading" ? (
-        <p className="text-caption text-muted-foreground">Connecting…</p>
-      ) : null}
-      {streamConnected && (stale || panel.status === "empty") ? (
-        <p className="text-caption text-muted-foreground">No active window</p>
-      ) : null}
-      {streamConnected && panel.status === "error" ? (
-        <p className="text-caption text-destructive">
-          Agent telemetry unavailable: {panel.message}
-        </p>
-      ) : null}
-    </CardContent>
-  </Card>
-);
+import { getAgentLastSeenMs } from "@/lib/panel";
+import { isDashboardTileVisible, renderDashboardTile } from "@/lib/render-dashboard-tile";
 
 const Dashboard = () => {
   const {
@@ -78,6 +58,30 @@ const Dashboard = () => {
     handleWeatherLocationChange,
     handleWeatherRefresh,
   } = useDashboard();
+  const {
+    layout,
+    isDesktop,
+    commitTileSwap,
+    commitTilePlace,
+    resolveSpan,
+    resolveRowSpan,
+    setDraftSpan,
+    setDraftRowSpan,
+    setDraftBoundary,
+    setDraftColPush,
+    setDraftRowBoundary,
+    clearDraftSpans,
+    commitDraftSpan,
+    commitDraftRowSpan,
+    commitDraftBoundary,
+    commitDraftColPush,
+    commitDraftRowBoundary,
+    setDraftRowBand,
+    commitDraftRowBand,
+    resetLayout,
+    previewAnchors,
+  } = useDashboardLayout();
+
   const readyPanel = panel.status === "ready" ? panel : null;
   const liveTelemetry = agentLive && readyPanel ? readyPanel.telemetry : null;
   const host = readyPanel?.telemetry.host ?? null;
@@ -92,8 +96,225 @@ const Dashboard = () => {
     liveTelemetry,
     historyLiveCapMs,
   );
-  const sideColumnRef = useRef<HTMLDivElement>(null);
-  const sideColumnHeight = useElementHeight(sideColumnRef, true);
+
+  const tileContext = {
+    panel,
+    agentLive,
+    streamConnected,
+    showAgentHint,
+    readyTelemetry: liveTelemetry,
+    host,
+    classificationEnabled,
+    settingsError,
+    settingsSyncing,
+    settingsReady,
+    onClassificationChange: handleClassificationToggle,
+    history,
+    historyActiveAppName: liveTelemetry?.appName ?? null,
+    historyRefreshing: refreshing,
+    historyHasLoaded: hasLoaded,
+    onHistoryRefresh: () => {
+      void refreshHistory();
+    },
+    githubStatus,
+    steamStatus,
+    googleCalendarStatus,
+    googleTasksStatus,
+  };
+
+  const visibleTileIds = filterVisibleTileOrder(layout.order, (id) => isDashboardTileVisible(id));
+
+  const spanContext = { isDesktop, mediaVisible: true };
+
+  const resolveTileColSpan = (id: DashboardTileId) => resolveSpan(id, spanContext);
+  const resolveTileRowSpan = (id: DashboardTileId) => resolveRowSpan(id);
+
+  const resolveLayoutColSpan = (tileId: DashboardTileId) =>
+    resolveEffectiveSpan(tileId, resolveSavedSpan(layout, tileId), spanContext);
+
+  const resolveLayoutRowSpan = (tileId: DashboardTileId) =>
+    resolveEffectiveRowSpan(tileId, resolveSavedRowSpan(layout, tileId));
+
+  const layoutAnchors =
+    Object.keys(previewAnchors).length > 0 ? previewAnchors : layout.pinned ? layout.anchor : {};
+
+  const tilePlacements = buildTilePlacements(
+    visibleTileIds,
+    resolveTileColSpan,
+    resolveTileRowSpan,
+    layoutAnchors,
+  );
+
+  const rowBands = listRowBands(tilePlacements);
+  const cellAnchors = anchorsFromPlacements(tilePlacements);
+
+  const stepRowBand = (band: RowBand, direction: 1 | -1) => {
+    const overrides = stepRowBandSpans(band, direction, resolveTileRowSpan);
+    if (!overrides) {
+      return null;
+    }
+    if (
+      !canApplyRowSpanOverrides(
+        visibleTileIds,
+        resolveTileColSpan,
+        resolveTileRowSpan,
+        overrides,
+        layoutAnchors,
+      )
+    ) {
+      return null;
+    }
+    return overrides;
+  };
+
+  const canStepRowSpanForTile = (id: DashboardTileId, direction: 1 | -1) =>
+    canStepTileRowSpan(
+      id,
+      direction,
+      visibleTileIds,
+      resolveTileColSpan,
+      resolveTileRowSpan,
+      layoutAnchors,
+    );
+
+  const handleSwapTiles = (activeId: DashboardTileId, overId: DashboardTileId) => {
+    const nextOrder = swapTileOrder(layout.order, activeId, overId);
+    if (nextOrder) {
+      commitTileSwap(nextOrder);
+    }
+  };
+
+  const handlePlaceTile = (activeId: DashboardTileId, anchor: TileAnchor) => {
+    const nextAnchors = anchorsForFreeDrop(
+      visibleTileIds,
+      resolveTileColSpan,
+      resolveTileRowSpan,
+      tilePlacements,
+      activeId,
+      anchor,
+    );
+    if (nextAnchors) {
+      commitTilePlace(nextAnchors);
+    }
+  };
+
+  const placementFor = (id: DashboardTileId) => {
+    const placement = tilePlacements.find((entry) => entry.id === id);
+    if (!placement) {
+      return { id, startRow: 1, endRow: 1, startCol: 1, endCol: 12 };
+    }
+    return placement;
+  };
+
+  const resizeHandlesFor = (id: DashboardTileId) => {
+    const edges = resolveResizeHandleEdges(
+      visibleTileIds,
+      resolveLayoutColSpan,
+      resolveLayoutRowSpan,
+      id,
+      layoutAnchors,
+    );
+    if (!isDesktop) {
+      return { right: false, left: false, bottom: edges.bottom, top: edges.top };
+    }
+    return edges;
+  };
+
+  const renderTile = (id: DashboardTileId, overlay = false, isDragSource = false) => {
+    const leftNeighborId = findLeftGapNeighbor(
+      visibleTileIds,
+      resolveTileColSpan,
+      resolveTileRowSpan,
+      id,
+      layoutAnchors,
+    );
+    const rightNeighborId = findRightGapNeighbor(
+      visibleTileIds,
+      resolveTileColSpan,
+      resolveTileRowSpan,
+      id,
+      layoutAnchors,
+    );
+    const topNeighborId = findTopGapNeighbor(
+      visibleTileIds,
+      resolveTileColSpan,
+      resolveTileRowSpan,
+      id,
+      layoutAnchors,
+    );
+    const bottomNeighborId = findBottomGapNeighbor(
+      visibleTileIds,
+      resolveTileColSpan,
+      resolveTileRowSpan,
+      id,
+      layoutAnchors,
+    );
+
+    return (
+      <DashboardTileShell
+        key={id}
+        id={id}
+        isOverlay={overlay}
+        isDragSource={isDragSource}
+        placement={placementFor(id)}
+        effectiveColSpan={resolveTileColSpan(id)}
+        effectiveRowSpan={resolveTileRowSpan(id)}
+        resizeHandles={resizeHandlesFor(id)}
+        leftNeighborId={leftNeighborId}
+        rightNeighborId={rightNeighborId}
+        topNeighborId={topNeighborId}
+        bottomNeighborId={bottomNeighborId}
+        leftNeighborColSpan={leftNeighborId ? resolveTileColSpan(leftNeighborId) : undefined}
+        rightNeighborColSpan={rightNeighborId ? resolveTileColSpan(rightNeighborId) : undefined}
+        topNeighborRowSpan={topNeighborId ? resolveTileRowSpan(topNeighborId) : undefined}
+        bottomNeighborRowSpan={bottomNeighborId ? resolveTileRowSpan(bottomNeighborId) : undefined}
+        onDraftColSpan={(span) => {
+          setDraftSpan(id, span, cellAnchors);
+        }}
+        onDraftColBoundary={(leftId, leftSpan, rightId, rightSpan) => {
+          setDraftBoundary(leftId, leftSpan, rightId, rightSpan, cellAnchors);
+        }}
+        onCommitColSpan={(span) => {
+          commitDraftSpan(id, span, cellAnchors);
+        }}
+        onCommitColBoundary={(leftId, leftSpan, rightId, rightSpan) => {
+          commitDraftBoundary(leftId, leftSpan, rightId, rightSpan, cellAnchors);
+        }}
+        onTryColGrowPush={() =>
+          tryColGrowWithPush(
+            visibleTileIds,
+            resolveTileColSpan,
+            resolveTileRowSpan,
+            id,
+            layoutAnchors,
+          )
+        }
+        onDraftColPush={(result) => {
+          setDraftColPush(result, cellAnchors);
+        }}
+        onCommitColPush={(result) => {
+          commitDraftColPush(result, cellAnchors);
+        }}
+        onDraftRowSpan={(span) => {
+          setDraftRowSpan(id, span, cellAnchors);
+        }}
+        onDraftRowBoundary={(topId, topSpan, bottomId, bottomSpan) => {
+          setDraftRowBoundary(topId, topSpan, bottomId, bottomSpan, cellAnchors);
+        }}
+        onCommitRowSpan={(span) => {
+          commitDraftRowSpan(id, span, cellAnchors);
+        }}
+        onCommitRowBoundary={(topId, topSpan, bottomId, bottomSpan) => {
+          commitDraftRowBoundary(topId, topSpan, bottomId, bottomSpan, cellAnchors);
+        }}
+        onRevertSpans={clearDraftSpans}
+        canStepBottomRowSpan={(direction) => canStepRowSpanForTile(id, direction)}
+        canStepTopRowSpan={(direction) => canStepRowSpanForTile(id, direction === 1 ? -1 : 1)}
+      >
+        {renderDashboardTile(id, tileContext)}
+      </DashboardTileShell>
+    );
+  };
 
   const headerAction = (
     <div className="flex items-center gap-2">
@@ -105,68 +326,37 @@ const Dashboard = () => {
         onRefresh={handleWeatherRefresh}
       />
       <ThemeToggle theme={theme} onChange={handleThemeChange} />
+      <LayoutResetButton onReset={resetLayout} />
     </div>
   );
-
-  const showMediaTile = host != null && shouldShowMediaTile(host);
 
   return (
     <Shell>
       <PageHeader action={headerAction} subtitle={panelSubtitle} />
-      <BentoGrid>
-        <div className="flex flex-col gap-5">
-          {agentLive && readyPanel ? (
-            <>
-              <WindowTile
-                telemetry={readyPanel.telemetry}
-                classificationEnabled={classificationEnabled}
-                settingsError={settingsError}
-                settingsSyncing={settingsSyncing}
-                settingsReady={settingsReady}
-                onClassificationChange={handleClassificationToggle}
-              />
-              <div
-                className={`grid grid-cols-1 items-stretch gap-4 ${showMediaTile ? "md:grid-cols-2" : ""}`}
-              >
-                <MachineTile host={host} />
-                {showMediaTile ? <MediaTile host={host} /> : null}
-              </div>
-            </>
-          ) : (
-            <>
-              <AgentPresencePlaceholder
-                panel={panel}
-                streamConnected={streamConnected}
-                stale={readyPanel != null && showAgentHint}
-              />
-              <MachineTile host={null} />
-            </>
-          )}
-        </div>
-        <div className="flex flex-col gap-4 md:flex-row md:items-start">
-          <div
-            className="md:min-h-0 md:min-w-0 md:flex-[3]"
-            style={sideColumnHeight === undefined ? undefined : { height: sideColumnHeight }}
-          >
-            <HistoryTile
-              className="h-full min-h-0"
-              history={history}
-              activeAppName={liveTelemetry?.appName ?? null}
-              refreshing={refreshing}
-              hasLoaded={hasLoaded}
-              onRefresh={() => {
-                void refreshHistory();
-              }}
-            />
-          </div>
-          <div ref={sideColumnRef} className="grid w-full gap-4 md:w-auto md:min-w-0 md:flex-[2]">
-            <GithubStatusTile status={githubStatus} />
-            <SteamStatusTile status={steamStatus} />
-            <GoogleCalendarTile status={googleCalendarStatus} />
-            <GoogleTasksTile status={googleTasksStatus} />
-          </div>
-        </div>
-      </BentoGrid>
+      <DashboardGrid
+        visibleTileIds={visibleTileIds}
+        placements={tilePlacements}
+        resolveColSpan={resolveTileColSpan}
+        resolveRowSpan={resolveTileRowSpan}
+        renderTile={renderTile}
+        onSwapTiles={handleSwapTiles}
+        onPlaceTile={handlePlaceTile}
+        rowBandResize={
+          isDesktop
+            ? {
+                bands: rowBands,
+                stepBand: stepRowBand,
+                onDraftBand: (overrides) => {
+                  setDraftRowBand(overrides, cellAnchors);
+                },
+                onCommitBand: (overrides) => {
+                  commitDraftRowBand(overrides, cellAnchors);
+                },
+                onRevert: clearDraftSpans,
+              }
+            : undefined
+        }
+      />
     </Shell>
   );
 };

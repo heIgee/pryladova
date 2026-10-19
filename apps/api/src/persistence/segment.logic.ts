@@ -73,6 +73,47 @@ export const isStaleHeartbeatGap = (previousIso: string, incomingIso: string): b
   return gapMs > STALE_HEARTBEAT_MS;
 };
 
+/**
+ * Open-segment time is capped at last_active_at. Heartbeats keep arriving
+ * every few seconds while the user is idle, so the last_seen gap stays under
+ * five minutes and the stale close never runs. When input resumes, last_active
+ * jumps to now and the still-open segment is billed for the whole idle gap.
+ * Close at the previous last_active before writing the new heartbeat.
+ * Do not use close_and_open_segment for that close: it sets ended_at to now
+ * and cements the gap.
+ */
+export const resolveIdleResumeCloseAt = (
+  previousActiveAt: string | null,
+  nextActiveAt: string,
+): string | null => {
+  if (!previousActiveAt) {
+    return null;
+  }
+  if (!isStaleHeartbeatGap(previousActiveAt, nextActiveAt)) {
+    return null;
+  }
+  return previousActiveAt;
+};
+
+/**
+ * Stale close writes the stored heartbeat time. If that timestamp is earlier
+ * than the open segment's started_at, `started_at <= ended_at` matches
+ * nothing, the segment stays open, and the next focus change sets ended_at
+ * to now. get_interval_summary then bills the whole gap to that app — a
+ * Windows Explorer segment opened weeks earlier showed up as ~13h on the day
+ * it was finally closed. End the segment at its start so the gap has no
+ * duration.
+ */
+export const resolveStaleSegmentEndAt = (
+  segmentStartedAt: string,
+  heartbeatEndAt: string,
+): string => {
+  if (Date.parse(heartbeatEndAt) < Date.parse(segmentStartedAt)) {
+    return segmentStartedAt;
+  }
+  return heartbeatEndAt;
+};
+
 /** Last agent contact before a long gap — used to close open segments without cementing downtime. */
 export const resolveStaleCloseBoundary = (
   persistedLastSeenAt: string | null,

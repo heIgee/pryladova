@@ -86,6 +86,8 @@ pnpm dev:web
 
 Open the web URL and sign in (dev password in `apps/api/.env.example`). Telemetry appears after the agent connects. The panel streams state over WebSocket; login uses the session cookie on `/api/auth/*`. Integration tiles show when the API has the matching config. Click the weather chip to use browser location or search a city; choice is saved in the browser.
 
+Dashboard tiles pack from the top with no gaps. Drag a header onto another tile to swap their place in that order; the grid repacks. Drag onto empty space in a row to move the tile there. Resizing a tile keeps it in that cell. Shrinking one pulls the tiles under it up so a fully empty row does not stay. On desktop, drag the side edges to resize width; drag the bottom edge to resize height; drag the horizontal band between rows to resize a whole row together. Use the reset control next to the theme toggle to restore the default layout. Mobile: full width, height resize only. Layout is persisted in browser `localStorage` (`pryladova.dashboardLayout`).
+
 ## Scripts
 
 | Command | Description |
@@ -104,7 +106,7 @@ Open the web URL and sign in (dev password in `apps/api/.env.example`). Telemetr
 | `pnpm knip` | Unused exports and dependencies |
 | `pnpm test` | Vitest (shared, api, web, agent privacy) |
 | `pnpm test:coverage` | Vitest with coverage report |
-| `pnpm test:e2e` | Playwright API → web panel |
+| `pnpm test:e2e` | Playwright on ports 3001 / 5174 (dev can stay on 3000 / 5173) |
 
 ## Testing
 
@@ -117,7 +119,7 @@ Before commit: `pnpm verify` (build, tests, coverage, e2e, knip, agent checks).
 | `pnpm verify` | Full local CI — run before commit |
 | `pnpm test` | Vitest unit + integration |
 | `pnpm test:coverage` | Same, with lcov output |
-| `pnpm test:e2e` | Playwright: login + agent WebSocket update → panel |
+| `pnpm test:e2e` | Playwright: login + agent WebSocket update → panel (API 3001, web 5174) |
 
 First-time E2E: `pnpm exec playwright install chromium`
 

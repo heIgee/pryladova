@@ -1,13 +1,19 @@
 import type { HistoryEntry } from "@pryladova/shared";
 import { Clock3, RefreshCw } from "lucide-react";
-import { useLayoutEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { headerIconButtonClassName } from "@/components/layout/shell";
 import { BentoTileHeader } from "@/components/tiles/bento-tile-header";
-import { bentoTileLucideIconClassName } from "@/components/tiles/bento-tile-header-layout";
+import {
+  bentoTileBodyClassName,
+  bentoTileCardClassName,
+  bentoTileLucideIconClassName,
+} from "@/components/tiles/bento-tile-header-layout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton, skeletonSize } from "@/components/ui/skeleton";
+import { useBentoTileSize } from "@/hooks/use-bento-tile-size";
 import type { HistoryState } from "@/hooks/use-history";
-import { formatDurationSec, summarizeHistoryEntries } from "@/lib/history";
+import { integrationListCap } from "@/lib/bento-tile-variants";
+import { formatDurationSec, partitionHistoryEntries, summarizeHistoryEntries } from "@/lib/history";
 import { cn } from "@/lib/utils";
 
 const NOW_CHIP_CLASS =
@@ -116,14 +122,6 @@ const HistoryBars = ({
   );
 };
 
-const HistoryReadyContent = ({
-  entries,
-  activeAppName,
-}: {
-  entries: HistoryEntry[];
-  activeAppName?: string | null;
-}) => <HistoryBars entries={entries} other={null} activeAppName={activeAppName} />;
-
 export const HistoryTile = ({
   history,
   activeAppName,
@@ -139,6 +137,12 @@ export const HistoryTile = ({
   onRefresh?: () => void;
   className?: string;
 }) => {
+  const [expanded, setExpanded] = useState(false);
+  const { row } = useBentoTileSize();
+  const rowBudget = integrationListCap(row);
+  const needsOtherBucket = history.status === "ready" && history.entries.length > rowBudget;
+  const visibleLimit = needsOtherBucket ? Math.max(1, rowBudget - 1) : rowBudget;
+
   const title =
     history.status === "loading"
       ? "Today"
@@ -147,38 +151,52 @@ export const HistoryTile = ({
         : "Today";
 
   const summary = history.status === "ready" ? summarizeHistoryEntries(history.entries) : null;
+  const canPartition = history.status === "ready" && history.entries.length > visibleLimit;
+  const partition =
+    history.status === "ready"
+      ? partitionHistoryEntries(history.entries, {
+          activeAppName,
+          expanded,
+          limit: visibleLimit,
+        })
+      : null;
 
   const canRefresh = Boolean(onRefresh) && (hasLoaded || history.status !== "loading");
-  const bodyRef = useRef<HTMLDivElement>(null);
-  const [scrollable, setScrollable] = useState(false);
 
-  useLayoutEffect(() => {
-    const el = bodyRef.current;
-    if (!el) {
-      return;
-    }
-
-    const sync = () => {
-      setScrollable(el.scrollHeight > el.clientHeight);
-    };
-
-    sync();
-    const resizeObserver = new ResizeObserver(sync);
-    resizeObserver.observe(el);
-    const mutationObserver = new MutationObserver(sync);
-    mutationObserver.observe(el, { childList: true, subtree: true, characterData: true });
-    return () => {
-      resizeObserver.disconnect();
-      mutationObserver.disconnect();
-    };
-  }, []);
+  const headerAction = (
+    <>
+      {canPartition ? (
+        <button
+          type="button"
+          className="inline-flex h-7 shrink-0 items-center rounded-md px-2 text-micro text-muted-foreground hover:bg-muted hover:text-foreground"
+          aria-label={expanded ? "Show fewer apps" : "Show all apps"}
+          data-testid="history-expand-toggle"
+          onClick={() => {
+            setExpanded((current) => !current);
+          }}
+        >
+          {expanded ? "Show less" : "Show all"}
+        </button>
+      ) : (
+        <span className="inline-flex h-7 min-w-[4.5rem] shrink-0" aria-hidden="true" />
+      )}
+      {onRefresh ? (
+        <button
+          type="button"
+          disabled={!canRefresh || refreshing}
+          className={cn(headerIconButtonClassName, "size-7 shrink-0")}
+          aria-label="Refresh activity"
+          title="Refresh activity"
+          onClick={onRefresh}
+        >
+          <RefreshCw className={cn("size-3.5", refreshing && "animate-spin")} aria-hidden="true" />
+        </button>
+      ) : null}
+    </>
+  );
 
   return (
-    <Card
-      size="sm"
-      className={cn("flex h-full min-h-0 flex-col", className)}
-      data-testid="history-tile"
-    >
+    <Card size="sm" className={cn(bentoTileCardClassName, className)} data-testid="history-tile">
       <BentoTileHeader
         testId="history-tile-header"
         icon={<Clock3 className={bentoTileLucideIconClassName} aria-hidden="true" />}
@@ -188,37 +206,23 @@ export const HistoryTile = ({
             ? `${formatDurationSec(summary.totalDurationSec)} tracked · ${summary.appCount} apps`
             : null
         }
-        action={
-          onRefresh ? (
-            <button
-              type="button"
-              disabled={!canRefresh || refreshing}
-              className={cn(headerIconButtonClassName, "size-7 shrink-0")}
-              aria-label="Refresh activity"
-              title="Refresh activity"
-              onClick={onRefresh}
-            >
-              <RefreshCw
-                className={cn("size-3.5", refreshing && "animate-spin")}
-                aria-hidden="true"
-              />
-            </button>
-          ) : null
-        }
+        action={headerAction}
       />
-      <CardContent className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <div ref={bodyRef} className={cn("min-h-0 flex-1", scrollable && "overflow-y-auto")}>
-          {history.status === "loading" ? <HistoryLoadingSkeleton /> : null}
-          {history.status === "empty" ? (
-            <p className="text-caption text-muted-foreground">No recorded app time yet today.</p>
-          ) : null}
-          {history.status === "error" ? (
-            <p className="text-caption text-destructive">{history.message}</p>
-          ) : null}
-          {history.status === "ready" ? (
-            <HistoryReadyContent entries={history.entries} activeAppName={activeAppName} />
-          ) : null}
-        </div>
+      <CardContent className={bentoTileBodyClassName}>
+        {history.status === "loading" ? <HistoryLoadingSkeleton /> : null}
+        {history.status === "empty" ? (
+          <p className="text-caption text-muted-foreground">No recorded app time yet today.</p>
+        ) : null}
+        {history.status === "error" ? (
+          <p className="text-caption text-destructive">{history.message}</p>
+        ) : null}
+        {history.status === "ready" && partition ? (
+          <HistoryBars
+            entries={partition.visible}
+            other={partition.other}
+            activeAppName={activeAppName}
+          />
+        ) : null}
       </CardContent>
     </Card>
   );

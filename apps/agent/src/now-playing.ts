@@ -5,42 +5,41 @@ import {
   mapMediaSession,
   pickCurrentSession,
   shouldRunThumbnailBust,
-  type ThumbnailBustState,
   thumbnailBustDelayMs,
   trackMediaKey,
 } from "./now-playing-core.js";
+import { getNowPlayingRuntime, resetNowPlayingRuntimeForHotReload } from "./now-playing-runtime.js";
 
 export { resolveHostMediaThumbnail } from "./now-playing-core.js";
 
+resetNowPlayingRuntimeForHotReload();
+
 type MediaSession = Parameters<typeof mapMediaSession>[0];
 
-let smtcErrorLogged = false;
-let feedStarted = false;
-let onThumbnailReady: ((media: HostMedia) => void) | null = null;
-let bustState: ThumbnailBustState | null = null;
-let bustTimer: ReturnType<typeof setTimeout> | null = null;
-let lastPushedThumbnailKey: string | null = null;
+const runtime = getNowPlayingRuntime;
 
 const clearBustTimer = (): void => {
-  if (bustTimer !== null) {
-    clearTimeout(bustTimer);
-    bustTimer = null;
+  const state = runtime();
+  if (state.bustTimer !== null) {
+    clearTimeout(state.bustTimer);
+    state.bustTimer = null;
   }
 };
 
 const clearThumbnailBust = (): void => {
   clearBustTimer();
-  bustState = null;
+  runtime().bustState = null;
 };
 
 const notifyThumbnailReady = (media: HostMedia): void => {
+  const state = runtime();
   const pushKey = `${trackMediaKey(media)}|${media.thumbnailDataUrl}`;
-  if (lastPushedThumbnailKey === pushKey) {
+  if (state.lastPushedThumbnailKey === pushKey) {
     return;
   }
-  lastPushedThumbnailKey = pushKey;
+  state.lastPushedThumbnailKey = pushKey;
   clearThumbnailBust();
-  onThumbnailReady?.(media);
+  state.onThumbnailReady?.(media);
 };
 
 const readSessions = async (): Promise<readonly MediaSession[]> => {
@@ -60,26 +59,28 @@ const mapCurrentMedia = (sessions: readonly MediaSession[]): HostMedia | null =>
 };
 
 const scheduleNextBust = (): void => {
-  if (bustState === null) {
+  const state = runtime();
+  if (state.bustState === null) {
     return;
   }
 
-  const delayMs = thumbnailBustDelayMs(bustState.nextAttemptIndex);
+  const delayMs = thumbnailBustDelayMs(state.bustState.nextAttemptIndex);
   if (delayMs === null) {
-    bustState = null;
+    state.bustState = null;
     return;
   }
 
   clearBustTimer();
-  const trackKey = bustState.trackKey;
-  bustTimer = setTimeout(() => {
-    bustTimer = null;
+  const trackKey = state.bustState.trackKey;
+  state.bustTimer = setTimeout(() => {
+    runtime().bustTimer = null;
     void runThumbnailBust(trackKey);
   }, delayMs);
 };
 
 const runThumbnailBust = async (trackKey: string): Promise<void> => {
-  if (bustState?.trackKey !== trackKey) {
+  const state = runtime();
+  if (state.bustState?.trackKey !== trackKey) {
     return;
   }
 
@@ -97,41 +98,42 @@ const runThumbnailBust = async (trackKey: string): Promise<void> => {
       return;
     }
 
-    const nextState = bustState ? advanceThumbnailBustState(bustState) : null;
-    bustState = nextState;
+    const nextState = state.bustState ? advanceThumbnailBustState(state.bustState) : null;
+    state.bustState = nextState;
     if (nextState) {
       scheduleNextBust();
     }
   } catch (error: unknown) {
-    if (!smtcErrorLogged) {
+    if (!state.smtcErrorLogged) {
       const message = error instanceof Error ? error.message : String(error);
       console.warn(`[agent] SMTC thumbnail retry failed: ${message}`);
-      smtcErrorLogged = true;
+      state.smtcErrorLogged = true;
     }
     clearThumbnailBust();
   }
 };
 
 const noteMediaThumbnail = (media: HostMedia): void => {
+  const state = runtime();
   if (media.thumbnailDataUrl) {
     clearThumbnailBust();
     return;
   }
 
   const trackKey = trackMediaKey(media);
-  if (bustState?.trackKey !== trackKey) {
-    lastPushedThumbnailKey = null;
+  if (state.bustState?.trackKey !== trackKey) {
+    state.lastPushedThumbnailKey = null;
   }
-  if (bustState?.trackKey === trackKey && bustTimer !== null) {
+  if (state.bustState?.trackKey === trackKey && state.bustTimer !== null) {
     return;
   }
 
-  if (!shouldRunThumbnailBust(bustState, trackKey)) {
+  if (!shouldRunThumbnailBust(state.bustState, trackKey)) {
     return;
   }
 
-  if (bustState === null || bustState.trackKey !== trackKey) {
-    bustState = createThumbnailBustState(trackKey);
+  if (state.bustState === null || state.bustState.trackKey !== trackKey) {
+    state.bustState = createThumbnailBustState(trackKey);
   }
 
   scheduleNextBust();
@@ -145,19 +147,19 @@ const handleSessionsChanged = (sessions: readonly MediaSession[]): void => {
 };
 
 const ensureFeed = async (): Promise<void> => {
-  if (feedStarted) {
+  const state = runtime();
+  if (state.feedUnsubscribe) {
     return;
   }
 
-  feedStarted = true;
   const { onSessionsChanged } = await import("windows-media-sessions");
-  onSessionsChanged(handleSessionsChanged);
+  state.feedUnsubscribe = onSessionsChanged(handleSessionsChanged);
 };
 
 export const setNowPlayingThumbnailListener = (
   listener: ((media: HostMedia) => void) | null,
 ): void => {
-  onThumbnailReady = listener;
+  runtime().onThumbnailReady = listener;
 };
 
 export const readNowPlaying = async (): Promise<HostMedia | null> => {
@@ -170,17 +172,18 @@ export const readNowPlaying = async (): Promise<HostMedia | null> => {
       return null;
     }
 
-    smtcErrorLogged = false;
+    runtime().smtcErrorLogged = false;
     const media = mapMediaSession(session);
     if (media) {
       noteMediaThumbnail(media);
     }
     return media;
   } catch (error: unknown) {
-    if (!smtcErrorLogged) {
+    const state = runtime();
+    if (!state.smtcErrorLogged) {
       const message = error instanceof Error ? error.message : String(error);
       console.warn(`[agent] SMTC read failed: ${message}`);
-      smtcErrorLogged = true;
+      state.smtcErrorLogged = true;
     }
     return null;
   }

@@ -1,7 +1,8 @@
 import type { TelemetryState, WindowClassification } from "@pryladova/shared";
 import { useEffect, useRef, useState } from "react";
 
-const CLASSIFICATION_SPINNER_DELAY_MS = 2_000;
+/** Shared delay before pending classification shows skeleton/spinner UI on focus change. */
+export const CLASSIFICATION_LOADING_DELAY_MS = 2_000;
 
 export const getStaleClassification = (
   telemetry: TelemetryState,
@@ -46,7 +47,7 @@ export const useClassificationDisplay = (
     }
 
     setShowSpinner(false);
-    const timer = setTimeout(() => setShowSpinner(true), CLASSIFICATION_SPINNER_DELAY_MS);
+    const timer = setTimeout(() => setShowSpinner(true), CLASSIFICATION_LOADING_DELAY_MS);
     return () => clearTimeout(timer);
   }, [status, classificationEnabled]);
 

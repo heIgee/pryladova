@@ -61,6 +61,14 @@ describe("partitionHistoryEntries", () => {
     expect(other?.appCount).toBe(4);
   });
 
+  it("honors a smaller visible cap", () => {
+    const entries = manyEntries();
+    const { visible, other } = partitionHistoryEntries(entries, { limit: 3 });
+
+    expect(visible).toHaveLength(3);
+    expect(other?.appCount).toBe(9);
+  });
+
   it("returns all entries when expanded", () => {
     const entries = manyEntries();
     expect(partitionHistoryEntries(entries, { expanded: true })).toEqual({

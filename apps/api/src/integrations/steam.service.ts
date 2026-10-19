@@ -116,7 +116,7 @@ export class SteamService {
     );
     recentUrl.searchParams.set("key", apiKey);
     recentUrl.searchParams.set("steamid", steamId);
-    recentUrl.searchParams.set("count", "5");
+    recentUrl.searchParams.set("count", "12");
 
     const [summariesRes, recentRes] = await Promise.all([fetch(summariesUrl), fetch(recentUrl)]);
 

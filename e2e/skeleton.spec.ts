@@ -36,12 +36,12 @@ test.describe("skeleton layout", () => {
     await page.goto("/");
     await login(page);
     await sendAgentUpdate(apiBase, hostFixture, deadlockTelemetryFixture, ingestSecret);
-    await waitForWindowTile(page);
 
     const header = page.getByTestId("window-tile-header");
     const titleSlot = page.getByTestId("window-tile-title-slot");
     const subtitleSlot = page.getByTestId("window-tile-subtitle-slot");
-    await expect(titleSlot).toHaveAttribute("aria-busy", "true", { timeout: 5_000 });
+    await expect(page.getByTestId("window-tile")).toBeVisible({ timeout: 10_000 });
+    await expect(titleSlot).toHaveAttribute("aria-busy", "true", { timeout: 10_000 });
     await expectSkeletonOverlayFillsSlot(titleSlot);
     await expect(subtitleSlot).toBeVisible({ timeout: 5_000 });
     await expectSkeletonOverlayFillsSlot(subtitleSlot);
@@ -81,8 +81,11 @@ test.describe("skeleton layout", () => {
 
     await sendAgentUpdate(apiBase, hostFixture, deadlockTelemetryFixture, ingestSecret);
 
+    await expect(page.getByRole("heading", { name: "Code", level: 2 })).toBeVisible({
+      timeout: 5_000,
+    });
     const titleSlot = page.getByTestId("window-tile-title-slot");
-    await expect(titleSlot).toHaveAttribute("aria-busy", "true", { timeout: 5_000 });
+    await expect(titleSlot).not.toHaveAttribute("aria-busy", "true");
     expect(await readBoxHeight(namesBlock)).toBe(settledHeight);
 
     await settleWindowClassification(page, "Deadlock");

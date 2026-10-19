@@ -16,7 +16,9 @@ import {
   type HeartbeatMemory,
   isStaleHeartbeatGap,
   parseCloseAndOpenResult,
+  resolveIdleResumeCloseAt,
   resolveStaleCloseBoundary,
+  resolveStaleSegmentEndAt,
   STALE_HEARTBEAT_MS,
 } from "./segment.logic.js";
 import { SupabaseService } from "./supabase.service.js";
@@ -29,6 +31,9 @@ export type HostTickOptions = {
   /** Persist heartbeat immediately (shutdown / API drain). */
   forcePersist?: boolean;
   idleMs?: number;
+  /** Re-open this app after an idle gap is closed, so post-resume time is counted. */
+  appName?: string;
+  windowTitle?: string;
 };
 
 @Injectable()
@@ -71,16 +76,26 @@ export class SegmentService implements OnApplicationShutdown {
     return this.runSegmentMutation(agentId, async () => {
       try {
         const persistedHeartbeat = await this.readPersistedHeartbeat(agentId);
+        const openStartedAt = await this.readOpenSegmentStart(agentId);
+        const idleCloseAt = resolveIdleResumeCloseAt(
+          persistedHeartbeat?.lastActiveAt ?? null,
+          telemetry.capturedAt,
+        );
         const staleBoundary = resolveStaleCloseBoundary(
           persistedHeartbeat?.lastSeenAt ?? null,
           telemetry.capturedAt,
         );
-        if (staleBoundary) {
-          await this.closeOpenSegmentUnlocked(
-            agentId,
-            persistedHeartbeat?.lastActiveAt ?? staleBoundary,
-            "stale",
-          );
+        const heartbeatEnd =
+          idleCloseAt ??
+          (staleBoundary ? (persistedHeartbeat?.lastActiveAt ?? staleBoundary) : null);
+        // Close before close_and_open_segment. That RPC sets ended_at to the
+        // new focus time, which bills an unclosed downtime gap to this app.
+        // A fresh heartbeat means the open span is real, however long it is.
+        if (heartbeatEnd) {
+          const endAt = openStartedAt
+            ? resolveStaleSegmentEndAt(openStartedAt, heartbeatEnd)
+            : heartbeatEnd;
+          await this.closeOpenSegmentUnlocked(agentId, endAt, "stale");
         }
 
         const client = this.supabaseService.getClient();
@@ -145,6 +160,7 @@ export class SegmentService implements OnApplicationShutdown {
       }
 
       const nowMs = Date.now();
+      const previousActiveAt = memory.lastActiveAt || null;
       const {
         memory: nextMemory,
         previousSeenAt,
@@ -155,12 +171,14 @@ export class SegmentService implements OnApplicationShutdown {
       });
       this.heartbeatMemory.set(agentId, nextMemory);
 
-      if (
-        !options?.skipStaleClose &&
-        previousSeenAt &&
-        isStaleHeartbeatGap(previousSeenAt, capturedAt)
-      ) {
-        await this.closeOpenSegmentAt(agentId, previousSeenAt, "stale");
+      if (!options?.skipStaleClose) {
+        const seenCloseAt =
+          previousSeenAt && isStaleHeartbeatGap(previousSeenAt, capturedAt) ? previousSeenAt : null;
+        const idleCloseAt = resolveIdleResumeCloseAt(previousActiveAt, nextMemory.lastActiveAt);
+        const closeAt = idleCloseAt ?? seenCloseAt;
+        if (closeAt) {
+          await this.closeStaleAndReopen(agentId, closeAt, capturedAt, options);
+        }
       }
 
       if (shouldPersist) {
@@ -218,6 +236,41 @@ export class SegmentService implements OnApplicationShutdown {
       lastSeenAt: data.last_seen_at,
       lastActiveAt: data.last_active_at,
     };
+  }
+
+  private async readOpenSegmentStart(agentId: string): Promise<string | null> {
+    const client = this.supabaseService.getClient();
+    const { data, error } = await client
+      .from("window_segments")
+      .select("started_at")
+      .eq("agent_id", agentId)
+      .is("ended_at", null)
+      .maybeSingle();
+
+    if (error) {
+      throw error;
+    }
+
+    return data?.started_at ?? null;
+  }
+
+  private async openSegmentAt(
+    agentId: string,
+    startedAt: string,
+    appName: string,
+    windowTitle: string,
+  ): Promise<void> {
+    const client = this.supabaseService.getClient();
+    const { error } = await client.from("window_segments").insert({
+      agent_id: agentId,
+      app_name: appName,
+      window_title: windowTitle,
+      started_at: startedAt,
+    });
+
+    if (error) {
+      throw error;
+    }
   }
 
   private async bootstrapHeartbeatMemory(
@@ -339,6 +392,25 @@ export class SegmentService implements OnApplicationShutdown {
     }
   }
 
+  private async closeStaleAndReopen(
+    agentId: string,
+    closeAt: string,
+    capturedAt: string,
+    options: HostTickOptions | undefined,
+  ): Promise<void> {
+    await this.runSegmentMutation(agentId, async () => {
+      await this.closeOpenSegmentUnlocked(agentId, closeAt, "stale");
+      if (!options?.appName) {
+        return;
+      }
+      const stillOpen = await this.readOpenSegmentStart(agentId);
+      if (stillOpen) {
+        return;
+      }
+      await this.openSegmentAt(agentId, capturedAt, options.appName, options.windowTitle ?? "");
+    });
+  }
+
   private async closeOpenSegmentAt(
     agentId: string,
     endedAt: string,
@@ -360,12 +432,14 @@ export class SegmentService implements OnApplicationShutdown {
   ): Promise<void> {
     try {
       const client = this.supabaseService.getClient();
+      const openStartedAt = await this.readOpenSegmentStart(agentId);
+      const endAt = openStartedAt ? resolveStaleSegmentEndAt(openStartedAt, endedAt) : endedAt;
       const { error } = await client
         .from("window_segments")
-        .update({ ended_at: endedAt, close_reason: closeReason })
+        .update({ ended_at: endAt, close_reason: closeReason })
         .eq("agent_id", agentId)
         .is("ended_at", null)
-        .lte("started_at", endedAt);
+        .lte("started_at", endAt);
 
       if (error) {
         throw error;

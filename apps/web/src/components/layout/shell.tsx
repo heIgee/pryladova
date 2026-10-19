@@ -1,4 +1,4 @@
-import { Moon, Sun } from "lucide-react";
+import { Moon, RotateCcw, Sun } from "lucide-react";
 import type { ReactNode } from "react";
 import { formatReleaseShort, readAppRelease } from "@/lib/release";
 import type { Theme } from "@/lib/theme";
@@ -73,10 +73,6 @@ export const PageHeader = ({
   </header>
 );
 
-export const BentoGrid = ({ children }: { children: ReactNode }) => (
-  <div className="flex flex-col gap-5">{children}</div>
-);
-
 export const ThemeToggle = ({
   theme,
   onChange,
@@ -99,3 +95,16 @@ export const ThemeToggle = ({
     </button>
   );
 };
+
+export const LayoutResetButton = ({ onReset }: { onReset: () => void }) => (
+  <button
+    type="button"
+    onClick={onReset}
+    className={headerIconButtonClassName}
+    aria-label="Reset dashboard layout"
+    title="Reset dashboard layout"
+    data-testid="dashboard-layout-reset"
+  >
+    <RotateCcw className="size-4" aria-hidden="true" />
+  </button>
+);

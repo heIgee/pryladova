@@ -13,9 +13,22 @@ const telemetry = (capturedAt: string, appName: string): TelemetryPayload => ({
   windowTitle: "title",
 });
 
+const openSegmentSelect = (startedAt: string | null = null) =>
+  vi.fn().mockReturnValue({
+    eq: vi.fn().mockReturnValue({
+      is: vi.fn().mockReturnValue({
+        maybeSingle: vi.fn().mockResolvedValue({
+          data: startedAt ? { started_at: startedAt } : null,
+          error: null,
+        }),
+      }),
+    }),
+  });
+
 const createHeartbeatClient = (options?: {
   dbLastSeenAt?: string | null;
   windowSegmentsUpdate?: ReturnType<typeof vi.fn>;
+  openSegmentStartedAt?: string | null;
 }) => {
   const heartbeatsSelect = vi.fn().mockReturnValue({
     eq: vi.fn().mockReturnValue({
@@ -53,7 +66,10 @@ const createHeartbeatClient = (options?: {
         };
       }
       if (table === "window_segments") {
-        return { update: windowSegmentsUpdate };
+        return {
+          update: windowSegmentsUpdate,
+          select: openSegmentSelect(options?.openSegmentStartedAt),
+        };
       }
       throw new Error(`unexpected table: ${table}`);
     }),
@@ -83,6 +99,9 @@ const createFocusChangeService = (rpc: ReturnType<typeof vi.fn>): SegmentService
     from: vi.fn((table: string) => {
       if (table === "agent_heartbeats") {
         return { select: heartbeatsSelect };
+      }
+      if (table === "window_segments") {
+        return { select: openSegmentSelect() };
       }
       throw new Error(`unexpected from() call: ${table}`);
     }),
@@ -143,7 +162,7 @@ describe("SegmentService", () => {
           return { select: heartbeatsSelect };
         }
         if (table === "window_segments") {
-          return { update: windowSegmentsUpdate };
+          return { update: windowSegmentsUpdate, select: openSegmentSelect() };
         }
         throw new Error(`unexpected table: ${table}`);
       }),
@@ -189,7 +208,7 @@ describe("SegmentService", () => {
           return { select: heartbeatsSelect };
         }
         if (table === "window_segments") {
-          return { update: windowSegmentsUpdate };
+          return { update: windowSegmentsUpdate, select: openSegmentSelect() };
         }
         throw new Error(`unexpected table: ${table}`);
       }),
@@ -347,7 +366,7 @@ describe("SegmentService", () => {
           return { select: heartbeatsSelect };
         }
         if (table === "window_segments") {
-          return { update: windowSegmentsUpdate };
+          return { update: windowSegmentsUpdate, select: openSegmentSelect() };
         }
         throw new Error(`unexpected table: ${table}`);
       }),
@@ -468,7 +487,7 @@ describe("SegmentService", () => {
           return { select: heartbeatsSelect, upsert: heartbeatsUpsert };
         }
         if (table === "window_segments") {
-          return { update: windowSegmentsUpdate };
+          return { update: windowSegmentsUpdate, select: openSegmentSelect() };
         }
         throw new Error(`unexpected table: ${table}`);
       }),
@@ -529,7 +548,7 @@ describe("SegmentService", () => {
       rpc,
       from: vi.fn((table: string) => {
         if (table === "window_segments") {
-          return { update: windowSegmentsUpdate };
+          return { update: windowSegmentsUpdate, select: openSegmentSelect() };
         }
         if (table === "agent_heartbeats") {
           return { select: heartbeatsSelect, upsert: heartbeatsUpsert };
@@ -560,5 +579,318 @@ describe("SegmentService", () => {
       last_seen_at: "2026-01-01T12:06:30.000Z",
       last_active_at: "2026-01-01T12:06:30.000Z",
     });
+  });
+
+  it("ends a pre-downtime segment at its start instead of the next focus change", async () => {
+    const segmentStart = "2026-08-27T15:41:57.906Z";
+    const lte = vi.fn().mockResolvedValue({ error: null });
+    const windowSegmentsUpdate = vi.fn().mockReturnValue({
+      eq: vi.fn().mockReturnValue({
+        is: vi.fn().mockReturnValue({ lte }),
+      }),
+    });
+    const heartbeatsSelect = vi.fn().mockReturnValue({
+      eq: vi.fn().mockReturnValue({
+        maybeSingle: vi.fn().mockResolvedValue({
+          data: {
+            last_seen_at: "2026-08-27T15:00:00.000Z",
+            last_active_at: "2026-08-27T15:00:00.000Z",
+          },
+          error: null,
+        }),
+      }),
+    });
+    const rpc = vi.fn().mockResolvedValue({
+      data: { action: "opened", segment_id: "seg-next" },
+      error: null,
+    });
+    const client = {
+      rpc,
+      from: vi.fn((table: string) => {
+        if (table === "agent_heartbeats") {
+          return { select: heartbeatsSelect };
+        }
+        if (table === "window_segments") {
+          return { update: windowSegmentsUpdate, select: openSegmentSelect(segmentStart) };
+        }
+        throw new Error(`unexpected table: ${table}`);
+      }),
+    };
+    const service = new SegmentService({
+      isConfigured: () => true,
+      getClient: () => client,
+    } as unknown as SupabaseService);
+
+    await service.onFocusChange("desk-pc", telemetry("2026-10-18T09:59:47.746Z", "Cursor"));
+
+    expect(windowSegmentsUpdate).toHaveBeenCalledWith({
+      ended_at: segmentStart,
+      close_reason: "stale",
+    });
+    expect(lte).toHaveBeenCalledWith("started_at", segmentStart);
+    expect(rpc).toHaveBeenCalledWith("close_and_open_segment", {
+      p_agent_id: "desk-pc",
+      p_captured_at: "2026-10-18T09:59:47.746Z",
+      p_app_name: "Cursor",
+      p_window_title: "title",
+    });
+  });
+
+  it("keeps a long open segment when the heartbeat is still fresh", async () => {
+    const windowSegmentsUpdate = vi.fn();
+    const heartbeatsSelect = vi.fn().mockReturnValue({
+      eq: vi.fn().mockReturnValue({
+        maybeSingle: vi.fn().mockResolvedValue({
+          data: {
+            last_seen_at: "2026-10-18T09:59:00.000Z",
+            last_active_at: "2026-10-18T09:59:00.000Z",
+          },
+          error: null,
+        }),
+      }),
+    });
+    const rpc = vi.fn().mockResolvedValue({
+      data: { action: "opened", segment_id: "seg-next" },
+      error: null,
+    });
+    const client = {
+      rpc,
+      from: vi.fn((table: string) => {
+        if (table === "agent_heartbeats") {
+          return { select: heartbeatsSelect };
+        }
+        if (table === "window_segments") {
+          return {
+            update: windowSegmentsUpdate,
+            select: openSegmentSelect("2026-10-17T09:00:00.000Z"),
+          };
+        }
+        throw new Error(`unexpected table: ${table}`);
+      }),
+    };
+    const service = new SegmentService({
+      isConfigured: () => true,
+      getClient: () => client,
+    } as unknown as SupabaseService);
+
+    await service.onFocusChange("desk-pc", telemetry("2026-10-18T09:59:47.746Z", "Cursor"));
+
+    expect(windowSegmentsUpdate).not.toHaveBeenCalled();
+    expect(rpc).toHaveBeenCalled();
+  });
+
+  it("ends an overnight open segment at last active time, not at its start", async () => {
+    const segmentStart = "2026-10-17T18:00:00.000Z";
+    const lastActiveAt = "2026-10-17T20:00:00.000Z";
+    const lte = vi.fn().mockResolvedValue({ error: null });
+    const windowSegmentsUpdate = vi.fn().mockReturnValue({
+      eq: vi.fn().mockReturnValue({
+        is: vi.fn().mockReturnValue({ lte }),
+      }),
+    });
+    const heartbeatsSelect = vi.fn().mockReturnValue({
+      eq: vi.fn().mockReturnValue({
+        maybeSingle: vi.fn().mockResolvedValue({
+          data: { last_seen_at: lastActiveAt, last_active_at: lastActiveAt },
+          error: null,
+        }),
+      }),
+    });
+    const rpc = vi.fn().mockResolvedValue({
+      data: { action: "opened", segment_id: "seg-next" },
+      error: null,
+    });
+    const client = {
+      rpc,
+      from: vi.fn((table: string) => {
+        if (table === "agent_heartbeats") {
+          return { select: heartbeatsSelect };
+        }
+        if (table === "window_segments") {
+          return { update: windowSegmentsUpdate, select: openSegmentSelect(segmentStart) };
+        }
+        throw new Error(`unexpected table: ${table}`);
+      }),
+    };
+    const service = new SegmentService({
+      isConfigured: () => true,
+      getClient: () => client,
+    } as unknown as SupabaseService);
+
+    await service.onFocusChange("desk-pc", telemetry("2026-10-18T16:00:00.000Z", "Cursor"));
+
+    expect(windowSegmentsUpdate).toHaveBeenCalledWith({
+      ended_at: lastActiveAt,
+      close_reason: "stale",
+    });
+    expect(lte).toHaveBeenCalledWith("started_at", lastActiveAt);
+  });
+
+  it("closes at the previous last_active when input resumes after idle", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T12:00:00.000Z"));
+    const order: string[] = [];
+    const lte = vi.fn().mockImplementation(async () => {
+      order.push("close");
+      return { error: null };
+    });
+    const windowSegmentsUpdate = vi.fn().mockReturnValue({
+      eq: vi.fn().mockReturnValue({
+        is: vi.fn().mockReturnValue({ lte }),
+      }),
+    });
+    const { service, heartbeatsUpsert } = createHeartbeatClient({
+      dbLastSeenAt: "2026-01-01T12:00:00.000Z",
+      windowSegmentsUpdate,
+    });
+    heartbeatsUpsert.mockImplementation(async () => {
+      order.push("upsert");
+      return { error: null };
+    });
+
+    await service.onHostTick("desk-pc", "2026-01-01T12:00:00.000Z", { idleMs: 0 });
+    await service.onHostTick("desk-pc", "2026-01-01T12:00:02.000Z", { idleMs: 0 });
+    await service.onHostTick("desk-pc", "2026-01-01T12:00:04.000Z", {
+      idleMs: 6 * 60 * 60 * 1000,
+    });
+    expect(windowSegmentsUpdate).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(HEARTBEAT_PERSIST_MS);
+    await service.onHostTick("desk-pc", "2026-01-01T12:00:06.000Z", { idleMs: 0 });
+
+    expect(windowSegmentsUpdate).toHaveBeenCalledWith({
+      ended_at: "2026-01-01T06:00:04.000Z",
+      close_reason: "stale",
+    });
+    expect(order[0]).toBe("close");
+    expect(heartbeatsUpsert).toHaveBeenCalledWith({
+      agent_id: "desk-pc",
+      last_seen_at: "2026-01-01T12:00:06.000Z",
+      last_active_at: "2026-01-01T12:00:06.000Z",
+    });
+  });
+
+  it("reopens the current app in the same lock after an idle gap", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T12:00:00.000Z"));
+    const insert = vi.fn().mockResolvedValue({ error: null });
+    const lte = vi.fn().mockResolvedValue({ error: null });
+    const windowSegmentsUpdate = vi.fn().mockReturnValue({
+      eq: vi.fn().mockReturnValue({
+        is: vi.fn().mockReturnValue({ lte }),
+      }),
+    });
+    const client = {
+      from: vi.fn((table: string) => {
+        if (table === "agent_heartbeats") {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: {
+                    last_seen_at: "2026-01-01T12:00:00.000Z",
+                    last_active_at: "2026-01-01T12:00:00.000Z",
+                  },
+                  error: null,
+                }),
+              }),
+            }),
+            upsert: vi.fn().mockResolvedValue({ error: null }),
+          };
+        }
+        if (table === "window_segments") {
+          return {
+            update: windowSegmentsUpdate,
+            insert,
+            select: openSegmentSelect(),
+          };
+        }
+        throw new Error(`unexpected table: ${table}`);
+      }),
+    };
+    const service = new SegmentService({
+      isConfigured: () => true,
+      getClient: () => client,
+    } as unknown as SupabaseService);
+
+    await service.onHostTick("desk-pc", "2026-01-01T12:00:00.000Z", { idleMs: 0 });
+    await service.onHostTick("desk-pc", "2026-01-01T12:00:04.000Z", {
+      idleMs: 6 * 60 * 60 * 1000,
+    });
+    vi.advanceTimersByTime(HEARTBEAT_PERSIST_MS);
+    await service.onHostTick("desk-pc", "2026-01-01T12:00:06.000Z", {
+      idleMs: 0,
+      appName: "Cursor",
+      windowTitle: "app.tsx",
+    });
+
+    expect(windowSegmentsUpdate).toHaveBeenCalledWith({
+      ended_at: "2026-01-01T06:00:04.000Z",
+      close_reason: "stale",
+    });
+    expect(insert).toHaveBeenCalledWith({
+      agent_id: "desk-pc",
+      app_name: "Cursor",
+      window_title: "app.tsx",
+      started_at: "2026-01-01T12:00:06.000Z",
+    });
+  });
+
+  it("skips reopen when the stale close leaves a segment open", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T12:00:00.000Z"));
+    const insert = vi.fn().mockResolvedValue({ error: null });
+    const lte = vi.fn().mockResolvedValue({ error: null });
+    const windowSegmentsUpdate = vi.fn().mockReturnValue({
+      eq: vi.fn().mockReturnValue({
+        is: vi.fn().mockReturnValue({ lte }),
+      }),
+    });
+    const client = {
+      from: vi.fn((table: string) => {
+        if (table === "agent_heartbeats") {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: {
+                    last_seen_at: "2026-01-01T12:00:00.000Z",
+                    last_active_at: "2026-01-01T12:00:00.000Z",
+                  },
+                  error: null,
+                }),
+              }),
+            }),
+            upsert: vi.fn().mockResolvedValue({ error: null }),
+          };
+        }
+        if (table === "window_segments") {
+          return {
+            update: windowSegmentsUpdate,
+            insert,
+            select: openSegmentSelect("2026-01-01T12:00:00.000Z"),
+          };
+        }
+        throw new Error(`unexpected table: ${table}`);
+      }),
+    };
+    const service = new SegmentService({
+      isConfigured: () => true,
+      getClient: () => client,
+    } as unknown as SupabaseService);
+
+    await service.onHostTick("desk-pc", "2026-01-01T12:00:00.000Z", { idleMs: 0 });
+    await service.onHostTick("desk-pc", "2026-01-01T12:00:04.000Z", {
+      idleMs: 6 * 60 * 60 * 1000,
+    });
+    vi.advanceTimersByTime(HEARTBEAT_PERSIST_MS);
+    await service.onHostTick("desk-pc", "2026-01-01T12:00:06.000Z", {
+      idleMs: 0,
+      appName: "Cursor",
+      windowTitle: "app.tsx",
+    });
+
+    expect(windowSegmentsUpdate).toHaveBeenCalled();
+    expect(insert).not.toHaveBeenCalled();
   });
 });

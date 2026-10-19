@@ -1,7 +1,10 @@
 import { forwardRef, Inject, Injectable } from "@nestjs/common";
 import {
+  HOST_MEDIA_HOLD_MS,
   type HostPayload,
+  holdHostMedia,
   isRedactedTelemetry,
+  type MediaHoldState,
   mergeHostPayload,
   parseTelemetryState,
   type TelemetryPayload,
@@ -48,6 +51,8 @@ export class TelemetryService {
   private ingestGeneration = 0;
   private publishQueued = false;
   private publishHostQueued = false;
+  private mediaHold: MediaHoldState = { absentSinceMs: null };
+  private mediaHoldTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     private readonly classificationService: ClassificationService,
@@ -178,7 +183,10 @@ export class TelemetryService {
     const thumbnailChanged = mergedThumbnail != null && mergedThumbnail !== previousThumbnail;
 
     if (agentId) {
-      void this.segmentService.onHostTick(agentId, payload.capturedAt, { idleMs: payload.idleMs });
+      void this.segmentService.onHostTick(agentId, payload.capturedAt, {
+        idleMs: payload.idleMs,
+        ...(this.state ? { appName: this.state.appName, windowTitle: this.state.windowTitle } : {}),
+      });
     }
 
     if (!this.state) {
@@ -213,9 +221,12 @@ export class TelemetryService {
     }
     this.state = null;
     this.pendingHost = null;
-    this.ingestGeneration = 0;
+    // Bump so an in-flight classify cannot match the next ingest's generation.
+    this.ingestGeneration += 1;
     this.publishQueued = false;
     this.publishHostQueued = false;
+    this.mediaHold = { absentSinceMs: null };
+    this.clearMediaHoldTimer();
   }
 
   reclassifyCurrentWindow(): void {
@@ -255,7 +266,54 @@ export class TelemetryService {
     previous: HostPayload | null | undefined,
     incoming: HostPayload,
   ): HostPayload {
-    return mergeHostPayload(previous, incoming);
+    const held = holdHostMedia(previous, incoming, this.mediaHold, Date.now());
+    this.mediaHold = held.hold;
+    this.syncMediaHoldTimer();
+    return mergeHostPayload(previous, held.host);
+  }
+
+  private syncMediaHoldTimer(): void {
+    this.clearMediaHoldTimer();
+    const absentSinceMs = this.mediaHold.absentSinceMs;
+    if (absentSinceMs === null) {
+      return;
+    }
+
+    const delayMs = Math.max(0, HOST_MEDIA_HOLD_MS - (Date.now() - absentSinceMs));
+    const timer = setTimeout(() => {
+      this.mediaHoldTimer = null;
+      this.releaseHeldMedia();
+    }, delayMs);
+    timer.unref();
+    this.mediaHoldTimer = timer;
+  }
+
+  private clearMediaHoldTimer(): void {
+    if (this.mediaHoldTimer === null) {
+      return;
+    }
+    clearTimeout(this.mediaHoldTimer);
+    this.mediaHoldTimer = null;
+  }
+
+  private releaseHeldMedia(): void {
+    this.mediaHold = { absentSinceMs: null };
+    const host = this.state?.host ?? this.pendingHost;
+    if (!host?.media) {
+      return;
+    }
+
+    const cleared: HostPayload = { ...host, media: null };
+    if (!this.state) {
+      this.pendingHost = cleared;
+      return;
+    }
+
+    this.state = parseTelemetryState({
+      ...this.state,
+      host: cleared,
+    });
+    this.publishHost();
   }
 
   private async runClassification(
@@ -272,6 +330,14 @@ export class TelemetryService {
       return;
     }
 
+    if (
+      !this.state ||
+      this.state.appName !== payload.appName ||
+      this.state.windowTitle !== payload.windowTitle
+    ) {
+      return;
+    }
+
     if (!this.settingsService.isClassificationEnabled()) {
       if (this.state) {
         this.state = parseTelemetryState({
@@ -281,10 +347,6 @@ export class TelemetryService {
         });
         this.publishState();
       }
-      return;
-    }
-
-    if (!this.state) {
       return;
     }
 

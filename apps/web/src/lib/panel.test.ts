@@ -8,7 +8,6 @@ import {
   type PanelState,
   resolvePanelSubtitle,
   resolveShowAgentHint,
-  shouldShowMediaTile,
   syncSettings,
 } from "./panel.js";
 import { buildWeatherUrl, fetchWeather, reverseGeocodeCity } from "./weather.js";
@@ -142,6 +141,106 @@ describe("applyPanelWsMessage", () => {
       }),
     });
   });
+
+  it("clears media when reconnect state has no host.media", () => {
+    const panel: PanelState = {
+      status: "ready",
+      telemetry: {
+        ...readyTelemetry,
+        host: {
+          idleMs: 0,
+          cpuPercent: 10,
+          ramPercent: 20,
+          uptimeSec: 100,
+          capturedAt: "2026-01-01T12:00:02.000Z",
+          media: {
+            title: "V1rtualAng3ls",
+            artist: "KENTENSHI",
+            albumTitle: null,
+            appName: "Spotify",
+            playbackStatus: "playing",
+            thumbnailDataUrl: "data:image/jpeg;base64,abc",
+          },
+        },
+      },
+    };
+
+    const next = applyPanelWsMessage(panel, {
+      type: "state",
+      telemetry: {
+        appName: "Code",
+        windowTitle: "app.tsx",
+        capturedAt: "2026-01-01T12:00:06.000Z",
+        receivedAt: "2026-01-01T12:00:06.000Z",
+        classification: null,
+        classificationStatus: "disabled",
+        host: {
+          idleMs: 0,
+          cpuPercent: 55,
+          ramPercent: 22,
+          uptimeSec: 110,
+          capturedAt: "2026-01-01T12:00:06.000Z",
+          media: null,
+        },
+      },
+    });
+
+    expect(next).toEqual({
+      status: "ready",
+      telemetry: expect.objectContaining({
+        host: expect.objectContaining({
+          cpuPercent: 55,
+          media: null,
+        }),
+      }),
+    });
+  });
+
+  it("clears media on host ticks that report nothing playing", () => {
+    const panel: PanelState = {
+      status: "ready",
+      telemetry: {
+        ...readyTelemetry,
+        host: {
+          idleMs: 0,
+          cpuPercent: 10,
+          ramPercent: 20,
+          uptimeSec: 100,
+          capturedAt: "2026-01-01T12:00:02.000Z",
+          media: {
+            title: "Track",
+            artist: "Artist",
+            albumTitle: null,
+            appName: "Player",
+            playbackStatus: "playing",
+            thumbnailDataUrl: "data:image/jpeg;base64,abc",
+          },
+        },
+      },
+    };
+
+    const next = applyPanelWsMessage(panel, {
+      type: "host",
+      host: {
+        idleMs: 0,
+        cpuPercent: 55,
+        ramPercent: 22,
+        uptimeSec: 110,
+        capturedAt: "2026-01-01T12:00:06.000Z",
+        media: null,
+      },
+    });
+
+    expect(next).toEqual({
+      status: "ready",
+      telemetry: expect.objectContaining({
+        host: expect.objectContaining({
+          cpuPercent: 55,
+          media: null,
+        }),
+      }),
+    });
+  });
 });
 
 describe("fetchSettings", () => {
@@ -184,45 +283,6 @@ describe("syncSettings", () => {
 
     await expect(syncSettings(true)).rejects.toThrow("Settings error (401)");
     vi.unstubAllGlobals();
-  });
-});
-
-describe("shouldShowMediaTile", () => {
-  it("is false when host is undefined", () => {
-    expect(shouldShowMediaTile(undefined)).toBe(false);
-  });
-
-  it("is false when host media is null", () => {
-    expect(
-      shouldShowMediaTile({
-        idleMs: 0,
-        cpuPercent: 0,
-        ramPercent: 0,
-        uptimeSec: 0,
-        media: null,
-        capturedAt: "2026-01-01T12:00:00.000Z",
-      }),
-    ).toBe(false);
-  });
-
-  it("is true when host media exists", () => {
-    expect(
-      shouldShowMediaTile({
-        idleMs: 0,
-        cpuPercent: 0,
-        ramPercent: 0,
-        uptimeSec: 0,
-        media: {
-          title: "Track",
-          artist: "Artist",
-          albumTitle: null,
-          appName: null,
-          playbackStatus: "playing" as const,
-          thumbnailDataUrl: null,
-        },
-        capturedAt: "2026-01-01T12:00:00.000Z",
-      }),
-    ).toBe(true);
   });
 });
 

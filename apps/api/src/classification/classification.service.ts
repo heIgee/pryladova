@@ -69,15 +69,7 @@ export class ClassificationService {
       return memoryCached;
     }
 
-    const dbCached = await this.readDbCache(appName, cacheTitle);
-    if (dbCached) {
-      this.writeMemoryCache(cacheKey, dbCached);
-      console.log(
-        `[api] classification cache hit db category=${dbCached.category} workRelated=${dbCached.workRelated}`,
-      );
-      return dbCached;
-    }
-
+    // The dev database is shared. A cached row would skip the gate and show a real name.
     if (readE2eClassificationEnabled()) {
       try {
         await waitForE2eClassificationRelease();
@@ -87,6 +79,15 @@ export class ClassificationService {
       const stub = e2eClassificationStub(appName, windowTitle);
       this.writeMemoryCache(cacheKey, stub);
       return stub;
+    }
+
+    const dbCached = await this.readDbCache(appName, cacheTitle);
+    if (dbCached) {
+      this.writeMemoryCache(cacheKey, dbCached);
+      console.log(
+        `[api] classification cache hit db category=${dbCached.category} workRelated=${dbCached.workRelated}`,
+      );
+      return dbCached;
     }
 
     const { config } = this.configService;

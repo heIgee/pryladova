@@ -1,6 +1,13 @@
 import { Skeleton, skeletonSize } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
+export const GoogleTileSkeleton = () => (
+  <div className="grid gap-2" aria-hidden="true" data-testid="google-tile-skeleton">
+    <Skeleton className={cn(skeletonSize.caption, "max-w-[55%]")} />
+    <Skeleton className={cn(skeletonSize.micro, "max-w-[40%]")} />
+  </div>
+);
+
 export const IntegrationTileSkeleton = () => (
   <div className="grid gap-2.5" aria-hidden="true" data-testid="integration-tile-skeleton">
     <div className="flex items-center gap-2.5">

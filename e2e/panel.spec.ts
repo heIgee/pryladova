@@ -6,8 +6,8 @@ import {
   redactedTelemetryFixture,
   telemetryFixture,
 } from "./fixtures/telemetry.js";
-import { sendAgentUpdate } from "./helpers/agent-ws.js";
-import { resetE2eApiState } from "./helpers/skeleton-layout.js";
+import { sendAgentHostUpdate, sendAgentUpdate } from "./helpers/agent-ws.js";
+import { resetE2eApiState, settleWindowClassification } from "./helpers/skeleton-layout.js";
 
 const login = async (page: Page): Promise<void> => {
   await page.getByLabel("Password").fill(panelPassword);
@@ -17,8 +17,6 @@ const login = async (page: Page): Promise<void> => {
 test.describe("panel", () => {
   test.beforeEach(async ({ page }) => {
     await resetE2eApiState(page);
-    const response = await page.request.post(`${apiBase}/api/test/e2e/classification/release`);
-    expect(response.ok()).toBeTruthy();
   });
 
   test("shows login before authenticated", async ({ page }) => {
@@ -65,10 +63,9 @@ test.describe("panel", () => {
     await login(page);
 
     await sendAgentUpdate(apiBase, hostFixture, telemetryFixture, ingestSecret);
-    const release = await page.request.post(`${apiBase}/api/test/e2e/classification/release`);
-    expect(release.ok()).toBeTruthy();
+    await settleWindowClassification(page, "Code");
 
-    await expect(page.getByTestId("window-tile")).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByTestId("window-tile")).toBeVisible();
     await expect(page.getByTestId("window-tile-title-slot")).toContainText("Code");
     await expect(page.getByText("app.tsx — pryladova")).toBeVisible();
   });
@@ -79,10 +76,13 @@ test.describe("panel", () => {
 
     await sendAgentUpdate(apiBase, hostFixture, redactedTelemetryFixture, ingestSecret);
 
-    await expect(page.getByRole("heading", { name: "Secure", level: 2 })).toBeVisible({
-      timeout: 5_000,
-    });
-    await expect(page.getByText("Redacted")).toBeVisible();
+    await expect(page.getByTestId("window-tile")).toBeVisible({ timeout: 10_000 });
+    await expect
+      .poll(async () => page.getByTestId("window-tile-title-slot").textContent(), {
+        timeout: 10_000,
+      })
+      .toContain("Secure");
+    await expect(page.getByTestId("window-tile-subtitle-slot")).toContainText("Redacted");
   });
 
   test("shows media tile content on mobile viewport", async ({ page }) => {
@@ -97,5 +97,32 @@ test.describe("panel", () => {
     await expect(mediaTile).toContainText("Test Track");
     await expect(mediaTile).toContainText("Test Artist");
     await expect(mediaTile).toContainText("Paused");
+  });
+
+  test("preserves media tile after host-only metrics tick", async ({ page }) => {
+    await page.goto("/");
+    await login(page);
+
+    await sendAgentUpdate(apiBase, hostWithMediaFixture, telemetryFixture, ingestSecret);
+
+    const mediaTile = page.getByTestId("media-tile");
+    await expect(mediaTile).toBeVisible({ timeout: 5_000 });
+    await expect(mediaTile).toContainText("Test Track");
+    await expect(mediaTile).toContainText("Test Artist");
+
+    await sendAgentHostUpdate(
+      apiBase,
+      {
+        ...hostFixture,
+        cpuPercent: 99,
+        capturedAt: "2026-01-01T12:01:00.000Z",
+        media: null,
+      },
+      ingestSecret,
+    );
+
+    await expect(mediaTile).toContainText("Test Track");
+    await expect(mediaTile).toContainText("Test Artist");
+    await expect(mediaTile).not.toContainText("Nothing playing");
   });
 });

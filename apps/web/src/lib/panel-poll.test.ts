@@ -210,4 +210,99 @@ describe("panel stream store", () => {
     expect(socket.close).toHaveBeenCalledOnce();
     vi.useRealTimers();
   });
+
+  it("clears media when reconnect state has no host.media", async () => {
+    vi.stubGlobal("WebSocket", MockWebSocket);
+
+    const { getPanelPollSnapshot, subscribePanelPoll } = await import("./panel-poll.js");
+    const unsubscribe = subscribePanelPoll(() => {});
+
+    const socket = MockWebSocket.instances[0];
+    socket.onmessage?.({
+      data: JSON.stringify({
+        type: "state",
+        telemetry: {
+          appName: "Code",
+          windowTitle: "app.tsx",
+          capturedAt: "2026-01-01T12:00:00.000Z",
+          receivedAt: "2026-01-01T12:00:01.000Z",
+          classification: null,
+          classificationStatus: "disabled",
+          host: {
+            idleMs: 0,
+            cpuPercent: 10,
+            ramPercent: 20,
+            uptimeSec: 100,
+            capturedAt: "2026-01-01T12:00:02.000Z",
+            media: {
+              title: "Test Track",
+              artist: "Test Artist",
+              albumTitle: null,
+              appName: "Spotify",
+              playbackStatus: "playing",
+              thumbnailDataUrl: "data:image/jpeg;base64,abc",
+            },
+          },
+        },
+      }),
+    } as MessageEvent<string>);
+
+    socket.onmessage?.({
+      data: JSON.stringify({
+        type: "state",
+        telemetry: {
+          appName: "Code",
+          windowTitle: "app.tsx",
+          capturedAt: "2026-01-01T12:00:06.000Z",
+          receivedAt: "2026-01-01T12:00:06.000Z",
+          classification: null,
+          classificationStatus: "disabled",
+          host: {
+            idleMs: 0,
+            cpuPercent: 55,
+            ramPercent: 22,
+            uptimeSec: 110,
+            capturedAt: "2026-01-01T12:00:06.000Z",
+            media: null,
+          },
+        },
+      }),
+    } as MessageEvent<string>);
+
+    expect(getPanelPollSnapshot().panel).toEqual({
+      status: "ready",
+      telemetry: expect.objectContaining({
+        host: expect.objectContaining({
+          cpuPercent: 55,
+          media: null,
+        }),
+      }),
+    });
+
+    unsubscribe();
+  });
+
+  it("refreshPanelPoll forces a new websocket when already connected", async () => {
+    vi.stubGlobal("WebSocket", MockWebSocket);
+
+    const { getPanelPollSnapshot, refreshPanelPoll, subscribePanelPoll } = await import(
+      "./panel-poll.js"
+    );
+    const unsubscribe = subscribePanelPoll(() => {});
+
+    await Promise.resolve();
+
+    const firstSocket = MockWebSocket.instances[0];
+    expect(getPanelPollSnapshot().streamConnected).toBe(true);
+
+    refreshPanelPoll();
+
+    await Promise.resolve();
+
+    expect(firstSocket.close).toHaveBeenCalledOnce();
+    expect(MockWebSocket.instances).toHaveLength(2);
+    expect(getPanelPollSnapshot().streamConnected).toBe(true);
+
+    unsubscribe();
+  });
 });

@@ -148,6 +148,3 @@ export const resolvePanelSubtitle = (
 
   return "live";
 };
-
-export const shouldShowMediaTile = (host: TelemetryState["host"] | undefined): boolean =>
-  host != null && host.media != null;

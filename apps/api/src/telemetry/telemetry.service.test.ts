@@ -286,6 +286,42 @@ describe("TelemetryService", () => {
     });
   });
 
+  it("clears held now-playing 30s after media stops", async () => {
+    vi.useFakeTimers();
+    const { telemetryService } = await createService();
+    telemetryService.setState(telemetryPayload);
+    const playing = {
+      idleMs: 0,
+      cpuPercent: 10,
+      ramPercent: 20,
+      uptimeSec: 100,
+      media: {
+        title: "Track",
+        artist: "Artist",
+        albumTitle: null,
+        appName: "Player",
+        playbackStatus: "playing" as const,
+        thumbnailDataUrl: "data:image/jpeg;base64,abc",
+      },
+      capturedAt: "2026-01-01T12:00:01.000Z",
+    };
+    telemetryService.setHost(playing);
+    telemetryService.setHost({
+      ...playing,
+      cpuPercent: 11,
+      media: null,
+      capturedAt: "2026-01-01T12:00:05.000Z",
+    });
+
+    expect(telemetryService.getState()?.host?.media?.title).toBe("Track");
+
+    await vi.advanceTimersByTimeAsync(30_000);
+
+    expect(telemetryService.getState()?.host?.media).toBeNull();
+    telemetryService.resetForE2e();
+    vi.useRealTimers();
+  });
+
   it("preserves thumbnail when host post omits it for unchanged track", async () => {
     const { telemetryService } = await createService();
     telemetryService.setState(telemetryPayload);

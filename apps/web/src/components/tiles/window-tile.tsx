@@ -2,13 +2,18 @@ import { pickSpinnerVerb, type TelemetryState } from "@pryladova/shared";
 import { Monitor } from "lucide-react";
 import type { ReactNode } from "react";
 import { BentoTileHeader } from "@/components/tiles/bento-tile-header";
-import { bentoTileLucideIconClassName } from "@/components/tiles/bento-tile-header-layout";
+import {
+  bentoTileBodyClipClassName,
+  bentoTileCardClassName,
+  bentoTileLucideIconClassName,
+} from "@/components/tiles/bento-tile-header-layout";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
+import { useBentoTileSize } from "@/hooks/use-bento-tile-size";
 import { useClassificationDisplay } from "@/hooks/use-classification-display";
-import { useUnsettledFocusKey } from "@/hooks/use-settled-focus-key";
+import { useDebouncedFocusLoading } from "@/hooks/use-settled-focus-key";
 import { cn } from "@/lib/utils";
 
 const MutedChip = ({ children }: { children: ReactNode }) => (
@@ -73,6 +78,10 @@ export const WindowTile = ({
   onClassificationChange: (enabled: boolean) => void;
 }) => {
   const status = telemetry.classificationStatus;
+  const { row } = useBentoTileSize();
+  const short = row < 3;
+  const titleClamp = short ? "truncate" : "line-clamp-2";
+  const subtitleClamp = short ? "truncate" : "line-clamp-3";
   const {
     badgeClassification,
     showCategory,
@@ -84,14 +93,27 @@ export const WindowTile = ({
   const classifiedName = telemetry.classification?.displayAppName ?? null;
   const layoutName = classifiedName ?? telemetry.appName;
   const focusKey = windowFocusKey(telemetry);
-  const showNameSkeleton = useUnsettledFocusKey(focusKey, {
-    enabled: classificationEnabled,
-    isPending: status === "pending",
-  });
-
   const distinctWindowTitle = hasDistinctWindowTitle(telemetry);
-  const windowSubtitle = showNameSkeleton ? null : resolveWindowSubtitle(telemetry, layoutName);
-  const showSubtitleSlot = showNameSkeleton ? distinctWindowTitle : windowSubtitle != null;
+  const settledWindowSubtitle = resolveWindowSubtitle(telemetry, layoutName);
+  const settledDisplay = {
+    layoutName,
+    windowSubtitle: settledWindowSubtitle,
+    showSubtitleSlot: settledWindowSubtitle != null,
+  };
+  const skeletonDisplay = {
+    layoutName: telemetry.appName,
+    windowSubtitle: distinctWindowTitle ? telemetry.windowTitle : null,
+    showSubtitleSlot: distinctWindowTitle,
+  };
+  const { showSkeleton: showNameSkeleton, display: windowDisplay } = useDebouncedFocusLoading(
+    focusKey,
+    settledDisplay,
+    skeletonDisplay,
+    {
+      enabled: classificationEnabled,
+      isPending: status === "pending",
+    },
+  );
 
   const showClassificationChips =
     showCategory ||
@@ -103,7 +125,7 @@ export const WindowTile = ({
     status === "disabled";
 
   return (
-    <Card size="sm" data-testid="window-tile">
+    <Card size="sm" className={bentoTileCardClassName} data-testid="window-tile">
       <BentoTileHeader
         testId="window-tile-header"
         icon={<Monitor className={bentoTileLucideIconClassName} aria-hidden="true" />}
@@ -148,32 +170,41 @@ export const WindowTile = ({
           ) : null
         }
       />
-      <CardContent className="flex flex-col gap-2">
-        <div className="grid gap-2" data-testid="window-tile-names">
+      <CardContent
+        className={cn(
+          bentoTileBodyClipClassName,
+          "flex min-w-0 flex-col overflow-x-hidden",
+          short ? "gap-1 py-1" : "gap-2",
+        )}
+      >
+        <div
+          className={cn("grid min-w-0", short ? "gap-1" : "gap-2")}
+          data-testid="window-tile-names"
+        >
           <h2
             className={cn(WINDOW_TITLE_CLASS, "relative")}
             data-testid="window-tile-title-slot"
             aria-busy={showNameSkeleton}
             aria-label={showNameSkeleton ? "Loading window name" : undefined}
           >
-            <span className={cn("block truncate", showNameSkeleton && "invisible")}>
-              {layoutName.trim().length > 0 ? layoutName : "\u00a0"}
+            <span className={cn("block", titleClamp, showNameSkeleton && "invisible")}>
+              {windowDisplay.layoutName.trim().length > 0 ? windowDisplay.layoutName : "\u00a0"}
             </span>
             {showNameSkeleton ? (
               <Skeleton as="span" className={WINDOW_TITLE_SKELETON_CLASS} aria-hidden="true" />
             ) : null}
           </h2>
-          {showSubtitleSlot ? (
+          {windowDisplay.showSubtitleSlot ? (
             <div
-              className={cn(WINDOW_SUBTITLE_CLASS, "relative line-clamp-3 text-muted-foreground")}
+              className={cn(WINDOW_SUBTITLE_CLASS, "relative text-muted-foreground", subtitleClamp)}
               data-testid="window-tile-subtitle-slot"
             >
               <span className={cn(showNameSkeleton && "invisible")}>
                 {showNameSkeleton
-                  ? telemetry.windowTitle.trim().length > 0
-                    ? telemetry.windowTitle
+                  ? (windowDisplay.windowSubtitle?.trim().length ?? 0) > 0
+                    ? windowDisplay.windowSubtitle
                     : "\u00a0"
-                  : windowSubtitle}
+                  : windowDisplay.windowSubtitle}
               </span>
               {showNameSkeleton ? (
                 <Skeleton as="span" className={WINDOW_SUBTITLE_SKELETON_CLASS} aria-hidden="true" />

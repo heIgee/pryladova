@@ -370,11 +370,39 @@ export type GoogleTaskItem = z.infer<typeof googleTaskItemSchema>;
 export type GoogleTasksStatusReady = z.infer<typeof googleTasksStatusReadySchema>;
 export type GoogleTasksStatusResponse = z.infer<typeof googleTasksStatusResponseSchema>;
 
+/** Keep the last track across empty host ticks, then drop it. */
+export const HOST_MEDIA_HOLD_MS = 30_000;
+
+export type MediaHoldState = {
+  absentSinceMs: number | null;
+};
+
+export const holdHostMedia = (
+  previous: HostPayload | null | undefined,
+  incoming: HostPayload,
+  hold: MediaHoldState,
+  nowMs: number,
+): { host: HostPayload; hold: MediaHoldState } => {
+  if (incoming.media || !previous?.media) {
+    return { host: incoming, hold: { absentSinceMs: null } };
+  }
+
+  const absentSinceMs = hold.absentSinceMs ?? nowMs;
+  if (nowMs - absentSinceMs >= HOST_MEDIA_HOLD_MS) {
+    return { host: incoming, hold: { absentSinceMs: null } };
+  }
+
+  return {
+    host: { ...incoming, media: previous.media },
+    hold: { absentSinceMs },
+  };
+};
+
 export const mergeHostPayload = (
   previous: HostPayload | null | undefined,
   incoming: HostPayload,
 ): HostPayload => {
-  if (!previous?.media || !incoming.media) {
+  if (!incoming.media || !previous?.media) {
     return incoming;
   }
 

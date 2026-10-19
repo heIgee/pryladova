@@ -1,14 +1,17 @@
 import type { HostPayload } from "@pryladova/shared";
 import { Music2 } from "lucide-react";
 import { BentoTileHeader } from "@/components/tiles/bento-tile-header";
-import { bentoTileLucideIconClassName } from "@/components/tiles/bento-tile-header-layout";
+import {
+  bentoTileBodyClipClassName,
+  bentoTileCardClassName,
+  bentoTileLucideIconClassName,
+} from "@/components/tiles/bento-tile-header-layout";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { useBentoTileSize } from "@/hooks/use-bento-tile-size";
+import { mediaLayoutClasses, pickMediaLayout } from "@/lib/bento-tile-variants";
 import { formatPlaybackStatus } from "@/lib/format";
 import { cn } from "@/lib/utils";
-
-const artFrameClassName =
-  "aspect-square size-32 shrink-0 overflow-hidden rounded-lg md:h-full md:w-auto";
 
 const coverArtAlt = (title: string, artist: string | null): string => {
   if (artist) {
@@ -21,14 +24,16 @@ const MediaArt = ({
   thumbnailDataUrl,
   title,
   artist,
+  artClassName,
 }: {
   thumbnailDataUrl: string | null;
   title: string;
   artist: string | null;
+  artClassName: string;
 }) => {
   if (thumbnailDataUrl) {
     return (
-      <div className={artFrameClassName}>
+      <div className={artClassName} data-testid="media-tile-art">
         <img
           src={thumbnailDataUrl}
           alt={coverArtAlt(title, artist)}
@@ -41,9 +46,10 @@ const MediaArt = ({
   return (
     <div
       className={cn(
-        artFrameClassName,
+        artClassName,
         "flex items-center justify-center bg-muted text-muted-foreground ring-1 ring-border/60",
       )}
+      data-testid="media-tile-art"
     >
       <Music2 className="size-8" aria-hidden="true" />
     </div>
@@ -58,9 +64,14 @@ export const MediaTile = ({
   className?: string;
 }) => {
   const media = host?.media ?? null;
+  const size = useBentoTileSize();
+  const variant = pickMediaLayout(size);
+  const layout = mediaLayoutClasses(variant, size);
+  const title = media?.title ?? "Nothing playing";
+  const artist = media ? (media.artist ?? "Unknown artist") : null;
 
   return (
-    <Card size="sm" className={cn("min-h-0 md:h-full", className)} data-testid="media-tile">
+    <Card size="sm" className={cn(bentoTileCardClassName, className)} data-testid="media-tile">
       <BentoTileHeader
         testId="media-tile-header"
         icon={<Music2 className={bentoTileLucideIconClassName} aria-hidden="true" />}
@@ -71,24 +82,41 @@ export const MediaTile = ({
           </Badge>
         }
       />
-      <CardContent className="flex flex-col md:min-h-0 md:flex-1 md:basis-0">
-        {media ? (
-          <div className="flex items-stretch gap-3 md:min-h-0 md:flex-1 md:basis-0">
-            <MediaArt
-              thumbnailDataUrl={media.thumbnailDataUrl}
-              title={media.title}
-              artist={media.artist}
-            />
-            <div className="flex min-w-0 flex-col justify-center gap-1">
-              <p className="line-clamp-2 text-body leading-snug font-medium">{media.title}</p>
-              <p className="truncate text-caption text-muted-foreground">
-                {media.artist ?? "Unknown artist"}
-              </p>
+      <CardContent
+        className={cn(bentoTileBodyClipClassName, layout.body)}
+        data-bento-layout={variant}
+      >
+        <div className={layout.content}>
+          {variant === "stack" ? (
+            <div className="flex min-h-0 w-full flex-1 items-center justify-center overflow-hidden">
+              <MediaArt
+                thumbnailDataUrl={media?.thumbnailDataUrl ?? null}
+                title={title}
+                artist={artist}
+                artClassName={layout.art}
+              />
             </div>
+          ) : (
+            <MediaArt
+              thumbnailDataUrl={media?.thumbnailDataUrl ?? null}
+              title={title}
+              artist={artist}
+              artClassName={layout.art}
+            />
+          )}
+          <div
+            className={cn(
+              "flex min-w-0 flex-col justify-center gap-1",
+              variant === "stack" ? "w-full shrink-0 text-center" : "min-h-0",
+            )}
+            data-testid="media-tile-caption"
+          >
+            <p className={layout.title}>{title}</p>
+            {artist ? (
+              <p className="truncate text-caption text-muted-foreground">{artist}</p>
+            ) : null}
           </div>
-        ) : (
-          <p className="text-caption text-muted-foreground">Nothing playing</p>
-        )}
+        </div>
       </CardContent>
     </Card>
   );

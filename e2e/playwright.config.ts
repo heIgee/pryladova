@@ -1,5 +1,11 @@
 import { defineConfig, devices } from "@playwright/test";
-import { ingestSecret } from "./constants.js";
+import { e2eApiPort, e2eWebPort, ingestSecret } from "./constants.js";
+
+const e2eWebServerEnv = {
+  E2E_API_PORT: String(e2eApiPort),
+  // Classification e2e holds the window longer than a short stale hint.
+  VITE_AGENT_HINT_AFTER_MS: "30000",
+};
 
 export default defineConfig({
   testDir: ".",
@@ -9,10 +15,10 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
-      testMatch: ["**/panel.spec.ts", "**/skeleton.spec.ts"],
+      testMatch: ["**/panel.spec.ts", "**/skeleton.spec.ts", "**/layout.spec.ts"],
       use: {
         ...devices["Desktop Chrome"],
-        baseURL: "http://127.0.0.1:5173",
+        baseURL: `http://127.0.0.1:${e2eWebPort}`,
         trace: "on-first-retry",
       },
     },
@@ -30,12 +36,12 @@ export default defineConfig({
   webServer: [
     {
       command: "node apps/api/dist/main.js",
-      url: "http://127.0.0.1:3000/api/health",
+      url: `http://127.0.0.1:${e2eApiPort}/api/health`,
       cwd: "..",
       reuseExistingServer: false,
       env: {
         NODE_ENV: "test",
-        PORT: "3000",
+        PORT: String(e2eApiPort),
         SESSION_SECRET: "e2e-session-secret-at-least-32-characters-long",
         PANEL_PASSWORD_HASH: "$2b$10$TtcGsCYSJ53WtzGpi0k7lOXLR3yY2n2jrjAnw0grKQFPV9sCEtQuq",
         INGEST_SECRET: ingestSecret,
@@ -44,13 +50,11 @@ export default defineConfig({
       },
     },
     {
-      command: "pnpm --filter web exec vite --host 127.0.0.1 --port 5173",
-      url: "http://127.0.0.1:5173",
+      command: `pnpm --filter web exec vite --host 127.0.0.1 --port ${e2eWebPort}`,
+      url: `http://127.0.0.1:${e2eWebPort}`,
       cwd: "..",
-      reuseExistingServer: !process.env.CI,
-      env: {
-        VITE_AGENT_HINT_AFTER_MS: "500",
-      },
+      reuseExistingServer: false,
+      env: e2eWebServerEnv,
     },
     {
       command:
@@ -58,6 +62,9 @@ export default defineConfig({
       url: "http://127.0.0.1:4173",
       cwd: "..",
       reuseExistingServer: false,
+      env: {
+        E2E_API_PORT: String(e2eApiPort),
+      },
     },
   ],
 });

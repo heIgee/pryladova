@@ -2,9 +2,14 @@ import type { HostPayload } from "@pryladova/shared";
 import { Cpu, MemoryStick, Server, Timer } from "lucide-react";
 import type { ReactNode } from "react";
 import { BentoTileHeader } from "@/components/tiles/bento-tile-header";
-import { bentoTileLucideIconClassName } from "@/components/tiles/bento-tile-header-layout";
+import {
+  bentoTileBodyClipClassName,
+  bentoTileCardClassName,
+  bentoTileLucideIconClassName,
+} from "@/components/tiles/bento-tile-header-layout";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { machineLayoutClasses } from "@/lib/bento-tile-variants";
 import {
   formatDuration,
   formatPercent,
@@ -24,7 +29,7 @@ const StatBar = ({
   percent: number;
   value: string;
 }) => (
-  <div className="flex flex-col gap-1.5">
+  <div className="flex flex-col gap-1">
     <div className="flex items-center justify-between gap-3">
       <div className="flex items-center gap-1.5 text-caption text-muted-foreground">
         {icon}
@@ -48,7 +53,7 @@ export const MachineTile = ({
   host: HostPayload | null;
   className?: string;
 }) => (
-  <Card size="sm" className={cn("h-full min-h-0", className)}>
+  <Card size="sm" className={cn(bentoTileCardClassName, className)}>
     <BentoTileHeader
       testId="machine-tile-header"
       icon={<Server className={bentoTileLucideIconClassName} aria-hidden="true" />}
@@ -67,9 +72,9 @@ export const MachineTile = ({
         </Badge>
       }
     />
-    <CardContent className="grid gap-3">
+    <CardContent className={cn(bentoTileBodyClipClassName, machineLayoutClasses.body)}>
       {host ? (
-        <>
+        <div className={machineLayoutClasses.grid}>
           <StatBar
             icon={<Cpu className="size-3.5" />}
             label="CPU"
@@ -82,14 +87,14 @@ export const MachineTile = ({
             percent={host.ramPercent}
             value={formatPercent(host.ramPercent)}
           />
-          <div className="flex items-center gap-1.5 text-caption text-muted-foreground">
+          <div className="mt-auto flex items-center gap-1.5 text-caption text-muted-foreground">
             <Timer className="size-3.5" />
             <span>Uptime</span>
             <span className="ml-auto font-medium text-foreground tabular-nums">
               {formatDuration(host.uptimeSec)}
             </span>
           </div>
-        </>
+        </div>
       ) : (
         <p className="text-caption text-muted-foreground" data-testid="machine-tile-empty">
           Metrics appear when the agent connects.

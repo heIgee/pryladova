@@ -191,6 +191,8 @@ const start = (store: PanelStreamStore): void => {
     return;
   }
 
+  store.panel = { status: "loading" };
+  refreshSnapshot(store);
   store.shouldRun = true;
   connect(store);
 };
@@ -200,6 +202,8 @@ const stop = (store: PanelStreamStore): void => {
   store.connectGeneration += 1;
   store.reconnectDelayMs = RECONNECT_BASE_MS;
   store.streamConnected = false;
+  store.panel = { status: "loading" };
+  refreshSnapshot(store);
   clearReconnect(store);
   abandonSocket(store.socket);
   store.socket = null;
@@ -208,8 +212,13 @@ const stop = (store: PanelStreamStore): void => {
 export const subscribePanelPoll = (listener: () => void): (() => void) => {
   const store = getStore();
   cancelPendingStop();
+  const wasStopped = !store.shouldRun;
   store.listeners.add(listener);
   start(store);
+
+  if (!wasStopped) {
+    refreshPanelPoll();
+  }
 
   return () => {
     store.listeners.delete(listener);

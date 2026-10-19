@@ -2,8 +2,12 @@ import type { CalendarEvent } from "@pryladova/shared";
 import { GOOGLE_CONNECT_ROUTE } from "@pryladova/shared";
 import { Calendar } from "lucide-react";
 import { BentoTileHeader } from "@/components/tiles/bento-tile-header";
-import { bentoTileLucideIconClassName } from "@/components/tiles/bento-tile-header-layout";
-import { IntegrationTileSkeleton } from "@/components/tiles/integration-tile-skeleton";
+import {
+  bentoTileBodyClassName,
+  bentoTileCardClassName,
+  bentoTileLucideIconClassName,
+} from "@/components/tiles/bento-tile-header-layout";
+import { GoogleTileSkeleton } from "@/components/tiles/integration-tile-skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -14,6 +18,7 @@ import {
 } from "@/lib/integration-dates";
 import type { GoogleCalendarTileStatus } from "@/lib/integration-status";
 import { isIntegrationLoading } from "@/lib/integration-status";
+import { cn } from "@/lib/utils";
 
 const isAllDayCalendarEvent = (event: CalendarEvent): boolean => {
   if (event.allDay || event.date) {
@@ -75,7 +80,7 @@ export const GoogleCalendarTile = ({
   status: GoogleCalendarTileStatus;
   className?: string;
 }) => (
-  <Card size="sm" className={className}>
+  <Card size="sm" className={cn(bentoTileCardClassName, className)}>
     <BentoTileHeader
       testId="google-calendar-tile-header"
       icon={<Calendar className={bentoTileLucideIconClassName} aria-hidden="true" />}
@@ -94,8 +99,8 @@ export const GoogleCalendarTile = ({
         ) : null
       }
     />
-    <CardContent className="grid gap-2.5 py-2.5">
-      {isIntegrationLoading(status) ? <IntegrationTileSkeleton /> : null}
+    <CardContent className={cn(bentoTileBodyClassName, "grid gap-2.5 py-2.5")}>
+      {isIntegrationLoading(status) ? <GoogleTileSkeleton /> : null}
       {status.status === "disabled" ? (
         <div className="grid gap-1">
           <p className="text-caption text-muted-foreground">Not configured</p>
@@ -112,12 +117,6 @@ export const GoogleCalendarTile = ({
             className="text-caption font-medium text-primary hover:underline"
           >
             Connect Google
-          </a>
-          <a
-            href={`${GOOGLE_CONNECT_ROUTE}?reconnect=1`}
-            className="text-micro text-muted-foreground hover:underline"
-          >
-            Reconnect with consent
           </a>
         </div>
       ) : null}

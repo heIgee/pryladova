@@ -71,8 +71,10 @@ const createDevLogger = (): Logger => {
   return logger;
 };
 
+const apiPort = process.env.E2E_API_PORT?.trim() || "3000";
+
 const apiProxy = {
-  target: "http://127.0.0.1:3000",
+  target: `http://127.0.0.1:${apiPort}`,
   changeOrigin: true,
   ws: true,
   configure: (proxy: { on: (event: string, listener: (...args: never[]) => void) => void }) => {

@@ -36,8 +36,16 @@ export const sendAgentUpdate = (
     };
 
     socket.once("open", () => {
-      socket.send(JSON.stringify({ type: "update", agentId: "e2e-agent", host, telemetry }));
-      socket.close();
+      socket.send(
+        JSON.stringify({ type: "update", agentId: "e2e-agent", host, telemetry }),
+        (error) => {
+          if (error) {
+            fail(error);
+            return;
+          }
+          socket.close();
+        },
+      );
     });
     socket.once("close", () => {
       clearTimeout(timeout);
@@ -45,3 +53,9 @@ export const sendAgentUpdate = (
     });
     socket.once("error", fail);
   });
+
+export const sendAgentHostUpdate = (
+  apiBase: string,
+  host: HostPayload,
+  ingestSecret?: string,
+): Promise<void> => sendAgentUpdate(apiBase, host, undefined, ingestSecret);

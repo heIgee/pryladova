@@ -9,9 +9,11 @@ import {
   mapIntervalSummaryRows,
   parseCloseAndOpenResult,
   parseIntervalSummaryRpcResult,
+  resolveIdleResumeCloseAt,
   resolveLastActiveAt,
   resolveOpenSegmentEndAt,
   resolveStaleCloseBoundary,
+  resolveStaleSegmentEndAt,
 } from "./segment.logic.js";
 
 describe("segment.logic", () => {
@@ -28,6 +30,24 @@ describe("segment.logic", () => {
       resolveStaleCloseBoundary("2026-01-01T12:00:00.000Z", "2026-01-01T12:04:00.000Z"),
     ).toBeNull();
     expect(resolveStaleCloseBoundary(null, "2026-01-01T12:05:01.000Z")).toBeNull();
+  });
+
+  it("closes an idle gap at the previous last_active, not at the resume time", () => {
+    expect(resolveIdleResumeCloseAt("2026-01-01T12:00:00.000Z", "2026-01-01T18:00:00.000Z")).toBe(
+      "2026-01-01T12:00:00.000Z",
+    );
+    expect(
+      resolveIdleResumeCloseAt("2026-01-01T12:00:00.000Z", "2026-01-01T12:04:00.000Z"),
+    ).toBeNull();
+    expect(resolveIdleResumeCloseAt(null, "2026-01-01T18:00:00.000Z")).toBeNull();
+  });
+
+  it("ends a segment at its start when the heartbeat predates it", () => {
+    const startedAt = "2026-08-27T15:41:57.906Z";
+    expect(resolveStaleSegmentEndAt(startedAt, "2026-08-27T15:00:00.000Z")).toBe(startedAt);
+    expect(resolveStaleSegmentEndAt(startedAt, "2026-08-27T16:00:00.000Z")).toBe(
+      "2026-08-27T16:00:00.000Z",
+    );
   });
 
   it("resolves last active time from idle duration", () => {

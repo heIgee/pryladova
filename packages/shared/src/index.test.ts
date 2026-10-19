@@ -4,6 +4,8 @@ import {
   githubStatusResponseSchema,
   googleCalendarStatusResponseSchema,
   googleTasksStatusResponseSchema,
+  HOST_MEDIA_HOLD_MS,
+  holdHostMedia,
   hostMediaSchema,
   hostPayloadForPanelWs,
   isRedactedTelemetry,
@@ -179,6 +181,81 @@ describe("panel host ws helpers", () => {
     ).toBeNull();
   });
 
+  it("drops media when a host payload clears it", () => {
+    const previous = {
+      idleMs: 0,
+      cpuPercent: 10,
+      ramPercent: 20,
+      uptimeSec: 100,
+      capturedAt: "2026-01-01T12:00:00.000Z",
+      media: {
+        title: "Track",
+        artist: "Artist",
+        albumTitle: null,
+        appName: "Player",
+        playbackStatus: "playing" as const,
+        thumbnailDataUrl: "data:image/jpeg;base64,abc",
+      },
+    };
+    const incoming = {
+      idleMs: 0,
+      cpuPercent: 42,
+      ramPercent: 20,
+      uptimeSec: 105,
+      capturedAt: "2026-01-01T12:00:05.000Z",
+      media: null,
+    };
+
+    expect(mergeHostPayload(previous, incoming).media).toBeNull();
+  });
+
+  it("holds the last track for 30s after media goes empty, then drops it", () => {
+    const previous = {
+      idleMs: 0,
+      cpuPercent: 10,
+      ramPercent: 20,
+      uptimeSec: 100,
+      capturedAt: "2026-01-01T12:00:00.000Z",
+      media: {
+        title: "Track",
+        artist: "Artist",
+        albumTitle: null,
+        appName: "Player",
+        playbackStatus: "playing" as const,
+        thumbnailDataUrl: "data:image/jpeg;base64,abc",
+      },
+    };
+    const incoming = {
+      ...previous,
+      cpuPercent: 42,
+      capturedAt: "2026-01-01T12:00:05.000Z",
+      media: null,
+    };
+    const started = Date.parse("2026-01-01T12:00:05.000Z");
+
+    const held = holdHostMedia(previous, incoming, { absentSinceMs: null }, started);
+    expect(held.host.media).toEqual(previous.media);
+    expect(held.hold.absentSinceMs).toBe(started);
+
+    const stillHeld = holdHostMedia(
+      held.host,
+      { ...incoming, capturedAt: "2026-01-01T12:00:20.000Z" },
+      held.hold,
+      started + 15_000,
+    );
+    expect(stillHeld.host.media).toEqual(previous.media);
+    expect(stillHeld.hold.absentSinceMs).toBe(started);
+
+    const dropped = holdHostMedia(
+      stillHeld.host,
+      { ...incoming, capturedAt: "2026-01-01T12:00:40.000Z" },
+      stillHeld.hold,
+      started + HOST_MEDIA_HOLD_MS,
+    );
+    expect(dropped.host.media).toBeNull();
+    expect(dropped.hold.absentSinceMs).toBeNull();
+  });
+
   it("preserves thumbnails across unchanged tracks", () => {
     const previous = {
       idleMs: 0,
@@ -254,6 +331,46 @@ describe("panel host ws helpers", () => {
     expect(mergeTelemetryState(previous, incoming).host?.media?.thumbnailDataUrl).toBe(
       "data:image/jpeg;base64,abc",
     );
+  });
+
+  it("drops media when reconnect telemetry clears host.media", () => {
+    const previous = {
+      appName: "Code",
+      windowTitle: "app.tsx",
+      capturedAt: "2026-01-01T12:00:00.000Z",
+      receivedAt: "2026-01-01T12:00:01.000Z",
+      classification: null,
+      classificationStatus: "disabled" as const,
+      host: {
+        idleMs: 0,
+        cpuPercent: 10,
+        ramPercent: 20,
+        uptimeSec: 100,
+        capturedAt: "2026-01-01T12:00:01.000Z",
+        media: {
+          title: "V1rtualAng3ls",
+          artist: "KENTENSHI",
+          albumTitle: null,
+          appName: "Spotify",
+          playbackStatus: "playing" as const,
+          thumbnailDataUrl: "data:image/jpeg;base64,abc",
+        },
+      },
+    };
+    const incoming = {
+      ...previous,
+      receivedAt: "2026-01-01T12:00:05.000Z",
+      host: {
+        idleMs: 0,
+        cpuPercent: 42,
+        ramPercent: 20,
+        uptimeSec: 105,
+        capturedAt: "2026-01-01T12:00:05.000Z",
+        media: null,
+      },
+    };
+
+    expect(mergeTelemetryState(previous, incoming).host?.media).toBeNull();
   });
 });
 
