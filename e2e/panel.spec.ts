@@ -125,4 +125,34 @@ test.describe("panel", () => {
     await expect(mediaTile).toContainText("Test Artist");
     await expect(mediaTile).not.toContainText("Nothing playing");
   });
+
+  test("steps the history day and stops at the ends", async ({ page }) => {
+    await page.goto("/");
+    await login(page);
+
+    const label = page.getByTestId("history-day-label");
+    const previous = page.getByTestId("history-day-previous");
+    const next = page.getByTestId("history-day-next");
+    await expect(label).toBeVisible();
+    await expect(next).toBeDisabled();
+    await expect(previous).toBeEnabled();
+
+    const today = (await label.textContent()) ?? "";
+    expect(today.length).toBeGreaterThan(0);
+
+    await previous.click();
+    await expect(label).not.toHaveText(today);
+    await next.click();
+    await expect(label).toHaveText(today);
+    await expect(next).toBeDisabled();
+
+    for (let step = 0; step < 6; step += 1) {
+      const before = (await label.textContent()) ?? "";
+      await previous.click();
+      await expect(label).not.toHaveText(before);
+    }
+
+    await expect(previous).toBeDisabled();
+    await expect(next).toBeEnabled();
+  });
 });

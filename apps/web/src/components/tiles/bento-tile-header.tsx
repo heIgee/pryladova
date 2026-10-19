@@ -20,6 +20,12 @@ export type BentoTileHeaderProps = {
   title: string;
   detail?: string | null;
   action?: ReactNode;
+  /** Buttons placed on either side of the title. The drag handle becomes a div so they are not nested in a button. */
+  aroundTitle?: {
+    leading: ReactNode;
+    trailing: ReactNode;
+  };
+  titleTestId?: string;
   className?: string;
   testId?: string;
 };
@@ -29,6 +35,8 @@ export const BentoTileHeader = ({
   title,
   detail,
   action,
+  aroundTitle,
+  titleTestId,
   className,
   testId = "bento-tile-header",
 }: BentoTileHeaderProps) => {
@@ -39,20 +47,37 @@ export const BentoTileHeader = ({
     "flex min-w-0 flex-1 items-center gap-1.5",
     dragListeners ? "cursor-grab active:cursor-grabbing" : null,
   );
+  const iconNode = (
+    <span className="flex size-3.5 shrink-0 items-center justify-center [&>svg]:size-3.5">
+      {icon}
+    </span>
+  );
+  const titleNode = aroundTitle ? (
+    <span className="inline-flex shrink-0 items-center gap-0.5">
+      {aroundTitle.leading}
+      <span className="shrink-0 text-sm font-medium" data-testid={titleTestId}>
+        {title}
+      </span>
+      {aroundTitle.trailing}
+    </span>
+  ) : (
+    <span className="shrink-0 text-sm font-medium" data-testid={titleTestId}>
+      {title}
+    </span>
+  );
+  const detailNode = detail ? (
+    <>
+      <span className="shrink-0 text-micro text-muted-foreground" aria-hidden="true">
+        ·
+      </span>
+      <span className="min-w-0 truncate text-micro text-muted-foreground">{detail}</span>
+    </>
+  ) : null;
   const handleLabel = (
     <>
-      <span className="flex size-3.5 shrink-0 items-center justify-center [&>svg]:size-3.5">
-        {icon}
-      </span>
-      <span className="shrink-0 text-sm font-medium">{title}</span>
-      {detail ? (
-        <>
-          <span className="shrink-0 text-micro text-muted-foreground" aria-hidden="true">
-            ·
-          </span>
-          <span className="min-w-0 truncate text-micro text-muted-foreground">{detail}</span>
-        </>
-      ) : null}
+      {iconNode}
+      {titleNode}
+      {detailNode}
     </>
   );
 
@@ -71,7 +96,22 @@ export const BentoTileHeader = ({
       data-testid={testId}
     >
       <div className={bentoTileHeaderRowClassName}>
-        {dragAttributes ? (
+        {dragAttributes && aroundTitle ? (
+          // Div, not button: the day chevrons are buttons and cannot nest inside the drag control.
+          // biome-ignore lint/a11y/useSemanticElements: day chevrons cannot nest in a button
+          <div
+            ref={setDragActivatorRef ?? undefined}
+            className={cn(handleClassName, "text-left text-inherit")}
+            {...dragAttributes}
+            {...(dragListeners ?? {})}
+            role="button"
+            tabIndex={0}
+            aria-label={`Drag ${title}`}
+            data-testid="dashboard-tile-drag-handle"
+          >
+            {handleLabel}
+          </div>
+        ) : dragAttributes ? (
           <button
             type="button"
             ref={setDragActivatorRef ?? undefined}

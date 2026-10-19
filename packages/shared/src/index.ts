@@ -119,10 +119,19 @@ export const historyQuerySchema = z
 export const historyEntrySchema = z.object({
   appName: trimmedNonEmptyString,
   durationSec: z.number().int().nonnegative(),
+  switchCount: z.number().int().nonnegative().optional(),
+});
+
+export const historySpanSchema = z.object({
+  appName: trimmedNonEmptyString,
+  startedAt: z.iso.datetime(),
+  endedAt: z.iso.datetime(),
+  open: z.boolean().optional(),
 });
 
 export const historyResponseSchema = z.object({
   entries: z.array(historyEntrySchema),
+  spans: z.array(historySpanSchema).default([]),
 });
 
 export const classificationStatusSchema = z.enum([
@@ -344,6 +353,7 @@ export type ClassificationStatus = z.infer<typeof classificationStatusSchema>;
 export type Settings = z.infer<typeof settingsSchema>;
 export type SettingsPutResponse = z.infer<typeof settingsPutResponseSchema>;
 export type HistoryEntry = z.infer<typeof historyEntrySchema>;
+export type HistorySpan = z.infer<typeof historySpanSchema>;
 export type HistoryResponse = z.infer<typeof historyResponseSchema>;
 export type TelemetryPayload = z.infer<typeof telemetryPayloadSchema>;
 export type PlaybackStatus = z.infer<typeof playbackStatusSchema>;

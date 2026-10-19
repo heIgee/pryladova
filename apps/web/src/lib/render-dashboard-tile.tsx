@@ -39,9 +39,14 @@ export type DashboardTileRenderContext = {
   settingsReady: boolean;
   onClassificationChange: (enabled: boolean) => void;
   history: HistoryState;
+  historyDayLabel: string;
+  historyDayRange: { from: string; to: string };
   historyActiveAppName: string | null;
   historyRefreshing: boolean;
   historyHasLoaded: boolean;
+  historyCanStepBack: boolean;
+  historyCanStepForward: boolean;
+  onHistoryStepDay: (direction: -1 | 1) => void;
   onHistoryRefresh: () => void;
   githubStatus: GithubTileStatus;
   steamStatus: SteamTileStatus;
@@ -118,9 +123,14 @@ export const renderDashboardTile = (
       return (
         <HistoryTile
           history={ctx.history}
+          dayLabel={ctx.historyDayLabel}
+          dayRange={ctx.historyDayRange}
           activeAppName={ctx.historyActiveAppName}
           refreshing={ctx.historyRefreshing}
           hasLoaded={ctx.historyHasLoaded}
+          canStepBack={ctx.historyCanStepBack}
+          canStepForward={ctx.historyCanStepForward}
+          onStepDay={ctx.onHistoryStepDay}
           onRefresh={ctx.onHistoryRefresh}
         />
       );

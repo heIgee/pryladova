@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   advanceHeartbeatMemory,
+  buildHistorySpans,
   computeIntervalSegmentDurationSec,
   createHeartbeatMemoryFromDb,
   createSerializedRunner,
@@ -196,14 +197,128 @@ describe("segment.logic", () => {
     expect(parseCloseAndOpenResult({ action: "opened" })).toBeNull();
   });
 
+  it("builds day spans from overlapping segments", () => {
+    const range = { start: "2026-08-08T00:00:00.000Z", end: "2026-08-09T00:00:00.000Z" };
+
+    expect(
+      buildHistorySpans(
+        [
+          {
+            app_name: "Cursor",
+            started_at: "2026-08-07T23:00:00.000Z",
+            ended_at: "2026-08-08T01:00:00.000Z",
+          },
+          {
+            app_name: "Cursor",
+            started_at: "2026-08-08T01:00:00.000Z",
+            ended_at: "2026-08-08T01:30:00.000Z",
+          },
+          {
+            app_name: "Cursor",
+            started_at: "2026-08-08T01:30:01.000Z",
+            ended_at: "2026-08-08T01:40:00.000Z",
+          },
+          {
+            app_name: "Edge",
+            started_at: "2026-08-08T03:00:00.000Z",
+            ended_at: "2026-08-08T03:05:00.000Z",
+          },
+          {
+            app_name: "   ",
+            started_at: "2026-08-08T04:00:00.000Z",
+            ended_at: "2026-08-08T04:05:00.000Z",
+          },
+          {
+            app_name: "Cursor",
+            started_at: "2026-08-08T12:00:00.000Z",
+            ended_at: null,
+          },
+        ],
+        { lastActiveAt: "2026-08-08T12:40:00.000Z", lastSeenAt: "2026-08-08T12:40:00.000Z" },
+        range,
+      ),
+    ).toEqual([
+      {
+        appName: "Cursor",
+        startedAt: "2026-08-08T00:00:00.000Z",
+        endedAt: "2026-08-08T01:40:00.000Z",
+      },
+      {
+        appName: "Edge",
+        startedAt: "2026-08-08T03:00:00.000Z",
+        endedAt: "2026-08-08T03:05:00.000Z",
+      },
+      {
+        appName: "Cursor",
+        startedAt: "2026-08-08T12:00:00.000Z",
+        endedAt: "2026-08-08T12:40:00.000Z",
+        open: true,
+      },
+    ]);
+  });
+
+  it("ends a still-open segment at midnight on a past day", () => {
+    expect(
+      buildHistorySpans(
+        [
+          {
+            app_name: "Cursor",
+            started_at: "2026-08-07T23:00:00.000Z",
+            ended_at: null,
+          },
+        ],
+        { lastActiveAt: "2026-08-08T12:00:00.000Z", lastSeenAt: "2026-08-08T12:00:00.000Z" },
+        { start: "2026-08-07T00:00:00.000Z", end: "2026-08-08T00:00:00.000Z" },
+      ),
+    ).toEqual([
+      {
+        appName: "Cursor",
+        startedAt: "2026-08-07T23:00:00.000Z",
+        endedAt: "2026-08-08T00:00:00.000Z",
+      },
+    ]);
+  });
+
+  it("keeps a real gap between two visits to the same app", () => {
+    expect(
+      buildHistorySpans(
+        [
+          {
+            app_name: "Cursor",
+            started_at: "2026-08-08T01:00:00.000Z",
+            ended_at: "2026-08-08T01:10:00.000Z",
+          },
+          {
+            app_name: "Cursor",
+            started_at: "2026-08-08T01:10:01.001Z",
+            ended_at: "2026-08-08T01:20:00.000Z",
+          },
+        ],
+        null,
+        { start: "2026-08-08T00:00:00.000Z", end: "2026-08-09T00:00:00.000Z" },
+      ),
+    ).toEqual([
+      {
+        appName: "Cursor",
+        startedAt: "2026-08-08T01:00:00.000Z",
+        endedAt: "2026-08-08T01:10:00.000Z",
+      },
+      {
+        appName: "Cursor",
+        startedAt: "2026-08-08T01:10:01.001Z",
+        endedAt: "2026-08-08T01:20:00.000Z",
+      },
+    ]);
+  });
+
   it("maps interval summary rows to shared shape", () => {
     expect(
       mapIntervalSummaryRows([
-        { app_name: "Code", duration_sec: 120 },
-        { app_name: "Firefox", duration_sec: 45 },
+        { app_name: "Code", duration_sec: 120, switch_count: 4 },
+        { app_name: "Firefox", duration_sec: 45, switch_count: 0 },
       ]),
     ).toEqual([
-      { appName: "Code", durationSec: 120 },
+      { appName: "Code", durationSec: 120, switchCount: 4 },
       { appName: "Firefox", durationSec: 45 },
     ]);
   });
@@ -211,16 +326,19 @@ describe("segment.logic", () => {
   it("drops interval summary rows with blank app names", () => {
     expect(
       mapIntervalSummaryRows([
-        { app_name: "   ", duration_sec: 4 },
-        { app_name: "SearchHost.exe", duration_sec: 10 },
+        { app_name: "   ", duration_sec: 4, switch_count: 1 },
+        { app_name: "SearchHost.exe", duration_sec: 10, switch_count: 0 },
       ]),
     ).toEqual([{ appName: "SearchHost.exe", durationSec: 10 }]);
   });
 
   it("parses get_interval_summary RPC rows", () => {
     expect(parseIntervalSummaryRpcResult([{ app_name: "Code", duration_sec: "120" }])).toEqual([
-      { app_name: "Code", duration_sec: 120 },
+      { app_name: "Code", duration_sec: 120, switch_count: 0 },
     ]);
+    expect(
+      parseIntervalSummaryRpcResult([{ app_name: "Code", duration_sec: 120, switch_count: "3" }]),
+    ).toEqual([{ app_name: "Code", duration_sec: 120, switch_count: 3 }]);
     expect(parseIntervalSummaryRpcResult(null)).toEqual([]);
     expect(parseIntervalSummaryRpcResult([{ app_name: "Code" }])).toEqual([]);
   });

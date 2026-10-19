@@ -5,6 +5,7 @@ import {
   createHistorySession,
   createLiveHistoryTracker,
   projectLiveHistory,
+  projectLiveSpans,
   resolveHistoryLiveCapMs,
   setActiveWindow,
 } from "./history-live.js";
@@ -36,7 +37,7 @@ describe("history-live", () => {
 
     expect(tracker.totals.Cursor).toBe(150);
     expect(projectLiveHistory(tracker, Date.parse("2026-08-08T12:01:00.000Z"))).toEqual([
-      { appName: "Cursor", durationSec: 150 },
+      { appName: "Cursor", durationSec: 150, switchCount: 1 },
       { appName: "Terminal", durationSec: 30 },
     ]);
   });
@@ -99,7 +100,7 @@ describe("history-live", () => {
 
     expect(next.lastCapturedAt).toBe("2026-08-08T12:00:30.000Z");
     expect(projectLiveHistory(next.tracker, Date.parse("2026-08-08T12:01:00.000Z"))).toEqual([
-      { appName: "Cursor", durationSec: 150 },
+      { appName: "Cursor", durationSec: 150, switchCount: 1 },
       { appName: "Terminal", durationSec: 30 },
     ]);
   });
@@ -113,7 +114,7 @@ describe("history-live", () => {
 
     expect(projectLiveHistory(tracker, Date.parse("2026-08-08T12:00:10.000Z"))).toEqual([
       { appName: "Cursor", durationSec: 8 },
-      { appName: "Terminal", durationSec: 2 },
+      { appName: "Terminal", durationSec: 2, switchCount: 1 },
     ]);
   });
 
@@ -202,5 +203,98 @@ describe("history-live", () => {
     });
 
     expect(next).toBe(session);
+  });
+
+  it("splits the open span when focus moves to another app", () => {
+    const spans = [
+      {
+        appName: "Cursor",
+        startedAt: "2026-08-08T11:00:00.000Z",
+        endedAt: "2026-08-08T12:00:00.000Z",
+        open: true,
+      },
+    ];
+    const session = createHistorySession(
+      [{ appName: "Cursor", durationSec: 120 }],
+      Date.parse("2026-08-08T12:00:00.000Z"),
+      { appName: "Cursor", capturedAt: "2026-08-08T11:58:00.000Z" },
+      spans,
+      Date.parse("2026-08-09T00:00:00.000Z"),
+    );
+
+    const next = applyTelemetryUpdate(session, {
+      appName: "Terminal",
+      capturedAt: "2026-08-08T12:00:30.000Z",
+    });
+
+    expect(next.spans).toEqual([
+      {
+        appName: "Cursor",
+        startedAt: "2026-08-08T11:00:00.000Z",
+        endedAt: "2026-08-08T12:00:30.000Z",
+      },
+      {
+        appName: "Terminal",
+        startedAt: "2026-08-08T12:00:30.000Z",
+        endedAt: "2026-08-08T12:00:30.000Z",
+        open: true,
+      },
+    ]);
+  });
+
+  it("keeps one span when the title changes inside the same app", () => {
+    const spans = [
+      {
+        appName: "Cursor",
+        startedAt: "2026-08-08T11:00:00.000Z",
+        endedAt: "2026-08-08T12:00:00.000Z",
+        open: true,
+      },
+    ];
+    const session = createHistorySession(
+      [{ appName: "Cursor", durationSec: 120 }],
+      Date.parse("2026-08-08T12:00:00.000Z"),
+      { appName: "Cursor", capturedAt: "2026-08-08T11:58:00.000Z" },
+      spans,
+      Date.parse("2026-08-09T00:00:00.000Z"),
+    );
+
+    const next = applyTelemetryUpdate(session, {
+      appName: "Cursor",
+      capturedAt: "2026-08-08T12:00:30.000Z",
+    });
+
+    expect(next.spans).toBe(spans);
+  });
+
+  it("extends only the open span and stops at the end of the day", () => {
+    const closed = {
+      appName: "Notes",
+      startedAt: "2026-08-08T08:00:00.000Z",
+      endedAt: "2026-08-08T09:00:00.000Z",
+    };
+    const open = {
+      appName: "Cursor",
+      startedAt: "2026-08-08T11:00:00.000Z",
+      endedAt: "2026-08-08T12:00:00.000Z",
+      open: true as const,
+    };
+    const dayEndMs = Date.parse("2026-08-08T13:00:00.000Z");
+
+    expect(
+      projectLiveSpans([closed, open], Date.parse("2026-08-08T12:30:00.000Z"), null, dayEndMs),
+    ).toEqual([closed, { ...open, endedAt: "2026-08-08T12:30:00.000Z" }]);
+    expect(
+      projectLiveSpans([closed, open], Date.parse("2026-08-08T18:00:00.000Z"), null, dayEndMs)[1]
+        ?.endedAt,
+    ).toBe("2026-08-08T13:00:00.000Z");
+    expect(
+      projectLiveSpans(
+        [closed, open],
+        Date.parse("2026-08-08T18:00:00.000Z"),
+        Date.parse("2026-08-08T12:10:00.000Z"),
+        dayEndMs,
+      )[1]?.endedAt,
+    ).toBe("2026-08-08T12:10:00.000Z");
   });
 });

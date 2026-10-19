@@ -182,11 +182,13 @@ export const parseCloseAndOpenResult = (value: unknown): CloseAndOpenResult | nu
 export type IntervalSummaryRow = {
   app_name: string;
   duration_sec: number;
+  switch_count: number;
 };
 
 const intervalSummaryRowSchema = z.object({
   app_name: z.string(),
   duration_sec: z.coerce.number(),
+  switch_count: z.coerce.number().optional(),
 });
 
 export const parseIntervalSummaryRpcResult = (value: unknown): IntervalSummaryRow[] => {
@@ -194,19 +196,151 @@ export const parseIntervalSummaryRpcResult = (value: unknown): IntervalSummaryRo
   if (!parsed.success) {
     return [];
   }
-  return parsed.data;
+  return parsed.data.map((row) => ({
+    app_name: row.app_name,
+    duration_sec: row.duration_sec,
+    switch_count: row.switch_count ?? 0,
+  }));
+};
+
+const HISTORY_SPAN_MERGE_GAP_MS = 1000;
+
+export type HistorySpanSource = {
+  app_name: string;
+  started_at: string;
+  ended_at: string | null;
+};
+
+export type BuiltHistorySpan = {
+  appName: string;
+  startedAt: string;
+  endedAt: string;
+  open?: true;
+};
+
+const historySpanSourceSchema = z.object({
+  app_name: z.string(),
+  started_at: z.string(),
+  ended_at: z.string().nullable().optional(),
+});
+
+export const parseHistorySpanSources = (value: unknown): HistorySpanSource[] => {
+  const parsed = z.array(historySpanSourceSchema).safeParse(value);
+  if (!parsed.success) {
+    return [];
+  }
+  return parsed.data.map((row) => ({
+    app_name: row.app_name,
+    started_at: row.started_at,
+    ended_at: row.ended_at ?? null,
+  }));
+};
+
+const historySpanHeartbeatSchema = z.object({
+  last_active_at: z.string().nullable().optional(),
+  last_seen_at: z.string().nullable().optional(),
+});
+
+export const parseHistorySpanHeartbeat = (value: unknown): IntervalHeartbeatInput | null => {
+  const parsed = historySpanHeartbeatSchema.safeParse(value);
+  if (!parsed.success) {
+    return null;
+  }
+  return {
+    lastActiveAt: parsed.data.last_active_at ?? null,
+    lastSeenAt: parsed.data.last_seen_at ?? null,
+  };
+};
+
+/** Clip overlapping segments to one local day and collapse title changes inside an app. */
+export const buildHistorySpans = (
+  rows: HistorySpanSource[],
+  heartbeat: IntervalHeartbeatInput | null,
+  range: { start: string; end: string },
+): BuiltHistorySpan[] => {
+  const rangeStartMs = Date.parse(range.start);
+  const rangeEndMs = Date.parse(range.end);
+  if (
+    !Number.isFinite(rangeStartMs) ||
+    !Number.isFinite(rangeEndMs) ||
+    rangeEndMs <= rangeStartMs
+  ) {
+    return [];
+  }
+
+  const clipped = rows
+    .flatMap((row) => {
+      const appName = row.app_name.trim();
+      const startMs = Date.parse(row.started_at);
+      if (!appName || !Number.isFinite(startMs)) {
+        return [];
+      }
+
+      const rawEnd = resolveOpenSegmentEndAt(
+        { startedAt: row.started_at, endedAt: row.ended_at },
+        heartbeat,
+      );
+      const rawEndMs = Date.parse(rawEnd);
+      if (!Number.isFinite(rawEndMs)) {
+        return [];
+      }
+
+      const start = Math.max(startMs, rangeStartMs);
+      const end = Math.min(rawEndMs, rangeEndMs);
+      if (end <= start) {
+        return [];
+      }
+
+      return [
+        {
+          appName,
+          startMs: start,
+          endMs: end,
+          open: row.ended_at === null && end < rangeEndMs,
+        },
+      ];
+    })
+    .sort((left, right) => left.startMs - right.startMs || left.endMs - right.endMs);
+
+  const merged: typeof clipped = [];
+  for (const slice of clipped) {
+    const previous = merged.at(-1);
+    if (
+      previous &&
+      previous.appName === slice.appName &&
+      slice.startMs - previous.endMs <= HISTORY_SPAN_MERGE_GAP_MS
+    ) {
+      previous.endMs = Math.max(previous.endMs, slice.endMs);
+      previous.open = slice.open;
+      continue;
+    }
+    merged.push({ ...slice });
+  }
+
+  return merged.map((slice) => ({
+    appName: slice.appName,
+    startedAt: new Date(slice.startMs).toISOString(),
+    endedAt: new Date(slice.endMs).toISOString(),
+    ...(slice.open ? { open: true as const } : {}),
+  }));
 };
 
 export const mapIntervalSummaryRows = (
   rows: IntervalSummaryRow[],
-): { appName: string; durationSec: number }[] =>
+): { appName: string; durationSec: number; switchCount?: number }[] =>
   rows.flatMap((row) => {
     const appName = row.app_name.trim();
     if (!appName) {
       return [];
     }
 
-    return [{ appName, durationSec: row.duration_sec }];
+    return [
+      {
+        appName,
+        durationSec: row.duration_sec,
+        ...(row.switch_count > 0 ? { switchCount: row.switch_count } : {}),
+      },
+    ];
   });
 
 export type SerializedRunner = <T>(key: string, fn: () => Promise<T>) => Promise<T>;

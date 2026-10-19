@@ -9,6 +9,40 @@ import { apiFetch } from "./api-fetch.js";
 
 export const HISTORY_VISIBLE_LIMIT = 8;
 
+/** How many history rows fit in `availablePx`, and the gap that lands the last row on the bottom edge. */
+export const fitHistoryRows = (
+  availablePx: number,
+  rowHeightPx: number,
+  gapPx: number,
+): { count: number; gapPx: number } => {
+  if (!(availablePx > 0) || !(rowHeightPx > 0) || !(gapPx >= 0)) {
+    return { count: 1, gapPx: Math.max(0, gapPx) || 0 };
+  }
+  const count = Math.max(1, Math.floor((availablePx + gapPx) / (rowHeightPx + gapPx)));
+  const gaps = Math.max(1, count - 1);
+  const slack = availablePx - (count * rowHeightPx + Math.max(0, count - 1) * gapPx);
+  return { count, gapPx: gapPx + Math.max(0, slack) / gaps };
+};
+
+/** Today plus the six local days before it. */
+export const HISTORY_DAY_LOOKBACK = 6;
+
+export const clampHistoryDayOffset = (offset: number): number => {
+  if (!Number.isFinite(offset)) {
+    return 0;
+  }
+  return Math.min(0, Math.max(-HISTORY_DAY_LOOKBACK, Math.trunc(offset)));
+};
+
+export const shiftLocalDay = (offset: number, now = new Date()): Date => {
+  const day = new Date(now);
+  day.setDate(day.getDate() + clampHistoryDayOffset(offset));
+  return day;
+};
+
+export const localDayKey = (date = new Date()): string =>
+  `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+
 export type HistoryOtherBucket = {
   appCount: number;
   durationSec: number;

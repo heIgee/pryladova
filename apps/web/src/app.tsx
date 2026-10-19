@@ -91,11 +91,18 @@ const Dashboard = () => {
     agentLastSeenMs,
     showAgentHint || panelSubtitle === "api-unavailable",
   );
-  const { history, refreshHistory, refreshing, hasLoaded } = useHistory(
-    true,
-    liveTelemetry,
-    historyLiveCapMs,
-  );
+  const {
+    history,
+    dayLabel: historyDayLabel,
+    dayRange: historyDayRange,
+    isToday: historyIsToday,
+    canStepBack: historyCanStepBack,
+    canStepForward: historyCanStepForward,
+    stepDay: stepHistoryDay,
+    refreshHistory,
+    refreshing,
+    hasLoaded,
+  } = useHistory(true, liveTelemetry, historyLiveCapMs);
 
   const tileContext = {
     panel,
@@ -110,9 +117,14 @@ const Dashboard = () => {
     settingsReady,
     onClassificationChange: handleClassificationToggle,
     history,
-    historyActiveAppName: liveTelemetry?.appName ?? null,
+    historyDayLabel,
+    historyDayRange,
+    historyActiveAppName: historyIsToday ? (liveTelemetry?.appName ?? null) : null,
     historyRefreshing: refreshing,
     historyHasLoaded: hasLoaded,
+    historyCanStepBack,
+    historyCanStepForward,
+    onHistoryStepDay: stepHistoryDay,
     onHistoryRefresh: () => {
       void refreshHistory();
     },

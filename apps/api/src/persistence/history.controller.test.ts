@@ -11,6 +11,10 @@ const createController = async (options: {
   persistedAgentId?: string | null;
   heartbeatError?: { message: string; code?: string };
   rpcResult?: { data: unknown; error: unknown };
+  segments?: unknown;
+  segmentsError?: { message: string; code?: string } | null;
+  spanHeartbeat?: { last_active_at: string | null; last_seen_at: string | null } | null;
+  spanHeartbeatError?: { message: string; code?: string } | null;
 }) => {
   const rpc = vi.fn().mockResolvedValue(
     options.rpcResult ?? {
@@ -33,27 +37,52 @@ const createController = async (options: {
           getClient: () => ({
             rpc,
             from: (table: string) => {
+              if (table === "window_segments") {
+                const builder = {
+                  select: () => builder,
+                  eq: () => builder,
+                  lt: () => builder,
+                  or: () => builder,
+                  order: async () => ({
+                    data: options.segments ?? [],
+                    error: options.segmentsError ?? null,
+                  }),
+                };
+                return builder;
+              }
               if (table !== "agent_heartbeats") {
                 throw new Error(`Unexpected table ${table}`);
               }
               return {
-                select: () => ({
-                  order: () => ({
-                    limit: () => ({
-                      maybeSingle: async () => {
-                        if (options.heartbeatError) {
-                          return { data: null, error: options.heartbeatError };
-                        }
-                        return {
-                          data: options.persistedAgentId
-                            ? { agent_id: options.persistedAgentId }
-                            : null,
-                          error: null,
-                        };
-                      },
+                select: (columns?: string) => {
+                  if (typeof columns === "string" && columns.includes("last_active_at")) {
+                    return {
+                      eq: () => ({
+                        maybeSingle: async () => ({
+                          data: options.spanHeartbeat ?? null,
+                          error: options.spanHeartbeatError ?? null,
+                        }),
+                      }),
+                    };
+                  }
+                  return {
+                    order: () => ({
+                      limit: () => ({
+                        maybeSingle: async () => {
+                          if (options.heartbeatError) {
+                            return { data: null, error: options.heartbeatError };
+                          }
+                          return {
+                            data: options.persistedAgentId
+                              ? { agent_id: options.persistedAgentId }
+                              : null,
+                            error: null,
+                          };
+                        },
+                      }),
                     }),
-                  }),
-                }),
+                  };
+                },
               };
             },
           }),
@@ -82,11 +111,57 @@ describe("HistoryController", () => {
     });
 
     expect(result.entries).toEqual([{ appName: "Code", durationSec: 120 }]);
+    expect(result.spans).toEqual([]);
     expect(rpc).toHaveBeenCalledWith("get_interval_summary", {
       p_agent_id: "desk-pc",
       p_range_start: "2026-08-08T00:00:00.000Z",
       p_range_end: "2026-08-08T01:00:00.000Z",
     });
+  });
+
+  it("returns clipped spans beside the duration totals", async () => {
+    const { controller } = await createController({
+      segments: [
+        {
+          app_name: "Code",
+          started_at: "2026-08-08T00:10:00.000Z",
+          ended_at: "2026-08-08T00:20:00.000Z",
+        },
+        {
+          app_name: "Code",
+          started_at: "2026-08-08T00:20:00.000Z",
+          ended_at: "2026-08-08T00:30:00.000Z",
+        },
+        {
+          app_name: "Firefox",
+          started_at: "2026-08-08T00:40:00.000Z",
+          ended_at: null,
+        },
+      ],
+      spanHeartbeat: {
+        last_active_at: "2026-08-08T00:45:00.000Z",
+        last_seen_at: "2026-08-08T00:45:00.000Z",
+      },
+    });
+
+    const result = await controller.getHistory({
+      from: "2026-08-08T00:00:00.000Z",
+      to: "2026-08-08T01:00:00.000Z",
+    });
+
+    expect(result.spans).toEqual([
+      {
+        appName: "Code",
+        startedAt: "2026-08-08T00:10:00.000Z",
+        endedAt: "2026-08-08T00:30:00.000Z",
+      },
+      {
+        appName: "Firefox",
+        startedAt: "2026-08-08T00:40:00.000Z",
+        endedAt: "2026-08-08T00:45:00.000Z",
+        open: true,
+      },
+    ]);
   });
 
   it("prefers explicit agentId over the bound agent", async () => {
@@ -120,7 +195,7 @@ describe("HistoryController", () => {
         from: "2026-08-08T00:00:00.000Z",
         to: "2026-08-08T01:00:00.000Z",
       }),
-    ).resolves.toEqual({ entries: [] });
+    ).resolves.toEqual({ entries: [], spans: [] });
     expect(rpc).not.toHaveBeenCalled();
   });
 

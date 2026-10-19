@@ -44,8 +44,6 @@ Shipped: **GitHub**, **Steam**, **Google Calendar** (in-meeting + next event), a
 
 - **Real CSS grid spans** — History left, integration tiles right (shipped for GitHub/Steam); widen further as tiles grow
 - **Status strip** — Discord when wired; separate from window / machine / media
-- **Day strip / timeline** — horizontal time-per-app view alongside bar chart
-- **History date picker** — not just "today"
 - **One live motion element** — network sparkline or CPU mini-chart from WS ticks
 - **Defer `react-grid-layout`** until tile set stabilizes
 - No productivity scoring, distraction alerts, or work/personal guilt chips
