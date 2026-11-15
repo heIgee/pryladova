@@ -11,6 +11,7 @@ import { integrationListCap, steamLayoutClasses } from "@/lib/bento-tile-variant
 import { formatDuration, formatPlaytimeMinutes } from "@/lib/format";
 import type { SteamTileStatus } from "@/lib/integration-status";
 import { isIntegrationLoading } from "@/lib/integration-status";
+import { safeHttpUrl } from "@/lib/safe-url";
 import { cn } from "@/lib/utils";
 
 const personaLabel = (state: SteamPersonaState): string => {
@@ -60,6 +61,8 @@ export const SteamStatusTile = ({
   const { row } = useBentoTileSize();
   const listCap = integrationListCap(row);
   const recentGames = status.status === "ready" ? status.recentlyPlayed.slice(0, listCap) : [];
+  const profileHref = status.status === "ready" ? safeHttpUrl(status.profileUrl) : null;
+  const avatarSrc = status.status === "ready" ? safeHttpUrl(status.avatarUrl) : null;
 
   return (
     <Card size="sm" className={cn(bentoTileCardClassName, className)} data-testid="steam-tile">
@@ -100,15 +103,15 @@ export const SteamStatusTile = ({
         {status.status === "ready" ? (
           <>
             <div className={cn("flex items-start gap-2.5", steamLayoutClasses.profile)}>
-              {status.profileUrl ? (
+              {profileHref ? (
                 <a
-                  href={status.profileUrl}
+                  href={profileHref}
                   target="_blank"
                   rel="noreferrer"
                   className="size-9 shrink-0 overflow-hidden rounded-lg bg-muted ring-1 ring-border/60"
                 >
-                  {status.avatarUrl ? (
-                    <img src={status.avatarUrl} alt="" className="size-full object-cover" />
+                  {avatarSrc ? (
+                    <img src={avatarSrc} alt="" className="size-full object-cover" />
                   ) : (
                     <div className="flex size-full items-center justify-center text-muted-foreground">
                       <UserRound className="size-4" aria-hidden="true" />
@@ -117,8 +120,8 @@ export const SteamStatusTile = ({
                 </a>
               ) : (
                 <div className="size-9 shrink-0 overflow-hidden rounded-lg bg-muted ring-1 ring-border/60">
-                  {status.avatarUrl ? (
-                    <img src={status.avatarUrl} alt="" className="size-full object-cover" />
+                  {avatarSrc ? (
+                    <img src={avatarSrc} alt="" className="size-full object-cover" />
                   ) : (
                     <div className="flex size-full items-center justify-center text-muted-foreground">
                       <UserRound className="size-4" aria-hidden="true" />
@@ -127,9 +130,9 @@ export const SteamStatusTile = ({
                 </div>
               )}
               <div className="min-w-0 flex-1 grid gap-0.5">
-                {status.profileUrl ? (
+                {profileHref ? (
                   <a
-                    href={status.profileUrl}
+                    href={profileHref}
                     target="_blank"
                     rel="noreferrer"
                     className="truncate text-caption font-medium hover:underline"
@@ -153,23 +156,26 @@ export const SteamStatusTile = ({
             {recentGames.length > 0 ? (
               <div className={steamLayoutClasses.list}>
                 <p className="text-micro text-muted-foreground">Recently played</p>
-                {recentGames.map((game) => (
-                  <div key={game.name} className="flex min-w-0 items-center gap-2 text-caption">
-                    <div className="size-6 shrink-0 overflow-hidden rounded bg-muted ring-1 ring-border/60">
-                      {game.iconUrl ? (
-                        <img src={game.iconUrl} alt="" className="size-full object-cover" />
-                      ) : (
-                        <div className="flex size-full items-center justify-center text-muted-foreground">
-                          <SteamIcon className="size-3" />
-                        </div>
-                      )}
+                {recentGames.map((game) => {
+                  const iconSrc = safeHttpUrl(game.iconUrl);
+                  return (
+                    <div key={game.name} className="flex min-w-0 items-center gap-2 text-caption">
+                      <div className="size-6 shrink-0 overflow-hidden rounded bg-muted ring-1 ring-border/60">
+                        {iconSrc ? (
+                          <img src={iconSrc} alt="" className="size-full object-cover" />
+                        ) : (
+                          <div className="flex size-full items-center justify-center text-muted-foreground">
+                            <SteamIcon className="size-3" />
+                          </div>
+                        )}
+                      </div>
+                      <span className="min-w-0 flex-1 truncate">{game.name}</span>
+                      <span className="shrink-0 tabular-nums text-muted-foreground">
+                        {formatPlaytimeMinutes(game.playtime2WeeksMin)}
+                      </span>
                     </div>
-                    <span className="min-w-0 flex-1 truncate">{game.name}</span>
-                    <span className="shrink-0 tabular-nums text-muted-foreground">
-                      {formatPlaytimeMinutes(game.playtime2WeeksMin)}
-                    </span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : null}
           </>

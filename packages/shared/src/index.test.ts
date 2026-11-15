@@ -8,6 +8,7 @@ import {
   holdHostMedia,
   hostMediaSchema,
   hostPayloadForPanelWs,
+  isRasterImageDataUrl,
   isRedactedTelemetry,
   mergeHostPayload,
   mergeTelemetryState,
@@ -128,6 +129,39 @@ describe("hostMediaSchema", () => {
       playbackStatus: "playing",
     });
     expect(media.thumbnailDataUrl).toBeNull();
+  });
+
+  it.each([
+    "data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=",
+    "data:image/svg+xml,<svg></svg>",
+    "data:image/jpeg,raw",
+    "data:text/html;base64,abc",
+  ])("rejects non-raster thumbnail %s", (thumbnailDataUrl) => {
+    expect(() =>
+      hostMediaSchema.parse({
+        title: "Track",
+        artist: null,
+        albumTitle: null,
+        appName: null,
+        playbackStatus: "playing",
+        thumbnailDataUrl,
+      }),
+    ).toThrow();
+  });
+
+  it.each(["png", "jpeg", "gif", "webp", "bmp", "PNG"])("accepts %s thumbnails", (subtype) => {
+    const thumbnailDataUrl = `data:image/${subtype};base64,abc`;
+    expect(isRasterImageDataUrl(thumbnailDataUrl)).toBe(true);
+    expect(
+      hostMediaSchema.parse({
+        title: "Track",
+        artist: null,
+        albumTitle: null,
+        appName: null,
+        playbackStatus: "playing",
+        thumbnailDataUrl,
+      }).thumbnailDataUrl,
+    ).toBe(thumbnailDataUrl);
   });
 
   it("rejects oversized thumbnail data url", () => {

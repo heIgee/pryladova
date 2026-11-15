@@ -19,4 +19,8 @@ describe("session", () => {
     const cookieHeader = `pryladova_session=${token}`;
     expect(readSessionCookie(cookieHeader, secret)).toBe(true);
   });
+
+  it("treats a malformed session cookie as signed out", () => {
+    expect(readSessionCookie("pryladova_session=%", secret)).toBe(false);
+  });
 });

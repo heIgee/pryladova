@@ -11,8 +11,7 @@ Future work — not scheduled. Stack and deploy: [README.md](README.md), [deploy
 ## Identity and config (self-hosted)
 
 - Multi-agent panel UX — label/select machines (`AGENT_ID` already in ingest)
-- **Integration keys on the server** — env-based secrets; configure once, restart API
-- **Settings → Integrations** in panel — masked keys, docs links; full UI persistence waits on settings store
+- **Settings → Integrations** in panel — masked keys, docs links
 
 ## Integrations (bento tiles)
 
@@ -21,8 +20,6 @@ Server-side fetch + cache (minutes-scale TTL). Pattern: copy `integrations/weath
 ### Env-key tiles
 
 - **Service ping grid** — ICMP or HTTP checks from API cron (router, NAS, self)
-
-Shipped: **GitHub**, **Steam**, **Google Calendar** (in-meeting + next event), and **Google Tasks** (open + due today) — env keys or OAuth in API, 5m cache, bento tiles beside history.
 
 ### OAuth (later)
 
@@ -42,18 +39,14 @@ Shipped: **GitHub**, **Steam**, **Google Calendar** (in-meeting + next event), a
 
 ### Bento layout
 
-- **Real CSS grid spans** — History left, integration tiles right (shipped for GitHub/Steam); widen further as tiles grow
 - **Status strip** — Discord when wired; separate from window / machine / media
 - **One live motion element** — network sparkline or CPU mini-chart from WS ticks
-- **Defer `react-grid-layout`** until tile set stabilizes
 - No productivity scoring, distraction alerts, or work/personal guilt chips
 
 ## API / ops
 
 - **Horizontal scaling (multi-instance API)** — segment writes, heartbeat debounce, and stale sweep need coordination (advisory locks, outbox, or single writer)
 - E2E coverage for production auth path — partial in `e2e/panel*.spec.ts`
-- Reject non-raster `thumbnailDataUrl` at API/shared boundary (SVG etc.)
-- Contract tests: API responses satisfy shared Zod output schemas
 - **Integration health** — per-tile stale/error flags on panel
 - **Panel WS payload budgets** — as optional host fields (network, GPU) grow
 
@@ -80,17 +73,10 @@ Extend `hostPayloadSchema` in shared. Host metrics stay ephemeral — sparklines
 - **Circuit breaker** (`opossum`) around API calls
 - **Local retry queue** (`better-sqlite3`) — pairs with `eventId` for idempotent replay
 - **Node.js SEA** for distributable `.exe`
-- Graceful shutdown — `clearInterval` on SIGINT/SIGTERM (shutdown message exists; poll loop does not stop)
-- `pickCurrentSession` stable tie-breaking when multiple SMTC sessions share rank
-- Degrade gracefully when `active-win` fails — don't skip window telemetry after a successful host tick
-- Reset track/thumbnail cache when SMTC session clears
-
 ## Product and UX
 
-- **Multi-day history** — week view, app-switching patterns
-- **`close_reason` in timeline UI** — stale vs focus_change vs shutdown
+- **Week history view** — app-switching patterns across days
 - Weather popover full a11y (arrow keys, focus trap, `aria-activedescendant`)
-- Consolidate WMO weather code → icon mapping in shared
 - Host CPU/RAM/media stale when host ticks stop but window telemetry still updates
 - Use release from `GET /api/health` for deploy verification (web uses build-time `VITE_APP_RELEASE` today)
 

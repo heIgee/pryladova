@@ -80,7 +80,7 @@ Caddy, `.env`, and Caddyfile are configured **once on the host** — not touched
 
 | File on host | Variables | Consumed by |
 |--------------|-----------|-------------|
-| `~/pryladova/.env` | `INGEST_SECRET`, `SESSION_SECRET`, `PANEL_PASSWORD_HASH_B64`, `GEMINI_*`, `SENTRY_*`, `SUPABASE_*`, `PORT`, `GHCR_OWNER` | API Docker container + compose |
+| `~/pryladova/.env` | `INGEST_SECRET`, `SESSION_SECRET`, `PANEL_PASSWORD_HASH_B64`, `GEMINI_*`, `SENTRY_*`, `SUPABASE_*`, `PORT`, `GHCR_OWNER`, integration keys — full list in [`env.example`](env.example) | API Docker container + compose |
 | `/etc/caddy/pryladova.env` | `PRYLADOVA_DOMAIN`, `PRYLADOVA_WEB_ROOT` | Caddy process |
 
 **Panel password on prod:** Docker Compose mangles `$` in bcrypt hashes. Set `PANEL_PASSWORD_HASH_B64` (not plain `PANEL_PASSWORD_HASH`):

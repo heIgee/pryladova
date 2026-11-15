@@ -149,8 +149,7 @@ const connect = (store: PanelStreamStore): void => {
       store.panel = applyPanelWsMessage(store.panel, message);
       notify(store);
     } catch {
-      store.panel = { status: "error", message: "Invalid telemetry response" };
-      notify(store);
+      // One bad frame must not latch the panel; the next valid message still applies.
     }
   };
 

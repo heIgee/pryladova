@@ -20,7 +20,7 @@ export const isIngestAuthorized = (
   ingestSecret: string | undefined,
 ): boolean => {
   if (!ingestSecret) {
-    return true;
+    return false;
   }
 
   const token = readBearerToken(authorization);

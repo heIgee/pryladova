@@ -50,7 +50,7 @@ export class GoogleOauthController {
     private readonly googleAccountService: GoogleAccountService,
   ) {}
 
-  @Get(GOOGLE_CONNECT_ROUTE)
+  @Post(GOOGLE_CONNECT_ROUTE)
   connect(
     @Query("reconnect") reconnectRaw: string | undefined,
     @Res({ passthrough: true }) response: Response,

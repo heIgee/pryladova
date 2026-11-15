@@ -23,9 +23,9 @@ const createGuard = (ingestSecret: string | undefined): IngestAuthGuard =>
   } as ConfigService);
 
 describe("IngestAuthGuard", () => {
-  it("allows requests when ingest secret is unset", () => {
+  it("rejects requests when ingest secret is unset", () => {
     const guard = createGuard(undefined);
-    expect(guard.canActivate(createContext())).toBe(true);
+    expect(() => guard.canActivate(createContext())).toThrow(UnauthorizedException);
   });
 
   it("allows valid bearer token", () => {

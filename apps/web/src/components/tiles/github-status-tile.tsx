@@ -15,6 +15,7 @@ import {
 } from "@/lib/bento-tile-variants";
 import type { GithubTileStatus } from "@/lib/integration-status";
 import { isIntegrationLoading } from "@/lib/integration-status";
+import { safeHttpUrl } from "@/lib/safe-url";
 import { cn } from "@/lib/utils";
 
 const ciStatusLabel = (status: CiCheckStatus): string => {
@@ -70,6 +71,8 @@ export const GithubStatusTile = ({
   const layout = githubLayoutClasses[variant];
   const listCap = integrationListCap(size.row);
   const checks = status.status === "ready" ? status.checks.slice(0, listCap) : [];
+  const profileHref = status.status === "ready" ? safeHttpUrl(status.profileUrl) : null;
+  const avatarSrc = status.status === "ready" ? safeHttpUrl(status.avatarUrl) : null;
 
   return (
     <Card size="sm" className={cn(bentoTileCardClassName, className)} data-testid="github-tile">
@@ -98,25 +101,35 @@ export const GithubStatusTile = ({
         {status.status === "ready" ? (
           <>
             <div className="flex items-center gap-2.5">
-              {status.avatarUrl ? (
-                <a
-                  href={status.profileUrl ?? undefined}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="size-9 shrink-0 overflow-hidden rounded-lg bg-muted ring-1 ring-border/60"
-                >
-                  <img src={status.avatarUrl} alt="" className="size-full object-cover" />
-                </a>
+              {avatarSrc ? (
+                profileHref ? (
+                  <a
+                    href={profileHref}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="size-9 shrink-0 overflow-hidden rounded-lg bg-muted ring-1 ring-border/60"
+                  >
+                    <img src={avatarSrc} alt="" className="size-full object-cover" />
+                  </a>
+                ) : (
+                  <div className="size-9 shrink-0 overflow-hidden rounded-lg bg-muted ring-1 ring-border/60">
+                    <img src={avatarSrc} alt="" className="size-full object-cover" />
+                  </div>
+                )
               ) : null}
               <div className="min-w-0 flex-1">
-                <a
-                  href={status.profileUrl ?? undefined}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="truncate text-caption font-medium hover:underline"
-                >
-                  @{status.username}
-                </a>
+                {profileHref ? (
+                  <a
+                    href={profileHref}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="truncate text-caption font-medium hover:underline"
+                  >
+                    @{status.username}
+                  </a>
+                ) : (
+                  <span className="truncate text-caption font-medium">@{status.username}</span>
+                )}
                 <p className="text-micro text-muted-foreground tabular-nums">
                   {status.publicRepos} repos · {status.followers} followers
                 </p>

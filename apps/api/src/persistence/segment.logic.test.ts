@@ -9,7 +9,9 @@ import {
   isStaleHeartbeatGap,
   mapIntervalSummaryRows,
   parseCloseAndOpenResult,
+  parseHistorySpanSources,
   parseIntervalSummaryRpcResult,
+  resolveHostTickCloseAt,
   resolveIdleResumeCloseAt,
   resolveLastActiveAt,
   resolveOpenSegmentEndAt,
@@ -255,6 +257,104 @@ describe("segment.logic", () => {
         open: true,
       },
     ]);
+  });
+
+  it("carries stale and shutdown close reasons on visible span ends", () => {
+    expect(
+      buildHistorySpans(
+        [
+          {
+            app_name: "Cursor",
+            started_at: "2026-08-08T01:00:00.000Z",
+            ended_at: "2026-08-08T01:10:00.000Z",
+            close_reason: "focus_change",
+          },
+          {
+            app_name: "Edge",
+            started_at: "2026-08-08T01:10:00.000Z",
+            ended_at: "2026-08-08T01:20:00.000Z",
+            close_reason: "stale",
+          },
+          {
+            app_name: "Edge",
+            started_at: "2026-08-08T01:20:00.500Z",
+            ended_at: "2026-08-08T01:30:00.000Z",
+            close_reason: "shutdown",
+          },
+          {
+            app_name: "Cursor",
+            started_at: "2026-08-08T23:00:00.000Z",
+            ended_at: "2026-08-09T01:00:00.000Z",
+            close_reason: "stale",
+          },
+        ],
+        null,
+        { start: "2026-08-08T00:00:00.000Z", end: "2026-08-09T00:00:00.000Z" },
+      ),
+    ).toEqual([
+      {
+        appName: "Cursor",
+        startedAt: "2026-08-08T01:00:00.000Z",
+        endedAt: "2026-08-08T01:10:00.000Z",
+      },
+      {
+        appName: "Edge",
+        startedAt: "2026-08-08T01:10:00.000Z",
+        endedAt: "2026-08-08T01:30:00.000Z",
+        closeReason: "shutdown",
+      },
+      {
+        appName: "Cursor",
+        startedAt: "2026-08-08T23:00:00.000Z",
+        endedAt: "2026-08-09T00:00:00.000Z",
+      },
+    ]);
+  });
+
+  it("ignores unknown close reasons", () => {
+    expect(
+      parseHistorySpanSources([
+        {
+          app_name: "Cursor",
+          started_at: "2026-08-08T01:00:00.000Z",
+          ended_at: "2026-08-08T01:10:00.000Z",
+          close_reason: "lock",
+        },
+      ]).flatMap((row) =>
+        buildHistorySpans([row], null, {
+          start: "2026-08-08T00:00:00.000Z",
+          end: "2026-08-09T00:00:00.000Z",
+        }),
+      ),
+    ).toEqual([
+      {
+        appName: "Cursor",
+        startedAt: "2026-08-08T01:00:00.000Z",
+        endedAt: "2026-08-08T01:10:00.000Z",
+      },
+    ]);
+  });
+
+  it("closes a host-tick gap at last input when that is earlier than last seen", () => {
+    expect(
+      resolveHostTickCloseAt(
+        "2026-08-08T12:00:00.000Z",
+        "2026-08-08T10:00:00.000Z",
+        "2026-08-08T10:00:00.000Z",
+        "2026-08-08T12:10:00.000Z",
+      ),
+    ).toBe("2026-08-08T10:00:00.000Z");
+  });
+
+  it("does not close a host tick when the seen gap is still fresh", () => {
+    expect(
+      resolveHostTickCloseAt(
+        "2026-08-08T12:00:00.000Z",
+        "2026-08-08T12:00:00.000Z",
+        "2026-08-08T12:00:04.000Z",
+        "2026-08-08T12:00:04.000Z",
+      ),
+    ).toBeNull();
   });
 
   it("ends a still-open segment at midnight on a past day", () => {

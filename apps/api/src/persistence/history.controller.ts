@@ -85,7 +85,7 @@ export class HistoryController {
     const [segmentsResult, heartbeatResult] = await Promise.all([
       client
         .from("window_segments")
-        .select("app_name, started_at, ended_at")
+        .select("app_name, started_at, ended_at, close_reason")
         .eq("agent_id", agentId)
         .lt("started_at", to)
         .or(`ended_at.gt."${from}",ended_at.is.null`)

@@ -1,4 +1,4 @@
-import type { HistoryEntry, HistorySpan } from "@pryladova/shared";
+import type { HistoryEntry, HistorySpan, HistorySpanCloseReason } from "@pryladova/shared";
 import { ChevronLeft, ChevronRight, Clock3, RefreshCw } from "lucide-react";
 import {
   type MouseEvent,
@@ -142,6 +142,12 @@ type HistoryStripSlice = {
   shadeIndex: number;
   startMs: number;
   endMs: number;
+  closeReason?: HistorySpanCloseReason;
+};
+
+const CLOSE_REASON_LABELS: Record<HistorySpanCloseReason, string> = {
+  stale: "went idle or offline",
+  shutdown: "agent stopped",
 };
 
 const recordedHistorySpan = (spans: HistorySpan[]): { startMs: number; endMs: number } | null => {
@@ -176,7 +182,13 @@ const buildHistoryStripSlices = (spans: HistorySpan[]): HistoryStripSlice[] => {
       shadeIndex = (shadeIndex + 1) % STRIP_ALPHAS.length;
     }
     previousShade = shadeIndex;
-    slices.push({ appName: span.appName, shadeIndex, startMs, endMs });
+    slices.push({
+      appName: span.appName,
+      shadeIndex,
+      startMs,
+      endMs,
+      ...(span.closeReason ? { closeReason: span.closeReason } : {}),
+    });
   }
   return slices;
 };
@@ -345,6 +357,14 @@ const HistoryDayStrip = ({
               {formatLocalClock(new Date(active.startMs))}–
               {formatLocalClock(new Date(active.endMs))} · {formatDurationSec(durationSec)}
             </p>
+            {active.closeReason ? (
+              <p
+                className="whitespace-nowrap text-micro text-muted-foreground"
+                data-testid="history-day-strip-close-reason"
+              >
+                Ended: {CLOSE_REASON_LABELS[active.closeReason]}
+              </p>
+            ) : null}
           </div>
         ) : null}
       </div>

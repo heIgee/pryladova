@@ -23,7 +23,11 @@ const bootstrap = async (): Promise<void> => {
     credentials: true,
   });
   const port = Number(process.env.PORT ?? 3000);
-  await app.listen(port);
+  if (process.env.NODE_ENV === "test") {
+    await app.listen(port, "127.0.0.1");
+  } else {
+    await app.listen(port);
+  }
 };
 
 void bootstrap().catch((error: unknown) => {

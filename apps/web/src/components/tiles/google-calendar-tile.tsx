@@ -1,5 +1,4 @@
 import type { CalendarEvent } from "@pryladova/shared";
-import { GOOGLE_CONNECT_ROUTE } from "@pryladova/shared";
 import { Calendar } from "lucide-react";
 import { BentoTileHeader } from "@/components/tiles/bento-tile-header";
 import {
@@ -7,6 +6,7 @@ import {
   bentoTileCardClassName,
   bentoTileLucideIconClassName,
 } from "@/components/tiles/bento-tile-header-layout";
+import { GoogleConnectLink } from "@/components/tiles/google-connect-link";
 import { GoogleTileSkeleton } from "@/components/tiles/integration-tile-skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -112,12 +112,7 @@ export const GoogleCalendarTile = ({
       {status.status === "needs_auth" ? (
         <div className="grid gap-1.5">
           <p className="text-caption text-muted-foreground">Google not connected</p>
-          <a
-            href={GOOGLE_CONNECT_ROUTE}
-            className="text-caption font-medium text-primary hover:underline"
-          >
-            Connect Google
-          </a>
+          <GoogleConnectLink label="Connect Google" />
         </div>
       ) : null}
       {status.status === "misconfigured" ? (

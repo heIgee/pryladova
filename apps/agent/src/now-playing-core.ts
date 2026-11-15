@@ -1,4 +1,9 @@
-import { type HostMedia, type PlaybackStatus, trackMediaKey } from "@pryladova/shared";
+import {
+  type HostMedia,
+  isRasterImageDataUrl,
+  type PlaybackStatus,
+  trackMediaKey,
+} from "@pryladova/shared";
 
 export { trackMediaKey };
 
@@ -27,7 +32,7 @@ const asThumbnailDataUrl = (value: unknown): string | null => {
     return null;
   }
   const trimmed = value.trim();
-  if (!trimmed.startsWith("data:image/")) {
+  if (!isRasterImageDataUrl(trimmed)) {
     return null;
   }
   return trimmed;
@@ -71,9 +76,12 @@ export const pickCurrentSession = (sessions: readonly MediaSession[]): MediaSess
     return null;
   }
 
+  // SMTC enumeration order is not stable across polls; tie-break on id so equal-rank sessions don't flap.
   return (
     [...candidates].sort(
-      (left, right) => playbackRank(left.playbackStatus) - playbackRank(right.playbackStatus),
+      (left, right) =>
+        playbackRank(left.playbackStatus) - playbackRank(right.playbackStatus) ||
+        left.id.localeCompare(right.id),
     )[0] ?? null
   );
 };

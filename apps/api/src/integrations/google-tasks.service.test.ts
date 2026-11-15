@@ -1,4 +1,5 @@
 import { Test } from "@nestjs/testing";
+import { googleTasksStatusResponseSchema } from "@pryladova/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ApiConfig } from "../config.js";
 import { ConfigService } from "../config.service.js";
@@ -113,6 +114,7 @@ describe("GoogleTasksService", () => {
 
     const status = await service.getStatus(true);
     expect(status.status).toBe("ready");
+    expect(googleTasksStatusResponseSchema.safeParse(status).success).toBe(true);
     if (status.status === "ready") {
       expect(status.accountEmail).toBe("user@example.com");
       expect(status.openCount).toBe(1);

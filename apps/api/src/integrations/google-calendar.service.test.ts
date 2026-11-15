@@ -1,4 +1,5 @@
 import { Test } from "@nestjs/testing";
+import { googleCalendarStatusResponseSchema } from "@pryladova/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ApiConfig } from "../config.js";
 import { ConfigService } from "../config.service.js";
@@ -118,6 +119,7 @@ describe("GoogleCalendarService", () => {
     const service = await createService();
     const status = await service.getStatus(true);
     expect(status.status).toBe("ready");
+    expect(googleCalendarStatusResponseSchema.safeParse(status).success).toBe(true);
     if (status.status === "ready") {
       expect(status.inMeeting).toBe(false);
       expect(status.accountEmail).toBe("user@example.com");

@@ -76,6 +76,9 @@ describe("panel stream store", () => {
       telemetry: expect.objectContaining({ appName: "Code" }),
     });
 
+    socket.onmessage?.({ data: "not-json" } as MessageEvent<string>);
+    expect(getPanelPollSnapshot().panel.status).toBe("ready");
+
     unsubscribe();
     expect(states).toContain("ready");
   });

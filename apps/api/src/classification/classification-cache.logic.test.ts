@@ -119,12 +119,15 @@ describe("isClassificationCacheFresh", () => {
 describe("parseClassificationCacheRow", () => {
   it("parses stored classification json", () => {
     expect(
-      parseClassificationCacheRow({
-        app_name: "Code",
-        window_title: "app.tsx",
-        classification,
-        updated_at: "2026-08-09T12:00:00.000Z",
-      }),
+      parseClassificationCacheRow(
+        {
+          app_name: "Code",
+          window_title: "app.tsx",
+          classification,
+          updated_at: "2026-08-09T12:00:00.000Z",
+        },
+        Date.parse("2026-08-09T12:00:00.000Z"),
+      ),
     ).toEqual(classification);
   });
 
@@ -144,12 +147,15 @@ describe("parseClassificationCacheRow", () => {
 
   it("returns null for invalid stored classification", () => {
     expect(
-      parseClassificationCacheRow({
-        app_name: "Code",
-        window_title: "app.tsx",
-        classification: { category: "NotReal" },
-        updated_at: "2026-08-09T12:00:00.000Z",
-      }),
+      parseClassificationCacheRow(
+        {
+          app_name: "Code",
+          window_title: "app.tsx",
+          classification: { category: "NotReal" },
+          updated_at: "2026-08-09T12:00:00.000Z",
+        },
+        Date.parse("2026-08-09T12:00:00.000Z"),
+      ),
     ).toBeNull();
   });
 });

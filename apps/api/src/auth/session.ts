@@ -55,7 +55,11 @@ export const readSessionCookie = (cookieHeader: string | undefined, secret: stri
     if (value.length === 0) {
       return false;
     }
-    return verifySessionToken(decodeURIComponent(value), secret);
+    try {
+      return verifySessionToken(decodeURIComponent(value), secret);
+    } catch {
+      return false;
+    }
   }
 
   return false;

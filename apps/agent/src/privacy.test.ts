@@ -33,12 +33,19 @@ describe("sanitizeSnapshot", () => {
     const result = sanitizeSnapshot(snapshot("Inbox — user@example.com", "Outlook"), blocked);
     expect(result.windowTitle).toBe("Inbox — [email]");
     expect(result.appName).toBe("Outlook");
+    expect(
+      sanitizeSnapshot(snapshot("Inbox — admin@localhost", "Outlook"), blocked).windowTitle,
+    ).toBe("Inbox — [email]");
   });
 
   it("redacts Windows paths in window titles", () => {
     const blocked = createBlockedAppsSet([]);
     const result = sanitizeSnapshot(snapshot("Editing C:\\Users\\me\\secret.txt", "Code"), blocked);
     expect(result.windowTitle).toBe("Editing [path]");
+    expect(
+      sanitizeSnapshot(snapshot("Editing C:/Users/me/secret.txt — Code", "Code"), blocked)
+        .windowTitle,
+    ).toBe("Editing [path] — Code");
   });
 
   it("redacts Windows paths that contain spaces", () => {
@@ -66,6 +73,15 @@ describe("sanitizeSnapshot", () => {
       appName: "Code",
       windowTitle: "app.tsx — pryladova",
     });
+  });
+
+  it("does not redact https urls in window titles", () => {
+    const blocked = createBlockedAppsSet([]);
+    const result = sanitizeSnapshot(
+      snapshot("Release notes — https://example.com/page", "Chrome"),
+      blocked,
+    );
+    expect(result.windowTitle).toBe("Release notes — https://example.com/page");
   });
 
   it("uses executable basename when process name is blank", () => {
@@ -100,6 +116,6 @@ describe("sanitizeSnapshot", () => {
     const blocked = createBlockedAppsSet([]);
     const window = snapshot("Secrets", "1Password");
     expect(shouldOmitHostMedia(window, blocked)).toBe(true);
-    expect(shouldOmitHostMedia(undefined, blocked)).toBe(false);
+    expect(shouldOmitHostMedia(undefined, blocked)).toBe(true);
   });
 });

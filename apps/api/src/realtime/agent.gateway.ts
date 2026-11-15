@@ -32,7 +32,6 @@ export class AgentGateway implements OnGatewayConnection {
       try {
         const body: unknown = JSON.parse(String(raw));
         const message = parseAgentWsInbound(body);
-        this.connectedAgents.set(client, message.agentId);
         const binding = this.agentBindingService.assertAgent(message.agentId);
         if (binding === "rejected") {
           const boundAgentId = this.agentBindingService.getBoundAgentId();
@@ -42,6 +41,7 @@ export class AgentGateway implements OnGatewayConnection {
           client.close(4403, "Hub already bound to another agent");
           return;
         }
+        this.connectedAgents.set(client, message.agentId);
 
         if (message.type === "update") {
           this.telemetryService.ingestAgentUpdate(message.agentId, message.host, message.telemetry);

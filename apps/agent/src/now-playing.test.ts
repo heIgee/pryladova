@@ -54,6 +54,15 @@ describe("mapMediaSession", () => {
         thumbnail: "https://example.com/x.jpg",
       })?.thumbnailDataUrl,
     ).toBeNull();
+    expect(
+      mapMediaSession({
+        id: "x",
+        sourceAppUserModelId: "x",
+        title: "Song",
+        playbackStatus: "playing",
+        thumbnail: "data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=",
+      })?.thumbnailDataUrl,
+    ).toBeNull();
   });
 });
 
@@ -66,6 +75,16 @@ describe("pickCurrentSession", () => {
     ]);
 
     expect(picked?.id).toBe("c");
+  });
+
+  it("picks the same session for equal ranks regardless of enumeration order", () => {
+    const sessions = [
+      { id: "spotify", sourceAppUserModelId: "s", title: "A", playbackStatus: "playing" as const },
+      { id: "browser", sourceAppUserModelId: "b", title: "B", playbackStatus: "playing" as const },
+    ];
+
+    expect(pickCurrentSession(sessions)?.id).toBe("browser");
+    expect(pickCurrentSession([...sessions].reverse())?.id).toBe("browser");
   });
 });
 

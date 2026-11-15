@@ -17,9 +17,27 @@ import { type AgentWsClient, type AgentWsConnectResult, connectAgentWs } from ".
 
 type HostPayloadPost = Omit<HostPayload, "cpuPercent"> & { cpuPercent?: number };
 
+let activeWinErrorLogged = false;
+
+/** A failed foreground read must not skip host metrics or force a WS reconnect. */
+const readForegroundOrUndefined = async () => {
+  try {
+    const { default: activeWin } = await import("active-win");
+    const result = await activeWin();
+    activeWinErrorLogged = false;
+    return result;
+  } catch (error: unknown) {
+    if (!activeWinErrorLogged) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`[agent] active window read failed: ${message}`);
+      activeWinErrorLogged = true;
+    }
+    return undefined;
+  }
+};
+
 const readActiveWindow = async (): Promise<RawWindowSnapshot | undefined> => {
-  const { default: activeWin } = await import("active-win");
-  const result = await activeWin();
+  const result = await readForegroundOrUndefined();
   if (!result?.title?.trim() || !result.owner?.name) {
     return undefined;
   }
@@ -169,6 +187,7 @@ const run = async (): Promise<void> => {
   let tickInFlight = false;
   let shuttingDown = false;
   let reconnecting = false;
+  let pollTimer: ReturnType<typeof setInterval> | undefined;
   let connection!: AgentWsConnectResult;
   let reconnectAgent!: () => Promise<void>;
 
@@ -177,6 +196,9 @@ const run = async (): Promise<void> => {
       return;
     }
     shuttingDown = true;
+    if (pollTimer) {
+      clearInterval(pollTimer);
+    }
     void (async (): Promise<void> => {
       try {
         if (connection?.client) {
@@ -238,6 +260,7 @@ const run = async (): Promise<void> => {
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       console.error(`[agent] ws update send failed: ${message}`);
+      tickInFlight = false;
       await reconnectAgent();
     } finally {
       tickInFlight = false;
@@ -272,9 +295,11 @@ const run = async (): Promise<void> => {
       );
       lastKey = "";
       watchHubBoundReject(connection.hubBoundReject);
-      await runTick();
     } finally {
       reconnecting = false;
+    }
+    if (!shuttingDown) {
+      await runTick();
     }
   };
 
@@ -287,7 +312,7 @@ const run = async (): Promise<void> => {
   watchHubBoundReject(connection.hubBoundReject);
 
   await runTick();
-  setInterval(() => {
+  pollTimer = setInterval(() => {
     void runTick().catch((error: unknown) => {
       const message = error instanceof Error ? error.message : String(error);
       console.error(`[agent] ${message}`);

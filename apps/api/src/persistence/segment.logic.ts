@@ -1,3 +1,4 @@
+import { type HistorySpanCloseReason, historySpanCloseReasonSchema } from "@pryladova/shared";
 import { z } from "zod";
 
 export const STALE_HEARTBEAT_MS = 5 * 60 * 1000;
@@ -115,6 +116,30 @@ export const resolveStaleSegmentEndAt = (
 };
 
 /** Last agent contact before a long gap — used to close open segments without cementing downtime. */
+/**
+ * Host-tick stale close. Idle heartbeats advance last_seen while last_active
+ * stays at the last input, so closing at last_seen bills that idle gap.
+ * Use the earlier of the two, matching the sweep path.
+ */
+export const resolveHostTickCloseAt = (
+  previousSeenAt: string,
+  previousActiveAt: string | null,
+  nextActiveAt: string,
+  incomingCapturedAt: string,
+): string | null => {
+  const idleCloseAt = resolveIdleResumeCloseAt(previousActiveAt, nextActiveAt);
+  if (idleCloseAt) {
+    return idleCloseAt;
+  }
+  if (!previousSeenAt || !isStaleHeartbeatGap(previousSeenAt, incomingCapturedAt)) {
+    return null;
+  }
+  if (previousActiveAt && Date.parse(previousActiveAt) < Date.parse(previousSeenAt)) {
+    return previousActiveAt;
+  }
+  return previousSeenAt;
+};
+
 export const resolveStaleCloseBoundary = (
   persistedLastSeenAt: string | null,
   incomingCapturedAt: string,
@@ -209,6 +234,7 @@ export type HistorySpanSource = {
   app_name: string;
   started_at: string;
   ended_at: string | null;
+  close_reason?: string | null;
 };
 
 export type BuiltHistorySpan = {
@@ -216,12 +242,14 @@ export type BuiltHistorySpan = {
   startedAt: string;
   endedAt: string;
   open?: true;
+  closeReason?: HistorySpanCloseReason;
 };
 
 const historySpanSourceSchema = z.object({
   app_name: z.string(),
   started_at: z.string(),
   ended_at: z.string().nullable().optional(),
+  close_reason: z.string().nullable().optional(),
 });
 
 export const parseHistorySpanSources = (value: unknown): HistorySpanSource[] => {
@@ -233,6 +261,7 @@ export const parseHistorySpanSources = (value: unknown): HistorySpanSource[] => 
     app_name: row.app_name,
     started_at: row.started_at,
     ended_at: row.ended_at ?? null,
+    close_reason: row.close_reason ?? null,
   }));
 };
 
@@ -291,12 +320,19 @@ export const buildHistorySpans = (
         return [];
       }
 
+      // A reason only describes the visible end when the range did not clip it.
+      const closeReason =
+        row.ended_at !== null && rawEndMs <= rangeEndMs
+          ? historySpanCloseReasonSchema.safeParse(row.close_reason).data
+          : undefined;
+
       return [
         {
           appName,
           startMs: start,
           endMs: end,
           open: row.ended_at === null && end < rangeEndMs,
+          closeReason,
         },
       ];
     })
@@ -310,7 +346,10 @@ export const buildHistorySpans = (
       previous.appName === slice.appName &&
       slice.startMs - previous.endMs <= HISTORY_SPAN_MERGE_GAP_MS
     ) {
-      previous.endMs = Math.max(previous.endMs, slice.endMs);
+      if (slice.endMs >= previous.endMs) {
+        previous.endMs = slice.endMs;
+        previous.closeReason = slice.closeReason;
+      }
       previous.open = slice.open;
       continue;
     }
@@ -322,6 +361,7 @@ export const buildHistorySpans = (
     startedAt: new Date(slice.startMs).toISOString(),
     endedAt: new Date(slice.endMs).toISOString(),
     ...(slice.open ? { open: true as const } : {}),
+    ...(slice.closeReason && !slice.open ? { closeReason: slice.closeReason } : {}),
   }));
 };
 

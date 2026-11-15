@@ -268,6 +268,82 @@ describe("SegmentService", () => {
     expect(heartbeatsUpsert).not.toHaveBeenCalled();
   });
 
+  it("closes a post-idle agent gap at last input, not last seen", async () => {
+    const lte = vi.fn().mockResolvedValue({ error: null });
+    const windowSegmentsUpdate = vi.fn().mockReturnValue({
+      eq: vi.fn().mockReturnValue({
+        is: vi.fn().mockReturnValue({ lte }),
+      }),
+    });
+    const { service } = createHeartbeatClient({
+      dbLastSeenAt: "2026-08-08T22:00:00.000Z",
+      windowSegmentsUpdate,
+    });
+
+    await service.onHostTick("desk-pc", "2026-08-08T22:00:00.000Z", { idleMs: 0 });
+    await service.onHostTick("desk-pc", "2026-08-08T22:04:00.000Z", { idleMs: 6 * 60 * 1000 });
+    windowSegmentsUpdate.mockClear();
+    await service.onHostTick("desk-pc", "2026-08-08T22:10:00.000Z", { idleMs: 12 * 60 * 1000 });
+
+    expect(windowSegmentsUpdate).toHaveBeenCalledWith({
+      ended_at: "2026-08-08T21:58:00.000Z",
+      close_reason: "stale",
+    });
+  });
+
+  it("does not close a segment that started after the stale boundary", async () => {
+    const { service, windowSegmentsUpdate } = createHeartbeatClient({
+      openSegmentStartedAt: STALE_INCOMING,
+    });
+
+    await service.onHostTick("desk-pc", STALE_PREVIOUS);
+    await service.onHostTick("desk-pc", STALE_INCOMING);
+
+    expect(windowSegmentsUpdate).not.toHaveBeenCalled();
+  });
+
+  it("does not open a new segment when the stale pre-close fails", async () => {
+    const rpc = vi.fn();
+    const heartbeatsSelect = vi.fn().mockReturnValue({
+      eq: vi.fn().mockReturnValue({
+        maybeSingle: vi.fn().mockResolvedValue({
+          data: { last_seen_at: STALE_PREVIOUS, last_active_at: STALE_PREVIOUS },
+          error: null,
+        }),
+      }),
+    });
+    const client = {
+      rpc,
+      from: vi.fn((table: string) => {
+        if (table === "agent_heartbeats") {
+          return { select: heartbeatsSelect };
+        }
+        if (table === "window_segments") {
+          return {
+            select: openSegmentSelect(STALE_PREVIOUS),
+            update: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                is: vi.fn().mockReturnValue({
+                  lte: vi.fn().mockResolvedValue({ error: { message: "down" } }),
+                }),
+              }),
+            }),
+          };
+        }
+        throw new Error(`unexpected table: ${table}`);
+      }),
+    };
+    const service = new SegmentService({
+      isConfigured: () => true,
+      getClient: () => client,
+    } as unknown as SupabaseService);
+
+    await expect(
+      service.onFocusChange("desk-pc", telemetry(STALE_INCOMING, "Code")),
+    ).resolves.toBeUndefined();
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
   it("debounces heartbeat upserts and persists after 30 seconds", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-01T12:00:00.000Z"));

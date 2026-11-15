@@ -110,6 +110,9 @@ describe("useHistory", () => {
   });
 
   it("does not apply telemetry to the previous day while today is loading", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 9, 19, 12, 0, 0));
+
     let releaseToday: (() => void) | null = null;
     vi.stubGlobal(
       "fetch",

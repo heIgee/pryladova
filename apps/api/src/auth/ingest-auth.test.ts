@@ -2,8 +2,9 @@ import { describe, expect, it } from "vitest";
 import { isIngestAuthorized } from "./ingest-auth.js";
 
 describe("isIngestAuthorized", () => {
-  it("allows requests when ingest secret is unset", () => {
-    expect(isIngestAuthorized(undefined, undefined)).toBe(true);
+  it("rejects requests when ingest secret is unset", () => {
+    expect(isIngestAuthorized(undefined, undefined)).toBe(false);
+    expect(isIngestAuthorized("Bearer anything", undefined)).toBe(false);
   });
 
   it("rejects missing bearer token when secret is set", () => {

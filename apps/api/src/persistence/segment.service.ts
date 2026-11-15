@@ -14,8 +14,8 @@ import {
   createSerializedRunner,
   createUnbootstrappedHeartbeatMemory,
   type HeartbeatMemory,
-  isStaleHeartbeatGap,
   parseCloseAndOpenResult,
+  resolveHostTickCloseAt,
   resolveIdleResumeCloseAt,
   resolveStaleCloseBoundary,
   resolveStaleSegmentEndAt,
@@ -95,7 +95,10 @@ export class SegmentService implements OnApplicationShutdown {
           const endAt = openStartedAt
             ? resolveStaleSegmentEndAt(openStartedAt, heartbeatEnd)
             : heartbeatEnd;
-          await this.closeOpenSegmentUnlocked(agentId, endAt, "stale");
+          const closed = await this.closeOpenSegmentUnlocked(agentId, endAt, "stale");
+          if (!closed) {
+            return undefined;
+          }
         }
 
         const client = this.supabaseService.getClient();
@@ -172,10 +175,12 @@ export class SegmentService implements OnApplicationShutdown {
       this.heartbeatMemory.set(agentId, nextMemory);
 
       if (!options?.skipStaleClose) {
-        const seenCloseAt =
-          previousSeenAt && isStaleHeartbeatGap(previousSeenAt, capturedAt) ? previousSeenAt : null;
-        const idleCloseAt = resolveIdleResumeCloseAt(previousActiveAt, nextMemory.lastActiveAt);
-        const closeAt = idleCloseAt ?? seenCloseAt;
+        const closeAt = resolveHostTickCloseAt(
+          previousSeenAt,
+          previousActiveAt,
+          nextMemory.lastActiveAt,
+          capturedAt,
+        );
         if (closeAt) {
           await this.closeStaleAndReopen(agentId, closeAt, capturedAt, options);
         }
@@ -399,8 +404,18 @@ export class SegmentService implements OnApplicationShutdown {
     options: HostTickOptions | undefined,
   ): Promise<void> {
     await this.runSegmentMutation(agentId, async () => {
-      await this.closeOpenSegmentUnlocked(agentId, closeAt, "stale");
-      if (!options?.appName) {
+      const openStartedAt = await this.readOpenSegmentStart(agentId);
+      // A focus change that just opened this segment already handled the gap.
+      // An older segment whose start is after the heartbeat end still needs the clamp.
+      if (
+        openStartedAt &&
+        Date.parse(openStartedAt) >= Date.parse(capturedAt) &&
+        Date.parse(closeAt) < Date.parse(openStartedAt)
+      ) {
+        return;
+      }
+      const closed = await this.closeOpenSegmentUnlocked(agentId, closeAt, "stale");
+      if (!closed || !options?.appName) {
         return;
       }
       const stillOpen = await this.readOpenSegmentStart(agentId);
@@ -429,7 +444,7 @@ export class SegmentService implements OnApplicationShutdown {
     agentId: string,
     endedAt: string,
     closeReason: CloseReason,
-  ): Promise<void> {
+  ): Promise<boolean> {
     try {
       const client = this.supabaseService.getClient();
       const openStartedAt = await this.readOpenSegmentStart(agentId);
@@ -444,8 +459,10 @@ export class SegmentService implements OnApplicationShutdown {
       if (error) {
         throw error;
       }
+      return true;
     } catch (error: unknown) {
       this.logPersistenceFailure("closeOpenSegmentAt", error);
+      return false;
     }
   }
 }

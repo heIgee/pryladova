@@ -169,6 +169,7 @@ export const readNowPlaying = async (): Promise<HostMedia | null> => {
     const session = pickCurrentSession(sessions);
     if (!session) {
       clearThumbnailBust();
+      runtime().lastPushedThumbnailKey = null;
       return null;
     }
 

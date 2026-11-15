@@ -1,4 +1,4 @@
-import type { HostPayload } from "@pryladova/shared";
+import { type HostPayload, isRasterImageDataUrl } from "@pryladova/shared";
 import { Music2 } from "lucide-react";
 import { BentoTileHeader } from "@/components/tiles/bento-tile-header";
 import {
@@ -31,7 +31,7 @@ const MediaArt = ({
   artist: string | null;
   artClassName: string;
 }) => {
-  if (thumbnailDataUrl) {
+  if (thumbnailDataUrl && isRasterImageDataUrl(thumbnailDataUrl)) {
     return (
       <div className={artClassName} data-testid="media-tile-art">
         <img

@@ -42,9 +42,11 @@ const DEFAULT_BLOCKED_APPS = [
 ] as const;
 
 const EMAIL_PATTERN =
-  /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+/g;
+  /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*/g;
 
 const WINDOWS_PATH_PATTERN = /[A-Za-z]:\\(?:[^"<>|*?]+(?:\\[^"<>|*?]+)*)/g;
+// Require a non-slash after ":/" so "https://" is not treated as a drive path.
+const WINDOWS_FORWARD_PATH_PATTERN = /[A-Za-z]:\/(?!\/)(?:[^"<>|*?\\\s]+(?:\/[^"<>|*?\\\s]+)*)/g;
 const UNC_PATH_PATTERN = /\\\\(?:[^"<>|*?]+(?:\\[^"<>|*?]+)*)/g;
 
 const normalizeAppToken = (value: string): string =>
@@ -100,6 +102,7 @@ const redactWindowTitle = (title: string): string =>
   title
     .replace(EMAIL_PATTERN, "[email]")
     .replace(WINDOWS_PATH_PATTERN, "[path]")
+    .replace(WINDOWS_FORWARD_PATH_PATTERN, "[path]")
     .replace(UNC_PATH_PATTERN, "[path]");
 
 export const sanitizeSnapshot = (
@@ -126,4 +129,4 @@ export const createBlockedAppsSet = (extraApps: string[]): Set<string> =>
 export const shouldOmitHostMedia = (
   snapshot: RawWindowSnapshot | undefined,
   blockedApps: Set<string>,
-): boolean => snapshot !== undefined && isBlockedApp(snapshot, blockedApps);
+): boolean => snapshot === undefined || isBlockedApp(snapshot, blockedApps);

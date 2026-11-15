@@ -81,6 +81,7 @@ export const WeatherHeader = ({
   const [refreshing, setRefreshing] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const refreshGeneration = useRef(0);
+  const refreshTimer = useRef<number | null>(null);
   const searchGeneration = useRef(0);
   const inputId = useId();
   const listboxId = useId();
@@ -109,6 +110,15 @@ export const WeatherHeader = ({
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [open]);
+
+  useEffect(
+    () => () => {
+      if (refreshTimer.current !== null) {
+        window.clearTimeout(refreshTimer.current);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!open) {
@@ -198,7 +208,10 @@ export const WeatherHeader = ({
       };
 
       if (elapsed < MIN_REFRESH_SPIN_MS) {
-        window.setTimeout(finish, MIN_REFRESH_SPIN_MS - elapsed);
+        if (refreshTimer.current !== null) {
+          window.clearTimeout(refreshTimer.current);
+        }
+        refreshTimer.current = window.setTimeout(finish, MIN_REFRESH_SPIN_MS - elapsed);
         return;
       }
 

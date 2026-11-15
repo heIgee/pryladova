@@ -147,7 +147,7 @@ export class WeatherService {
 
   async searchCities(query: string): Promise<GeocodeCity[]> {
     const trimmed = query.trim();
-    if (trimmed.length < 2) {
+    if (trimmed.length < 2 || trimmed.length > 128) {
       return [];
     }
 

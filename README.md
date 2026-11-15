@@ -44,14 +44,14 @@ Optional env — copy `apps/api/.env.example` to `apps/api/.env`:
 
 - **Panel auth** (required): `SESSION_SECRET`, `PANEL_PASSWORD_HASH`
 - **Classification** (optional): `GEMINI_API_KEY`, `GEMINI_MODEL`
-- **Agent ingest** (production): `INGEST_SECRET`
+- **Agent ingest** (required): `INGEST_SECRET` — same value on the API and the agent
 - **Persistence & integrations** (optional): `SUPABASE_*`, GitHub/Steam/Google vars, `INTEGRATION_ENCRYPTION_KEY` — see `.env.example`
 
 Supabase holds activity history, classification cache, and hub settings (including encrypted Google OAuth tokens). After pulling schema changes, run `pnpm db:push`. Google Calendar/Tasks: set OAuth vars, push migrations, then connect from the panel tiles.
 
 When `GEMINI_API_KEY` is missing or the LLM call fails, telemetry is still stored with `classificationStatus: "failed"`.
 
-Classification runs asynchronously after POST — the agent gets `204` immediately; the web panel may show a pending spinner verb until the result arrives.
+Classification runs asynchronously after ingest — agent updates are never blocked on it; the web panel may show a pending spinner verb until the result arrives.
 
 **2. Agent** — active window + host metrics over WebSocket (`/api/ws/agent`)
 
@@ -68,12 +68,13 @@ Optional env — copy `apps/agent/.env.example` to `apps/agent/.env` (not commit
 | `DEV_API_URL` | `http://localhost:3000` | Dev API origin (`pnpm dev:agent`) |
 | `API_URL` | — | Remote API origin (`pnpm dev:agent:remote`) |
 | `POLL_INTERVAL_MS` | `2000` | Poll interval (ms) |
-| `INGEST_SECRET` | — | Must match API when ingest auth is enabled |
+| `INGEST_SECRET` | — | Required. Must match the API. Unset rejects every agent connection |
+| `AGENT_ID` | hostname | Stable machine identity sent on ingest |
 | `BLOCKED_APPS` | — | Comma-separated app names merged with the default blocklist |
 
 **Host metrics** (local Win32 / SMTC, every poll): idle time, CPU%, RAM%, uptime, now playing. SMTC album art is sent when the active player exposes a thumbnail (no extra config).
 
-**Agent privacy** (local, before POST):
+**Agent privacy** (local, before send):
 
 - Blocked apps (password managers, SSH/RDP, crypto wallets, etc.) send `Secure` / `Redacted` instead of raw titles.
 - Window titles keep tab names; emails and file paths are redacted to `[email]` and `[path]`.
@@ -104,7 +105,7 @@ Dashboard tiles pack from the top with no gaps. Drag a header onto another tile 
 | `pnpm typecheck` | Typecheck all packages (turbo) |
 | `pnpm lint` / `pnpm lint:fix` | Biome check / fix |
 | `pnpm knip` | Unused exports and dependencies |
-| `pnpm test` | Vitest (shared, api, web, agent privacy) |
+| `pnpm test` | Vitest (shared, api, web, agent) |
 | `pnpm test:coverage` | Vitest with coverage report |
 | `pnpm test:e2e` | Playwright on ports 3001 / 5174 (dev can stay on 3000 / 5173) |
 
@@ -119,7 +120,7 @@ Before commit: `pnpm verify` (build, tests, coverage, e2e, knip, agent checks).
 | `pnpm verify` | Full local CI — run before commit |
 | `pnpm test` | Vitest unit + integration |
 | `pnpm test:coverage` | Same, with lcov output |
-| `pnpm test:e2e` | Playwright: login + agent WebSocket update → panel (API 3001, web 5174) |
+| `pnpm test:e2e` | Playwright: login, agent WebSocket → panel, dashboard layout, loading skeletons (API 3001, web 5174) |
 
 First-time E2E: `pnpm exec playwright install chromium`
 
@@ -176,5 +177,6 @@ apps/api     # NestJS API (ESM, Supabase-backed persistence)
 apps/web     # React + Vite + Tailwind v4
 packages/shared   # Shared types and Zod schemas
 deploy/           # runbook, bootstrap, Caddyfile, env examples
+e2e/              # Playwright specs and runner
 supabase/         # SQL migrations
 ```

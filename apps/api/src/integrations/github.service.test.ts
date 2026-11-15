@@ -1,4 +1,5 @@
 import { Test } from "@nestjs/testing";
+import { githubStatusResponseSchema } from "@pryladova/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ApiConfig } from "../config.js";
 import { ConfigService } from "../config.service.js";
@@ -106,6 +107,7 @@ describe("GithubService", () => {
     const service = await createService();
     const status = await service.getStatus();
     expect(status.status).toBe("ready");
+    expect(githubStatusResponseSchema.safeParse(status).success).toBe(true);
     if (status.status === "ready") {
       expect(status.commitsToday).toBe(4);
       expect(status.openPullRequests).toBe(2);

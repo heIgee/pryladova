@@ -1,4 +1,5 @@
 import { Test } from "@nestjs/testing";
+import { steamStatusResponseSchema } from "@pryladova/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ApiConfig } from "../config.js";
 import { ConfigService } from "../config.service.js";
@@ -107,6 +108,7 @@ describe("SteamService", () => {
     const service = await createService();
     const status = await service.getStatus();
     expect(status.status).toBe("ready");
+    expect(steamStatusResponseSchema.safeParse(status).success).toBe(true);
     if (status.status === "ready") {
       expect(status.personaState).toBe("online");
       expect(status.username).toBe("example");

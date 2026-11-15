@@ -1,4 +1,5 @@
 import { Test } from "@nestjs/testing";
+import { weatherResponseSchema } from "@pryladova/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WeatherService } from "./weather.service.js";
 
@@ -48,6 +49,7 @@ describe("WeatherService", () => {
 
     const first = await service.getWeather(50.45, 30.52);
     expect(first.status).toBe("ready");
+    expect(weatherResponseSchema.safeParse(first).success).toBe(true);
     if (first.status === "ready") {
       expect(first.temperatureC).toBe(10);
     }
@@ -132,6 +134,14 @@ describe("WeatherService", () => {
       lat: 40.65,
       lon: -73.95,
     });
+  });
+
+  it("does not geocode an oversized city query", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const service = await createService();
+    await expect(service.searchCities("a".repeat(129))).resolves.toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("rejects invalid coordinates", async () => {

@@ -30,6 +30,12 @@ export const AGENT_WS_ROUTE = "/api/ws/agent";
 /** Max base64 album-art payload length accepted on ingest (~512 KB). */
 export const THUMBNAIL_DATA_URL_MAX_LENGTH = 512_000;
 
+/** Raster-only: SVG data URLs can carry script and are not album art. */
+const RASTER_IMAGE_DATA_URL_PATTERN = /^data:image\/(?:png|jpeg|gif|webp|bmp);base64,/i;
+
+export const isRasterImageDataUrl = (value: string): boolean =>
+  RASTER_IMAGE_DATA_URL_PATTERN.test(value);
+
 export const healthResponseSchema = z.object({
   ok: z.literal(true),
   release: z.string().min(1).optional(),
@@ -122,11 +128,15 @@ export const historyEntrySchema = z.object({
   switchCount: z.number().int().nonnegative().optional(),
 });
 
+/** Non-default segment ends; focus changes are implied by the next span. */
+export const historySpanCloseReasonSchema = z.enum(["stale", "shutdown"]);
+
 export const historySpanSchema = z.object({
   appName: trimmedNonEmptyString,
   startedAt: z.iso.datetime(),
   endedAt: z.iso.datetime(),
   open: z.boolean().optional(),
+  closeReason: historySpanCloseReasonSchema.optional(),
 });
 
 export const historyResponseSchema = z.object({
@@ -158,7 +168,7 @@ export const hostMediaSchema = z.object({
   playbackStatus: playbackStatusSchema,
   thumbnailDataUrl: z
     .string()
-    .startsWith("data:image/")
+    .regex(RASTER_IMAGE_DATA_URL_PATTERN)
     .max(THUMBNAIL_DATA_URL_MAX_LENGTH)
     .nullable()
     .default(null),
@@ -354,6 +364,7 @@ export type Settings = z.infer<typeof settingsSchema>;
 export type SettingsPutResponse = z.infer<typeof settingsPutResponseSchema>;
 export type HistoryEntry = z.infer<typeof historyEntrySchema>;
 export type HistorySpan = z.infer<typeof historySpanSchema>;
+export type HistorySpanCloseReason = z.infer<typeof historySpanCloseReasonSchema>;
 export type HistoryResponse = z.infer<typeof historyResponseSchema>;
 export type TelemetryPayload = z.infer<typeof telemetryPayloadSchema>;
 export type PlaybackStatus = z.infer<typeof playbackStatusSchema>;

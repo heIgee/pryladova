@@ -128,6 +128,6 @@ export const assertProductionIngestSecret = (config: ApiConfig): void => {
     throw new Error("INGEST_SECRET is required when NODE_ENV=production");
   }
   if (!config.ingestSecret) {
-    console.warn("[api] INGEST_SECRET unset — ingest routes are open");
+    console.warn("[api] INGEST_SECRET unset — agent ingest is rejected");
   }
 };
