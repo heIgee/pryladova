@@ -9,7 +9,7 @@
   "scripts": {
     "build": "nest build",
     "dev": "nest start --watch",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -b",
     "lint": "biome check .",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
@@ -46,7 +46,7 @@
     "@types/ws": "^8.18.1",
     "@vitest/coverage-v8": "^4.1.10",
     "supertest": "^7.2.2",
-    "typescript": "^5.9.2",
+    "typescript": "6.0.3",
     "unplugin-swc": "^1.5.9",
     "vitest": "^4.1.10"
   }

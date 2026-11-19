@@ -2,26 +2,32 @@ import type { IncomingMessage } from "node:http";
 import { Logger } from "@nestjs/common";
 import { type OnGatewayConnection, WebSocketGateway } from "@nestjs/websockets";
 import { AGENT_WS_ROUTE, parseAgentWsInbound } from "@pryladova/shared";
-import WebSocket from "ws";
-import { isIngestAuthorized } from "../auth/ingest-auth.js";
+import type WebSocket from "ws";
 import { ConfigService } from "../config.service.js";
-import { AgentBindingService } from "../ingest/agent-binding.service.js";
-import { SegmentService } from "../persistence/segment.service.js";
-import { TelemetryService } from "../telemetry/telemetry.service.js";
+import { isIngestAuthorized } from "../ingest/ingest-auth.js";
+import { AgentIngressService } from "./agent-ingress.service.js";
+
+type AgentSocket = {
+  close(code?: number, reason?: string): void;
+  on(event: "message", listener: (raw: WebSocket.RawData) => void): void;
+  on(event: "close", listener: () => void): void;
+};
+
+type HeaderRequest = {
+  headers: IncomingMessage["headers"];
+};
 
 @WebSocketGateway({ path: AGENT_WS_ROUTE })
 export class AgentGateway implements OnGatewayConnection {
   private readonly logger = new Logger(AgentGateway.name);
-  private readonly connectedAgents = new WeakMap<WebSocket, string>();
+  private readonly connectedAgents = new WeakMap<AgentSocket, string>();
 
   constructor(
     private readonly configService: ConfigService,
-    private readonly telemetryService: TelemetryService,
-    private readonly segmentService: SegmentService,
-    private readonly agentBindingService: AgentBindingService,
+    private readonly agentIngressService: AgentIngressService,
   ) {}
 
-  handleConnection(client: WebSocket, request: IncomingMessage): void {
+  handleConnection(client: AgentSocket, request: HeaderRequest): void {
     const { ingestSecret } = this.configService.config;
     if (!isIngestAuthorized(request.headers.authorization, ingestSecret)) {
       client.close(4401, "Invalid ingest credentials");
@@ -32,9 +38,8 @@ export class AgentGateway implements OnGatewayConnection {
       try {
         const body: unknown = JSON.parse(String(raw));
         const message = parseAgentWsInbound(body);
-        const binding = this.agentBindingService.assertAgent(message.agentId);
-        if (binding === "rejected") {
-          const boundAgentId = this.agentBindingService.getBoundAgentId();
+        if (this.agentIngressService.acceptMessage(message) === "rejected") {
+          const boundAgentId = this.agentIngressService.boundAgentId();
           this.logger.warn(
             `[ingest] rejected agent ${message.agentId} — hub bound to ${boundAgentId}`,
           );
@@ -42,13 +47,6 @@ export class AgentGateway implements OnGatewayConnection {
           return;
         }
         this.connectedAgents.set(client, message.agentId);
-
-        if (message.type === "update") {
-          this.telemetryService.ingestAgentUpdate(message.agentId, message.host, message.telemetry);
-          return;
-        }
-
-        void this.segmentService.closeForShutdown(message.agentId, message.capturedAt);
       } catch (error: unknown) {
         const detail = error instanceof Error ? error.message : String(error);
         this.logger.warn(`Rejected agent message: ${detail}`);
@@ -59,7 +57,7 @@ export class AgentGateway implements OnGatewayConnection {
     client.on("close", () => {
       const agentId = this.connectedAgents.get(client);
       if (agentId) {
-        void this.segmentService.closeForAgentDisconnect(agentId);
+        this.agentIngressService.handleDisconnect(agentId);
       }
     });
   }

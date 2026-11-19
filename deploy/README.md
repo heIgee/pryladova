@@ -54,34 +54,34 @@ flowchart TB
 
 Caddy, `.env`, and Caddyfile are configured **once on the host** — not touched by CI.
 
-| Location | Path | Deployed by CI? |
-|----------|------|-----------------|
-| API secrets | `~/pryladova/.env` | No — edit on host |
-| SPA static files | `~/pryladova/web/` | Yes — SCP each deploy |
-| Docker Compose | `~/pryladova/docker-compose.yml` | Yes — SCP each deploy |
-| Caddy domain / web root | `/etc/caddy/pryladova.env` | No — edit on host |
-| Caddy routing / panel auth | `/etc/caddy/Caddyfile` | No — edit on host |
-| Agent config | `apps/agent/.env` on your PC | No — local dev only |
+| Location                   | Path                             | Deployed by CI?       |
+| -------------------------- | -------------------------------- | --------------------- |
+| API secrets                | `~/pryladova/.env`               | No — edit on host     |
+| SPA static files           | `~/pryladova/web/`               | Yes — SCP each deploy |
+| Docker Compose             | `~/pryladova/docker-compose.yml` | Yes — SCP each deploy |
+| Caddy domain / web root    | `/etc/caddy/pryladova.env`       | No — edit on host     |
+| Caddy routing / panel auth | `/etc/caddy/Caddyfile`           | No — edit on host     |
+| Agent config               | `apps/agent/.env` on your PC     | No — local dev only   |
 
 **Not auto-deployed:** `~/pryladova/.env`, Caddy config, agent env. Change those on the host/PC yourself.
 
 ## Files in this folder
 
-| File | Used by | Purpose |
-|------|---------|---------|
-| [`bootstrap.sh`](bootstrap.sh) | Host (once) | Create `~/pryladova/web`, seed API `.env` |
-| [`env.example`](env.example) | API container | Template for `~/pryladova/.env` |
-| [`host.env.example`](host.env.example) | Caddy | Template for `/etc/caddy/pryladova.env` |
-| [`Caddyfile`](Caddyfile) | Caddy | TLS, routing |
-| [`../docker-compose.yml`](../docker-compose.yml) | Host Docker | Runs API image on `127.0.0.1:3000` |
+| File                                                               | Used by                | Purpose                                   |
+| ------------------------------------------------------------------ | ---------------------- | ----------------------------------------- |
+| [`bootstrap.sh`](bootstrap.sh)                                     | Host (once)            | Create `~/pryladova/web`, seed API `.env` |
+| [`env.example`](env.example)                                       | API container          | Template for `~/pryladova/.env`           |
+| [`host.env.example`](host.env.example)                             | Caddy                  | Template for `/etc/caddy/pryladova.env`   |
+| [`Caddyfile`](Caddyfile)                                           | Caddy                  | TLS, routing                              |
+| [`../docker-compose.yml`](../docker-compose.yml)                   | Host Docker            | Runs API image on `127.0.0.1:3000`        |
 | [`uptime-kuma/docker-compose.yml`](uptime-kuma/docker-compose.yml) | Host Docker (optional) | Self-hosted uptime UI on `127.0.0.1:3002` |
 
 ## Two env files (easy to mix up)
 
-| File on host | Variables | Consumed by |
-|--------------|-----------|-------------|
-| `~/pryladova/.env` | `INGEST_SECRET`, `SESSION_SECRET`, `PANEL_PASSWORD_HASH_B64`, `GEMINI_*`, `SENTRY_*`, `SUPABASE_*`, `PORT`, `GHCR_OWNER`, integration keys — full list in [`env.example`](env.example) | API Docker container + compose |
-| `/etc/caddy/pryladova.env` | `PRYLADOVA_DOMAIN`, `PRYLADOVA_WEB_ROOT` | Caddy process |
+| File on host               | Template                                                                              | Consumed by                    |
+| -------------------------- | ------------------------------------------------------------------------------------- | ------------------------------ |
+| `~/pryladova/.env`         | [`env.example`](env.example)                                                          | API Docker container + compose |
+| `/etc/caddy/pryladova.env` | [`host.env.example`](host.env.example)                                              | Caddy process                  |
 
 **Panel password on prod:** Docker Compose mangles `$` in bcrypt hashes. Set `PANEL_PASSWORD_HASH_B64` (not plain `PANEL_PASSWORD_HASH`):
 
@@ -116,18 +116,10 @@ chmod +x deploy/bootstrap.sh
 Edit API env:
 
 ```bash
-nano ~/pryladova/.env
-# Required: INGEST_SECRET=<long random string>
-# Required: SESSION_SECRET=<long random string>
-# Required: PANEL_PASSWORD_HASH_B64=<output of: caddy hash-password | base64 -w0>
-# Optional: GEMINI_API_KEY, GEMINI_MODEL
-# Optional: SENTRY_DSN=<real DSN from Sentry project settings>
-# Optional Google OAuth: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI,
-#   INTEGRATION_ENCRYPTION_KEY (32 random bytes, base64), optional GOOGLE_REFRESH_TOKEN override
-# SENTRY_RELEASE is injected by deploy (git sha); do not set manually.
+nano ~/pryladova/.env   # keys and comments: deploy/env.example
 ```
 
-Sign in with the **plaintext password** you typed into `caddy hash-password`, not the hash or base64 string.
+Sign in with the **plaintext password** you typed into `caddy hash-password`, not the hash or base64 string. Production panel hash: `PANEL_PASSWORD_HASH_B64` (see comments in `deploy/env.example`).
 
 ### Google OAuth (Calendar + Tasks, optional)
 
@@ -137,7 +129,7 @@ Requires a Google Cloud OAuth **Web** client with **Google Calendar API** and **
 
 **Production:** Publishing the consent screen allows any Google user and long-lived refresh tokens, but these scopes trigger verification (privacy policy, app homepage, review). Only pursue if others will connect — not needed for a solo panel.
 
-1. Set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, and `INTEGRATION_ENCRYPTION_KEY` in `~/pryladova/.env`. Run `supabase db push` so `hub_settings.google_refresh_token_encrypted` exists.
+1. Set Google OAuth vars in `~/pryladova/.env` per [`env.example`](env.example). Run `supabase db push` so `hub_settings.google_refresh_token_encrypted` exists.
 2. Open the panel → Calendar or Tasks tile → **Connect Google**. Requires Supabase configured; tokens persist encrypted in `hub_settings`.
 3. After adding Tasks scope to an existing connect, use **Reconnect with consent** so the refresh token includes both APIs.
 4. Optional: set `GOOGLE_REFRESH_TOKEN` in env to override DB storage (invalid value → tile shows misconfigured; DB token preserved).
@@ -187,30 +179,30 @@ sudo systemctl restart caddy
 
 Repo → **Settings** → **Secrets and variables** → **Actions**. Two tabs:
 
-| Tab | Used for |
-|-----|----------|
-| **Secrets** | Tokens, SSH keys, hosts |
+| Tab           | Used for                                            |
+| ------------- | --------------------------------------------------- |
+| **Secrets**   | Tokens, SSH keys, hosts                             |
 | **Variables** | `VITE_SENTRY_DSN` (Sentry client DSN for web build) |
 
 `gh secret list` shows secrets only. Run `gh variable list` to verify variables.
 
 #### Secrets tab
 
-| Secret | How to get it |
-|--------|----------------|
-| `VPS_SSH_KEY` | Private key that can SSH as deploy user |
-| `VPS_HOST` | Host IP or hostname |
-| `VPS_USER` | SSH user (optional; default `ubuntu`) |
-| `VPS_SSH_KNOWN_HOST` | `ssh-keyscan -H <VPS_HOST> 2>/dev/null` |
-| `SENTRY_AUTH_TOKEN` | Sentry organization **`org:ci`** token — [details](#sentry-from-scratch) |
-| `SENTRY_ORG` | Sentry organization slug |
-| `SENTRY_PROJECT` | Sentry project slug |
-| `SUPABASE_ACCESS_TOKEN` | Supabase account token — deploy runs `supabase db push` before VPS deploy. See [SUPABASE.md](../SUPABASE.md) |
+| Secret                  | How to get it                                                                                                                |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `VPS_SSH_KEY`           | Private key that can SSH as deploy user                                                                                      |
+| `VPS_HOST`              | Host IP or hostname                                                                                                          |
+| `VPS_USER`              | SSH user (optional; default `ubuntu`)                                                                                        |
+| `VPS_SSH_KNOWN_HOST`    | `ssh-keyscan -H <VPS_HOST> 2>/dev/null`                                                                                      |
+| `SENTRY_AUTH_TOKEN`     | Sentry organization **`org:ci`** token — [details](#sentry-from-scratch)                                                     |
+| `SENTRY_ORG`            | Sentry organization slug                                                                                                     |
+| `SENTRY_PROJECT`        | Sentry project slug                                                                                                          |
+| `SUPABASE_ACCESS_TOKEN` | Personal access token (`sbp_…`) from the Supabase account tokens page. Deploy runs `supabase db push` before the VPS deploy. |
 
 #### Variables tab
 
-| Variable | Value |
-|----------|-------|
+| Variable          | Value                                                                                                                                     |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | `VITE_SENTRY_DSN` | Sentry project **Client DSN** (baked into SPA at build). Deploy reads `vars.VITE_SENTRY_DSN`, with `secrets.VITE_SENTRY_DSN` as fallback. |
 
 Sentry optional — deploy succeeds without it. See [Sentry (from scratch)](#sentry-from-scratch).
@@ -227,12 +219,7 @@ Merge to `main`. Workflow builds image, uploads web + compose, restarts API cont
 
 ### 6. Windows agent (remote API)
 
-`apps/agent/.env` on your PC:
-
-```env
-API_URL=https://<PRYLADOVA_DOMAIN>
-INGEST_SECRET=<same value as ~/pryladova/.env>
-```
+Copy [`apps/agent/.env.example`](../apps/agent/.env.example) to `apps/agent/.env` on your PC (`API_URL`, `INGEST_SECRET` must match prod).
 
 ```powershell
 pnpm dev:agent:remote
@@ -259,10 +246,10 @@ ssh -L 3002:127.0.0.1:3002 ubuntu@<VPS_HOST>
 
 Open `http://localhost:3002`, create the admin user, then add monitors:
 
-| Monitor | URL | Notes |
-|---------|-----|-------|
-| Edge (recommended) | `https://<PRYLADOVA_DOMAIN>/api/health` | Full stack; no panel login required |
-| API container | `http://pryladova-api:3000/api/health` | Only after joining Kuma to the API compose network (see below) |
+| Monitor            | URL                                     | Notes                                                          |
+| ------------------ | --------------------------------------- | -------------------------------------------------------------- |
+| Edge (recommended) | `https://<PRYLADOVA_DOMAIN>/api/health` | Full stack; no panel login required                            |
+| API container      | `http://pryladova-api:3000/api/health`  | Only after joining Kuma to the API compose network (see below) |
 
 The API binds to `127.0.0.1:3000` on the host, so `http://host.docker.internal:3000` from a default-bridge container will **not** reach it. Prefer the Caddy edge URL, or attach Kuma to the API network:
 
@@ -275,7 +262,7 @@ networks:
 networks:
   pryladova:
     external: true
-    name: pryladova_default   # docker network ls — match the API compose project
+    name: pryladova_default # docker network ls — match the API compose project
 ```
 
 Add a notification (Telegram, email, etc.) under Settings → Notifications.
@@ -294,13 +281,13 @@ Free SaaS uptime checks from outside the VPS. Catches whole-host outages that [U
 
 What catches what:
 
-| Check | Tool | Where | Setup |
-|-------|------|-------|-------|
-| API container down (host alive) | Uptime Kuma | VPS Docker | Manual — [above](#uptime-kuma-optional-self-hosted) |
-| Whole VPS / edge down | UptimeRobot | SaaS | Manual — [above](#uptimerobot-optional-external) |
-| React JS crashes | Sentry + Error Boundary | SaaS | GitHub vars/secrets + VPS `.env` |
-| Nest 5xx / unhandled | Sentry | SaaS | VPS `SENTRY_DSN` in `.env` |
-| Prod-only bugs before merge | Prod E2E | CI | Automatic in `pnpm verify` — rejects error-boundary fallback |
+| Check                           | Tool                    | Where      | Setup                                                        |
+| ------------------------------- | ----------------------- | ---------- | ------------------------------------------------------------ |
+| API container down (host alive) | Uptime Kuma             | VPS Docker | Manual — [above](#uptime-kuma-optional-self-hosted)          |
+| Whole VPS / edge down           | UptimeRobot             | SaaS       | Manual — [above](#uptimerobot-optional-external)             |
+| React JS crashes                | Sentry + Error Boundary | SaaS       | GitHub vars/secrets + VPS `.env`                             |
+| Nest 5xx / unhandled            | Sentry                  | SaaS       | VPS `SENTRY_DSN` in `.env`                                   |
+| Prod-only bugs before merge     | Prod E2E                | CI         | Automatic in `pnpm verify` — rejects error-boundary fallback |
 
 Client-side crashes also log to the browser console as `[web:client-error]` and show a reload fallback via the React error boundary.
 
@@ -310,22 +297,22 @@ One Sentry project covers both the React panel and the Nest API. The repo alread
 
 **Web vs API DSN:**
 
-| Surface | Env var | Where you set it |
-|---------|---------|------------------|
-| React panel | `VITE_SENTRY_DSN` | GitHub Actions **variable** → CI web build |
-| Nest API | `SENTRY_DSN` | VPS `~/pryladova/.env` → restart API container |
+| Surface     | Env var           | Where you set it                               |
+| ----------- | ----------------- | ---------------------------------------------- |
+| React panel | `VITE_SENTRY_DSN` | GitHub Actions **variable** → CI web build     |
+| Nest API    | `SENTRY_DSN`      | VPS `~/pryladova/.env` → restart API container |
 
 Same DSN string for both. VPS `.env` alone does not enable browser reporting — you need the GitHub variable and a redeploy.
 
 #### Where values come from (general)
 
-| Value | Scope in Sentry | How to identify it |
-|-------|-----------------|-------------------|
-| **DSN** | Project | Project settings → client keys / DSN. Public ingest URL for that project. |
-| **`SENTRY_ORG`** | Organization | Organization **slug** — short name in URLs (`/organizations/<slug>/`) or org settings. Not the numeric `o…` id embedded in the DSN. |
-| **`SENTRY_PROJECT`** | Project | Project **slug** — short name in URLs (`/projects/<slug>/`) or project settings. Not the numeric id at the end of the DSN. |
+| Value                   | Scope in Sentry      | How to identify it                                                                                                                                                               |
+| ----------------------- | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **DSN**                 | Project              | Project settings → client keys / DSN. Public ingest URL for that project.                                                                                                        |
+| **`SENTRY_ORG`**        | Organization         | Organization **slug** — short name in URLs (`/organizations/<slug>/`) or org settings. Not the numeric `o…` id embedded in the DSN.                                              |
+| **`SENTRY_PROJECT`**    | Project              | Project **slug** — short name in URLs (`/projects/<slug>/`) or project settings. Not the numeric id at the end of the DSN.                                                       |
 | **`SENTRY_AUTH_TOKEN`** | Organization or user | **Organization auth token** with scope **`org:ci`** (Sentry’s CI token — releases + source maps). Or a personal token with release/source-map permissions. CI only; not the DSN. |
-| **`SENTRY_RELEASE`** | — | Set by **deploy** to the git sha (web at build time, API at `docker compose up`). Omit from VPS `.env`. Shown in panel footer (web) and `GET /api/health` (API). |
+| **`SENTRY_RELEASE`**    | —                    | Set by **deploy** to the git sha (web at build time, API at `docker compose up`). Omit from VPS `.env`. Shown in panel footer (web) and `GET /api/health` (API).                 |
 
 Use one project’s DSN and slugs consistently if you created multiple projects.
 
@@ -339,9 +326,11 @@ Official references (UI changes over time): [DSN](https://docs.sentry.io/product
    - **Variables:** `VITE_SENTRY_DSN`
    - **Secrets:** `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT`
 4. **VPS** — paste the **Client DSN** from Sentry project settings into `~/pryladova/.env`:
+
    ```env
    SENTRY_DSN=https://xxxxxxxx@o0.ingest.sentry.io/0
    ```
+
    Do **not** set `SENTRY_RELEASE` in `.env` — deploy passes the git sha at `docker compose up` time.
    Restart API: `docker compose -f ~/pryladova/docker-compose.yml up -d` (or wait for the next deploy).
 5. Merge to `main` (or re-run Deploy). CI uploads source maps when the three Sentry secrets are set; EU DSNs auto-use `https://de.sentry.io` (override with `SENTRY_URL` in the deploy workflow if needed). Upload failure fails the build. Maps are not deployed to `~/pryladova/web/`.
@@ -403,25 +392,25 @@ curl -s https://<PRYLADOVA_DOMAIN>/api/health
 
 ## Routing reference
 
-| Request | Edge auth | App auth |
-|---------|-----------|----------|
-| `GET /` (SPA) | — | Panel session (login form) |
-| `GET /api/health` | — | Public |
-| `GET/PUT /api/*` (panel REST) | — | Nest session cookie |
-| `WSS /api/ws/panel` | — | Nest session cookie |
-| `WSS /api/ws/agent` | — | Nest `INGEST_SECRET` Bearer |
+| Request                       | Edge auth | App auth                    |
+| ----------------------------- | --------- | --------------------------- |
+| `GET /` (SPA)                 | —         | Panel session (login form)  |
+| `GET /api/health`             | —         | Public                      |
+| `GET/PUT /api/*` (panel REST) | —         | Nest session cookie         |
+| `WSS /api/ws/panel`           | —         | Nest session cookie         |
+| `WSS /api/ws/agent`           | —         | Nest `INGEST_SECRET` Bearer |
 
 ## Troubleshooting
 
-| Symptom | Check |
-|---------|-------|
-| 404 on `/api/auth/*`, logs missing AuthModule | `docker compose ps` — tag must be deploy sha (`IMAGE_TAG` in `.env`), not `:latest` |
-| 502 on `/api/*` | `docker compose ps` in `~/pryladova`; `curl localhost:3000/api/health`; `docker logs pryladova-api` |
-| Compose warns `$… variable is not set` | Plain `PANEL_PASSWORD_HASH` in `.env` — use `PANEL_PASSWORD_HASH_B64` instead |
-| Agent 401 | `INGEST_SECRET` match between agent `.env` and `~/pryladova/.env` |
-| Panel 401 | Sign in at `/`; check `SESSION_SECRET` and `PANEL_PASSWORD_HASH_B64` in `~/pryladova/.env` |
-| Caddy fails to start | `sudo caddy validate --config /etc/caddy/Caddyfile --envfile /etc/caddy/pryladova.env`; env vars set? |
-| `docker pull` 403 | GHCR package visibility; deploy workflow logs in via `GITHUB_TOKEN` |
-| Google connect: access denied | Account not on OAuth consent screen test users (Testing mode) |
-| Google connect: redirect error | `GOOGLE_REDIRECT_URI` must match the Web client redirect URI exactly |
-| Calendar tile stale after ~7 days | Testing-mode refresh token expired — **Reconnect** on the tile |
+| Symptom                                       | Check                                                                                                 |
+| --------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| 404 on `/api/auth/*`, logs missing AuthModule | `docker compose ps` — tag must be deploy sha (`IMAGE_TAG` in `.env`), not `:latest`                   |
+| 502 on `/api/*`                               | `docker compose ps` in `~/pryladova`; `curl localhost:3000/api/health`; `docker logs pryladova-api`   |
+| Compose warns `$… variable is not set`        | Plain `PANEL_PASSWORD_HASH` in `.env` — use `PANEL_PASSWORD_HASH_B64` instead                         |
+| Agent 401                                     | `INGEST_SECRET` match between agent `.env` and `~/pryladova/.env`                                     |
+| Panel 401                                     | Sign in at `/`; check `SESSION_SECRET` and `PANEL_PASSWORD_HASH_B64` in `~/pryladova/.env`            |
+| Caddy fails to start                          | `sudo caddy validate --config /etc/caddy/Caddyfile --envfile /etc/caddy/pryladova.env`; env vars set? |
+| `docker pull` 403                             | GHCR package visibility; deploy workflow logs in via `GITHUB_TOKEN`                                   |
+| Google connect: access denied                 | Account not on OAuth consent screen test users (Testing mode)                                         |
+| Google connect: redirect error                | `GOOGLE_REDIRECT_URI` must match the Web client redirect URI exactly                                  |
+| Calendar tile stale after ~7 days             | Testing-mode refresh token expired — **Reconnect** on the tile                                        |

@@ -73,6 +73,20 @@ export const GithubStatusTile = ({
   const checks = status.status === "ready" ? status.checks.slice(0, listCap) : [];
   const profileHref = status.status === "ready" ? safeHttpUrl(status.profileUrl) : null;
   const avatarSrc = status.status === "ready" ? safeHttpUrl(status.avatarUrl) : null;
+  const avatarFrameClass =
+    "size-9 shrink-0 overflow-hidden rounded-lg bg-muted ring-1 ring-border/60";
+  let avatar: ReactNode = null;
+  if (avatarSrc) {
+    avatar = profileHref ? (
+      <a href={profileHref} target="_blank" rel="noreferrer" className={avatarFrameClass}>
+        <img src={avatarSrc} alt="" className="size-full object-cover" />
+      </a>
+    ) : (
+      <div className={avatarFrameClass}>
+        <img src={avatarSrc} alt="" className="size-full object-cover" />
+      </div>
+    );
+  }
 
   return (
     <Card size="sm" className={cn(bentoTileCardClassName, className)} data-testid="github-tile">
@@ -82,7 +96,7 @@ export const GithubStatusTile = ({
         title="GitHub"
       />
       <CardContent
-        className={cn("flex-1 min-h-0", layout.body)}
+        className={cn("min-h-0 flex-1", layout.body)}
         data-bento-layout={variant}
         data-bento-list-cap={listCap}
       >
@@ -96,27 +110,14 @@ export const GithubStatusTile = ({
           </div>
         ) : null}
         {status.status === "unavailable" ? (
-          <p className="text-caption text-destructive">GitHub status unavailable</p>
+          <p className="text-caption text-destructive" aria-live="polite">
+            GitHub status unavailable
+          </p>
         ) : null}
         {status.status === "ready" ? (
           <>
             <div className="flex items-center gap-2.5">
-              {avatarSrc ? (
-                profileHref ? (
-                  <a
-                    href={profileHref}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="size-9 shrink-0 overflow-hidden rounded-lg bg-muted ring-1 ring-border/60"
-                  >
-                    <img src={avatarSrc} alt="" className="size-full object-cover" />
-                  </a>
-                ) : (
-                  <div className="size-9 shrink-0 overflow-hidden rounded-lg bg-muted ring-1 ring-border/60">
-                    <img src={avatarSrc} alt="" className="size-full object-cover" />
-                  </div>
-                )
-              ) : null}
+              {avatar}
               <div className="min-w-0 flex-1">
                 {profileHref ? (
                   <a

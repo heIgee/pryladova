@@ -1,5 +1,3 @@
-import { readE2eClassificationEnabled } from "./e2e-classification.stub.js";
-
 type GateWaiter = {
   resolve: () => void;
   reject: (error: Error) => void;
@@ -17,10 +15,6 @@ export const resetE2eClassificationGate = (): void => {
 };
 
 export const waitForE2eClassificationRelease = (): Promise<void> => {
-  if (!readE2eClassificationEnabled()) {
-    return Promise.resolve();
-  }
-
   if (open) {
     return Promise.resolve();
   }

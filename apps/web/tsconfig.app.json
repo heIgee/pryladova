@@ -1,13 +1,16 @@
 {
+  "$schema": "https://www.schemastore.org/tsconfig",
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "jsx": "react-jsx",
-    "module": "ESNext",
+    "target": "es2023",
+    "lib": ["ES2023", "DOM"],
+    "module": "esnext",
     "moduleResolution": "bundler",
-    "noEmit": true,
     "allowImportingTsExtensions": true,
-    "baseUrl": ".",
+    "allowArbitraryExtensions": true,
+    "jsx": "react-jsx",
+    "types": ["vite/client"],
+    "noEmit": true,
     "paths": {
       "@/*": ["./src/*"]
     }

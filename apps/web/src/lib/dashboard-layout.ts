@@ -97,10 +97,13 @@ export const DEFAULT_DASHBOARD_LAYOUT: DashboardLayoutV1 = {
 const isDashboardTileId = (value: unknown): value is DashboardTileId =>
   typeof value === "string" && (DASHBOARD_TILE_IDS as readonly string[]).includes(value);
 
-const isColSpan = (value: unknown): value is ColSpan =>
+export const parseDashboardTileId = (value: unknown): DashboardTileId | null =>
+  isDashboardTileId(value) ? value : null;
+
+export const isColSpan = (value: unknown): value is ColSpan =>
   typeof value === "number" && (COL_SPANS as readonly number[]).includes(value);
 
-const isRowSpan = (value: unknown, id?: DashboardTileId): value is RowSpan =>
+export const isRowSpan = (value: unknown, id?: DashboardTileId): value is RowSpan =>
   typeof value === "number" && (rowSpanLadder(id) as readonly number[]).includes(value);
 
 const isTileAnchor = (value: unknown): value is TileAnchor => {

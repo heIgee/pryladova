@@ -5,3 +5,8 @@ packages:
 allowBuilds:
   active-win: true
   esbuild: true
+  "@nestjs/core": false
+  "@sentry/cli": true
+  "@swc/core": true
+  koffi: true
+  lefthook: false

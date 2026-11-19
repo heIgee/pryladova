@@ -1,10 +1,11 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { SettingsService } from "../settings/settings.service.js";
 import { fetchGoogleAccountEmail, parseGoogleIdTokenEmail } from "./google-account.logic.js";
 import { GoogleTokenService } from "./google-token.service.js";
 
 @Injectable()
 export class GoogleAccountService {
+  private readonly logger = new Logger(GoogleAccountService.name);
   private envAccountEmail: string | null = null;
 
   constructor(
@@ -43,7 +44,7 @@ export class GoogleAccountService {
       return email;
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
-      console.error(`[api] google account email fetch failed: ${message}`);
+      this.logger.error(`google account email fetch failed: ${message}`);
       return null;
     }
   }
@@ -77,7 +78,7 @@ export class GoogleAccountService {
       return email;
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
-      console.error(`[api] google account email persist failed: ${message}`);
+      this.logger.error(`google account email persist failed: ${message}`);
       return null;
     }
   }

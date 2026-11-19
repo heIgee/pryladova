@@ -7,6 +7,23 @@ type SessionPayload = {
   exp: number;
 };
 
+const parseSessionPayload = (raw: string): SessionPayload | null => {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || !("exp" in parsed)) {
+      return null;
+    }
+    const { exp } = parsed;
+    if (typeof exp !== "number") {
+      return null;
+    }
+    return { exp };
+  } catch {
+    // Malformed base64 JSON in the session cookie body is treated as unsigned.
+    return null;
+  }
+};
+
 const signBody = (secret: string, body: string): string =>
   createHmac("sha256", secret).update(body).digest("base64url");
 
@@ -33,12 +50,8 @@ export const verifySessionToken = (token: string, secret: string, now = Date.now
     return false;
   }
 
-  try {
-    const payload = JSON.parse(Buffer.from(body, "base64url").toString("utf8")) as SessionPayload;
-    return typeof payload.exp === "number" && payload.exp > now;
-  } catch {
-    return false;
-  }
+  const payload = parseSessionPayload(Buffer.from(body, "base64url").toString("utf8"));
+  return payload !== null && payload.exp > now;
 };
 
 export const readSessionCookie = (cookieHeader: string | undefined, secret: string): boolean => {
@@ -58,6 +71,7 @@ export const readSessionCookie = (cookieHeader: string | undefined, secret: stri
     try {
       return verifySessionToken(decodeURIComponent(value), secret);
     } catch {
+      // decodeURIComponent fails on malformed cookie encoding; treat as signed out.
       return false;
     }
   }

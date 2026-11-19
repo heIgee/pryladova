@@ -1,8 +1,8 @@
 import type { TelemetryPayload } from "@pryladova/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { supabaseServiceFromClient } from "../test/persistence-mocks.js";
 import { HEARTBEAT_PERSIST_MS } from "./segment.logic.js";
 import { SegmentService } from "./segment.service.js";
-import type { SupabaseService } from "./supabase.service.js";
 
 const STALE_PREVIOUS = "2026-01-01T12:00:00.000Z";
 const STALE_INCOMING = "2026-01-01T12:06:00.000Z";
@@ -25,6 +25,16 @@ const openSegmentSelect = (startedAt: string | null = null) =>
     }),
   });
 
+const heartbeatRow = (dbLastSeenAt: string | null | undefined) => {
+  if (dbLastSeenAt === undefined) {
+    return { last_seen_at: STALE_PREVIOUS, last_active_at: STALE_PREVIOUS };
+  }
+  if (dbLastSeenAt === null) {
+    return null;
+  }
+  return { last_seen_at: dbLastSeenAt, last_active_at: dbLastSeenAt };
+};
+
 const createHeartbeatClient = (options?: {
   dbLastSeenAt?: string | null;
   windowSegmentsUpdate?: ReturnType<typeof vi.fn>;
@@ -33,15 +43,7 @@ const createHeartbeatClient = (options?: {
   const heartbeatsSelect = vi.fn().mockReturnValue({
     eq: vi.fn().mockReturnValue({
       maybeSingle: vi.fn().mockResolvedValue({
-        data:
-          options?.dbLastSeenAt === undefined
-            ? { last_seen_at: STALE_PREVIOUS, last_active_at: STALE_PREVIOUS }
-            : options.dbLastSeenAt === null
-              ? null
-              : {
-                  last_seen_at: options.dbLastSeenAt,
-                  last_active_at: options.dbLastSeenAt,
-                },
+        data: heartbeatRow(options?.dbLastSeenAt),
         error: null,
       }),
     }),
@@ -75,10 +77,7 @@ const createHeartbeatClient = (options?: {
     }),
   };
 
-  const supabaseService = {
-    isConfigured: () => true,
-    getClient: () => client,
-  } as unknown as SupabaseService;
+  const supabaseService = supabaseServiceFromClient(client);
 
   return {
     service: new SegmentService(supabaseService),
@@ -107,10 +106,7 @@ const createFocusChangeService = (rpc: ReturnType<typeof vi.fn>): SegmentService
     }),
   };
 
-  const supabaseService = {
-    isConfigured: () => true,
-    getClient: () => client,
-  } as unknown as SupabaseService;
+  const supabaseService = supabaseServiceFromClient(client);
 
   return new SegmentService(supabaseService);
 };
@@ -168,10 +164,7 @@ describe("SegmentService", () => {
       }),
     };
 
-    const supabaseService = {
-      isConfigured: () => true,
-      getClient: () => client,
-    } as unknown as SupabaseService;
+    const supabaseService = supabaseServiceFromClient(client);
 
     const service = new SegmentService(supabaseService);
     await service.onFocusChange("desk-pc", telemetry(STALE_INCOMING, "Cursor"));
@@ -214,10 +207,7 @@ describe("SegmentService", () => {
       }),
     };
 
-    const supabaseService = {
-      isConfigured: () => true,
-      getClient: () => client,
-    } as unknown as SupabaseService;
+    const supabaseService = supabaseServiceFromClient(client);
 
     const service = new SegmentService(supabaseService);
     await service.closeForAgentDisconnect("desk-pc");
@@ -333,10 +323,7 @@ describe("SegmentService", () => {
         throw new Error(`unexpected table: ${table}`);
       }),
     };
-    const service = new SegmentService({
-      isConfigured: () => true,
-      getClient: () => client,
-    } as unknown as SupabaseService);
+    const service = new SegmentService(supabaseServiceFromClient(client));
 
     await expect(
       service.onFocusChange("desk-pc", telemetry(STALE_INCOMING, "Code")),
@@ -448,10 +435,7 @@ describe("SegmentService", () => {
       }),
     };
 
-    const supabaseService = {
-      isConfigured: () => true,
-      getClient: () => client,
-    } as unknown as SupabaseService;
+    const supabaseService = supabaseServiceFromClient(client);
 
     const service = new SegmentService(supabaseService);
     await service.sweepStaleHeartbeats();
@@ -472,10 +456,7 @@ describe("SegmentService", () => {
       rpc: vi.fn(),
     };
 
-    const supabaseService = {
-      isConfigured: () => true,
-      getClient: () => client,
-    } as unknown as SupabaseService;
+    const supabaseService = supabaseServiceFromClient(client);
 
     const service = new SegmentService(supabaseService);
     const classification = {
@@ -569,10 +550,7 @@ describe("SegmentService", () => {
       }),
     };
 
-    const supabaseService = {
-      isConfigured: () => true,
-      getClient: () => client,
-    } as unknown as SupabaseService;
+    const supabaseService = supabaseServiceFromClient(client);
 
     const service = new SegmentService(supabaseService);
     await service.onHostTick("desk-pc", STALE_PREVIOUS);
@@ -633,10 +611,7 @@ describe("SegmentService", () => {
       }),
     };
 
-    const supabaseService = {
-      isConfigured: () => true,
-      getClient: () => client,
-    } as unknown as SupabaseService;
+    const supabaseService = supabaseServiceFromClient(client);
 
     const service = new SegmentService(supabaseService);
     await service.onHostTick("desk-pc", STALE_PREVIOUS);
@@ -692,10 +667,7 @@ describe("SegmentService", () => {
         throw new Error(`unexpected table: ${table}`);
       }),
     };
-    const service = new SegmentService({
-      isConfigured: () => true,
-      getClient: () => client,
-    } as unknown as SupabaseService);
+    const service = new SegmentService(supabaseServiceFromClient(client));
 
     await service.onFocusChange("desk-pc", telemetry("2026-10-18T09:59:47.746Z", "Cursor"));
 
@@ -744,10 +716,7 @@ describe("SegmentService", () => {
         throw new Error(`unexpected table: ${table}`);
       }),
     };
-    const service = new SegmentService({
-      isConfigured: () => true,
-      getClient: () => client,
-    } as unknown as SupabaseService);
+    const service = new SegmentService(supabaseServiceFromClient(client));
 
     await service.onFocusChange("desk-pc", telemetry("2026-10-18T09:59:47.746Z", "Cursor"));
 
@@ -788,10 +757,7 @@ describe("SegmentService", () => {
         throw new Error(`unexpected table: ${table}`);
       }),
     };
-    const service = new SegmentService({
-      isConfigured: () => true,
-      getClient: () => client,
-    } as unknown as SupabaseService);
+    const service = new SegmentService(supabaseServiceFromClient(client));
 
     await service.onFocusChange("desk-pc", telemetry("2026-10-18T16:00:00.000Z", "Cursor"));
 
@@ -884,10 +850,7 @@ describe("SegmentService", () => {
         throw new Error(`unexpected table: ${table}`);
       }),
     };
-    const service = new SegmentService({
-      isConfigured: () => true,
-      getClient: () => client,
-    } as unknown as SupabaseService);
+    const service = new SegmentService(supabaseServiceFromClient(client));
 
     await service.onHostTick("desk-pc", "2026-01-01T12:00:00.000Z", { idleMs: 0 });
     await service.onHostTick("desk-pc", "2026-01-01T12:00:04.000Z", {
@@ -950,10 +913,7 @@ describe("SegmentService", () => {
         throw new Error(`unexpected table: ${table}`);
       }),
     };
-    const service = new SegmentService({
-      isConfigured: () => true,
-      getClient: () => client,
-    } as unknown as SupabaseService);
+    const service = new SegmentService(supabaseServiceFromClient(client));
 
     await service.onHostTick("desk-pc", "2026-01-01T12:00:00.000Z", { idleMs: 0 });
     await service.onHostTick("desk-pc", "2026-01-01T12:00:04.000Z", {

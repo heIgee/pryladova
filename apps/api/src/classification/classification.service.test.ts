@@ -1,15 +1,14 @@
 import { Test } from "@nestjs/testing";
 import { SECURE_APP_NAME, SECURE_WINDOW_TITLE } from "@pryladova/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { testApiConfig } from "../config.js";
 import { ConfigService } from "../config.service.js";
 import { SupabaseService } from "../persistence/supabase.service.js";
 import { SettingsService } from "../settings/settings.service.js";
 import { createSupabaseServiceMock } from "../test/persistence-mocks.js";
 import { ClassificationService } from "./classification.service.js";
 
-const { generateObjectMock } = vi.hoisted(() => ({
-  generateObjectMock: vi.fn(),
-}));
+const generateObjectMock = vi.hoisted(() => vi.fn());
 
 vi.mock("ai", () => ({
   generateObject: generateObjectMock,
@@ -27,7 +26,10 @@ const classification = {
 
 const createService = async (options?: {
   geminiApiKey?: string | undefined;
-  supabase?: SupabaseService;
+  supabase?: {
+    isConfigured: () => boolean;
+    getClient: () => { from: (table: string) => unknown };
+  };
 }) => {
   const geminiApiKey =
     options !== undefined && "geminiApiKey" in options ? options.geminiApiKey : "test-key";
@@ -38,15 +40,7 @@ const createService = async (options?: {
       SettingsService,
       {
         provide: ConfigService,
-        useValue: {
-          config: {
-            geminiApiKey,
-            geminiModel: "gemini-3.1-flash-lite",
-            ingestSecret: undefined,
-            supabaseUrl: undefined,
-            supabaseSecretKey: undefined,
-          },
-        },
+        useValue: { config: testApiConfig({ geminiApiKey }) },
       },
       {
         provide: SupabaseService,

@@ -1,11 +1,9 @@
-import type { HostPayload, TelemetryPayload } from "@pryladova/shared";
+import { type HostPayload, hostPayloadSchema, type TelemetryPayload } from "@pryladova/shared";
 import { loadConfig } from "./config.js";
 import { initHostMetrics, readHostMetrics } from "./host-metrics.js";
-import {
-  readNowPlaying,
-  resolveHostMediaThumbnail,
-  setNowPlayingThumbnailListener,
-} from "./now-playing.js";
+import { agentLog } from "./logger.js";
+import { readNowPlaying, setNowPlayingThumbnailListener } from "./now-playing.js";
+import { resolveHostMediaThumbnail } from "./now-playing-core.js";
 import {
   createBlockedAppsSet,
   type RawWindowSnapshot,
@@ -29,7 +27,7 @@ const readForegroundOrUndefined = async () => {
   } catch (error: unknown) {
     if (!activeWinErrorLogged) {
       const message = error instanceof Error ? error.message : String(error);
-      console.warn(`[agent] active window read failed: ${message}`);
+      agentLog.warn(`active window read failed: ${message}`);
       activeWinErrorLogged = true;
     }
     return undefined;
@@ -124,9 +122,8 @@ const CONNECT_RETRY_MAX_MS = 30_000;
 
 const formatConnectError = (error: unknown): string => {
   if (error instanceof Error) {
-    const sys = error as NodeJS.ErrnoException;
-    if (sys.code) {
-      return sys.code;
+    if ("code" in error && typeof error.code === "string" && error.code.length > 0) {
+      return error.code;
     }
     const message = error.message.trim();
     if (message) {
@@ -140,7 +137,7 @@ const formatConnectError = (error: unknown): string => {
 const watchHubBoundReject = (hubBoundReject: Promise<never>): void => {
   void hubBoundReject.catch((error: unknown) => {
     const message = error instanceof Error ? error.message : String(error);
-    console.error(`[agent] ${message}`);
+    agentLog.error(message);
     process.exit(1);
   });
 };
@@ -156,14 +153,15 @@ const connectWithRetry = async (
 
   for (;;) {
     try {
+      // biome-ignore lint/performance/noAwaitInLoops: reconnect waits out the previous attempt
       const connection = await connectAgentWs(apiUrl, ingestSecret, agentId, onDisconnect);
       if (loggedFailure) {
-        console.log("[agent] ws connected");
+        agentLog.info("ws connected");
       }
       return connection;
     } catch (error: unknown) {
       if (!loggedFailure) {
-        console.error(`[agent] ws connect failed: ${formatConnectError(error)} (retrying)`);
+        agentLog.error(`ws connect failed: ${formatConnectError(error)} (retrying)`);
         loggedFailure = true;
       }
       await new Promise((resolve) => {
@@ -177,8 +175,8 @@ const connectWithRetry = async (
 const run = async (): Promise<void> => {
   const config = loadConfig();
   await initHostMetrics();
-  console.log(
-    `[agent] pid=${process.pid} agentId=${config.agentId} profile=${config.profile} api=${config.apiUrl}`,
+  agentLog.info(
+    `pid=${process.pid} agentId=${config.agentId} profile=${config.profile} api=${config.apiUrl}`,
   );
   const blockedApps = createBlockedAppsSet(config.blockedApps);
   let lastKey = "";
@@ -206,7 +204,7 @@ const run = async (): Promise<void> => {
         }
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
-        console.error(`[agent] shutdown send failed: ${message}`);
+        agentLog.error(`shutdown send failed: ${message}`);
       }
       connection?.client?.close();
       process.exit(0);
@@ -235,11 +233,11 @@ const run = async (): Promise<void> => {
         if (key !== lastKey) {
           telemetry = payload;
           lastKey = key;
-          console.log(`[agent] ${payload.appName} — ${payload.windowTitle}`);
+          agentLog.info(`${payload.appName} — ${payload.windowTitle}`);
         }
       }
 
-      client.sendUpdate(hostResult.host as HostPayload, telemetry);
+      client.sendUpdate(hostPayloadSchema.parse(hostResult.host), telemetry);
       lastTrackKey = hostResult.lastTrackKey;
       cachedThumbnail = hostResult.cachedThumbnail;
     }
@@ -259,7 +257,7 @@ const run = async (): Promise<void> => {
       await tick(connection.client);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
-      console.error(`[agent] ws update send failed: ${message}`);
+      agentLog.error(`ws update send failed: ${message}`);
       tickInFlight = false;
       await reconnectAgent();
     } finally {
@@ -315,13 +313,13 @@ const run = async (): Promise<void> => {
   pollTimer = setInterval(() => {
     void runTick().catch((error: unknown) => {
       const message = error instanceof Error ? error.message : String(error);
-      console.error(`[agent] ${message}`);
+      agentLog.error(message);
     });
   }, config.pollIntervalMs);
 };
 
 void run().catch((error: unknown) => {
   const message = error instanceof Error ? error.message : String(error);
-  console.error(`[agent] fatal: ${message}`);
+  agentLog.error(`fatal: ${message}`);
   process.exit(1);
 });

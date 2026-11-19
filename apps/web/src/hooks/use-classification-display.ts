@@ -29,28 +29,26 @@ export const useClassificationDisplay = (
 } => {
   const status = telemetry.classificationStatus;
   const lastReadyRef = useRef<WindowClassification | null>(null);
-  const [showSpinner, setShowSpinner] = useState(false);
+  const [delayedSpinner, setDelayedSpinner] = useState(false);
+  const pendingWithDelay = classificationEnabled && status === "pending";
 
   if (status === "ready" && telemetry.classification) {
     lastReadyRef.current = telemetry.classification;
   }
 
   useEffect(() => {
-    if (status === "ready") {
-      setShowSpinner(false);
+    if (!pendingWithDelay) {
       return;
     }
 
-    if (status !== "pending" || !classificationEnabled) {
-      setShowSpinner(false);
-      return;
-    }
+    const timer = setTimeout(() => setDelayedSpinner(true), CLASSIFICATION_LOADING_DELAY_MS);
+    return () => {
+      clearTimeout(timer);
+      setDelayedSpinner(false);
+    };
+  }, [pendingWithDelay]);
 
-    setShowSpinner(false);
-    const timer = setTimeout(() => setShowSpinner(true), CLASSIFICATION_LOADING_DELAY_MS);
-    return () => clearTimeout(timer);
-  }, [status, classificationEnabled]);
-
+  const showSpinner = pendingWithDelay && delayedSpinner;
   const stale = getStaleClassification(telemetry, showSpinner, lastReadyRef.current);
   const badgeClassification = telemetry.classification ?? stale;
   const showingStale = stale !== null;
@@ -67,7 +65,7 @@ export const useClassificationDisplay = (
     badgeClassification,
     showCategory,
     showWorkChip,
-    showSpinner: classificationEnabled && status === "pending" && showSpinner,
+    showSpinner,
     isClassificationFailed: classificationEnabled && status === "failed",
     isMisconfigured: classificationEnabled && status === "misconfigured",
   };

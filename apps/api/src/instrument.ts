@@ -1,11 +1,11 @@
-import "./config.js";
 import * as Sentry from "@sentry/node";
+import { loadConfig } from "./config.js";
 
-const dsn = process.env.SENTRY_DSN?.trim();
-if (dsn && process.env.NODE_ENV !== "test") {
+const config = loadConfig();
+if (config.sentryDsn && !config.runtime.isTest) {
   Sentry.init({
-    dsn,
-    environment: process.env.NODE_ENV ?? "development",
-    release: process.env.SENTRY_RELEASE?.trim() || undefined,
+    dsn: config.sentryDsn,
+    environment: config.runtime.nodeEnv,
+    release: config.runtime.sentryRelease,
   });
 }

@@ -7,7 +7,7 @@ import {
   isSchemaMissingError,
   PERMISSION_DENIED_MESSAGE,
   SCHEMA_MISSING_MESSAGE,
-} from "./persistence-error.js";
+} from "@pryladova/shared";
 import {
   advanceHeartbeatMemory,
   createHeartbeatMemoryFromDb,
@@ -207,6 +207,7 @@ export class SegmentService implements OnApplicationShutdown {
       }
 
       try {
+        // biome-ignore lint/performance/noAwaitInLoops: heartbeats persist one agent at a time
         await this.persistHeartbeat(id, memory);
         this.heartbeatMemory.set(id, {
           ...memory,
@@ -386,6 +387,7 @@ export class SegmentService implements OnApplicationShutdown {
       }
 
       for (const heartbeat of heartbeats ?? []) {
+        // biome-ignore lint/performance/noAwaitInLoops: stale segments close in heartbeat order
         await this.closeOpenSegmentAt(
           heartbeat.agent_id,
           heartbeat.last_active_at ?? heartbeat.last_seen_at,

@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import {
   type GoogleCalendarStatusResponse,
   parseGoogleCalendarStatusResponse,
@@ -21,6 +21,7 @@ type CachedReady = Extract<GoogleCalendarStatusResponse, { status: "ready" }>;
 
 @Injectable()
 export class GoogleCalendarService {
+  private readonly logger = new Logger(GoogleCalendarService.name);
   private cached: { ready: CachedReady; expiresAt: number } | null = null;
 
   constructor(
@@ -71,7 +72,7 @@ export class GoogleCalendarService {
       }
 
       const message = error instanceof Error ? error.message : String(error);
-      console.error(`[api] google calendar fetch failed: ${message}`);
+      this.logger.error(`google calendar fetch failed: ${message}`);
       return parseGoogleCalendarStatusResponse({ status: "unavailable" });
     }
   }
@@ -122,14 +123,18 @@ export class GoogleCalendarService {
     const upcomingEvents = pickUpcomingEvents(events, nowMs);
     const activeTimed = events.some((event) => isActiveTimedMeeting(event, nowMs));
 
-    return parseGoogleCalendarStatusResponse({
+    const readyResponse = parseGoogleCalendarStatusResponse({
       status: "ready",
       accountEmail,
       inMeeting: activeTimed,
       currentEvent,
       upcomingEvents,
       fetchedAt: nowIso,
-    }) as CachedReady;
+    });
+    if (readyResponse.status !== "ready") {
+      throw new Error("Google Calendar status response was not ready");
+    }
+    return readyResponse;
   }
 
   private getDbRefreshTokenPlaintext(): string | null {
@@ -142,7 +147,7 @@ export class GoogleCalendarService {
       return this.googleTokenService.decryptRefreshToken(encrypted);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
-      console.error(`[api] google refresh token decrypt failed: ${message}`);
+      this.logger.error(`google refresh token decrypt failed: ${message}`);
       return null;
     }
   }

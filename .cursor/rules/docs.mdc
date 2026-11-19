@@ -1,15 +1,12 @@
 ---
-description: Where docs live and when to update them
+description: Markdown authoring once a markdown file is open
 globs: **/*.md
 alwaysApply: false
 ---
 
-# Docs maintenance
+# Docs authoring
 
-- Living docs: behavior, deploy, env, or CI changes → update the relevant doc in the same change. Do not wait to be asked.
-- Map: `deploy/*` → `deploy/README.md`; local dev → `README.md`; future work → `ROADMAP.md`.
-- Single source of truth: env vars in the app's `.env.example`, scripts in `package.json` — docs reference, don't duplicate.
-- Notice stale or wrong docs while working → fix in that change or call it out before finishing.
+- Notice stale or wrong docs while a markdown file is open: fix them in that change or call them out before finishing.
 
 ## Todos in markdown
 

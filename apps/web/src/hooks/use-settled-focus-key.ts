@@ -54,51 +54,40 @@ export const useDebouncedFocusLoading = (
   skeletonDisplay: FocusDisplaySnapshot,
   options: { enabled: boolean; isPending: boolean },
 ): { showSkeleton: boolean; display: FocusDisplaySnapshot } => {
-  const [lastSettled, setLastSettled] = useState<SettledFocusSnapshot | null>(null);
-  const [showSkeleton, setShowSkeleton] = useState(false);
+  const lastSettledRef = useRef<SettledFocusSnapshot | null>(null);
   const hasEverSettledRef = useRef(false);
-  const settledDisplayRef = useRef(settledDisplay);
-  settledDisplayRef.current = settledDisplay;
+  const [delayElapsed, setDelayElapsed] = useState(false);
+
+  if (!options.enabled || !options.isPending) {
+    lastSettledRef.current = { focusKey, ...settledDisplay };
+    hasEverSettledRef.current = true;
+  }
+
+  const isUnsettled = options.enabled && lastSettledRef.current?.focusKey !== focusKey;
+  const showImmediateSkeleton = shouldShowImmediateFocusSkeleton(
+    hasEverSettledRef.current,
+    isUnsettled,
+  );
+  const needsSkeletonDelay = isUnsettled && !showImmediateSkeleton;
 
   useEffect(() => {
-    if (!options.enabled) {
-      setLastSettled({ focusKey, ...settledDisplayRef.current });
-      hasEverSettledRef.current = true;
-      setShowSkeleton(false);
+    if (!needsSkeletonDelay) {
       return;
     }
 
-    if (!options.isPending) {
-      setLastSettled({ focusKey, ...settledDisplayRef.current });
-      hasEverSettledRef.current = true;
-      setShowSkeleton(false);
-    }
-  }, [focusKey, options.enabled, options.isPending]);
-
-  const isUnsettled = options.enabled && lastSettled?.focusKey !== focusKey;
-
-  useEffect(() => {
-    if (!isUnsettled) {
-      setShowSkeleton(false);
-      return;
-    }
-
-    if (shouldShowImmediateFocusSkeleton(hasEverSettledRef.current, isUnsettled)) {
-      setShowSkeleton(true);
-      return;
-    }
-
-    setShowSkeleton(false);
-    const timer = setTimeout(() => setShowSkeleton(true), CLASSIFICATION_LOADING_DELAY_MS);
+    setDelayElapsed(false);
+    const timer = setTimeout(() => setDelayElapsed(true), CLASSIFICATION_LOADING_DELAY_MS);
     return () => clearTimeout(timer);
-  }, [isUnsettled]);
+  }, [needsSkeletonDelay]);
+
+  const showSkeleton = isUnsettled && (showImmediateSkeleton || delayElapsed);
 
   return resolveDebouncedFocusDisplay({
     enabled: options.enabled,
     isUnsettled,
     showSkeleton,
     hasEverSettled: hasEverSettledRef.current,
-    lastSettled,
+    lastSettled: lastSettledRef.current,
     settledDisplay,
     skeletonDisplay,
   });

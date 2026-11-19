@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import {
   type GeocodeCity,
   parseGeocodeCitiesResponse,
@@ -89,6 +89,7 @@ const formatReverseGeocodeLabel = (result: {
 
 @Injectable()
 export class WeatherService {
+  private readonly logger = new Logger(WeatherService.name);
   private readonly cache = new Map<string, { ready: CachedReady; expiresAt: number }>();
 
   async getWeather(
@@ -124,13 +125,17 @@ export class WeatherService {
 
       const json: unknown = await response.json();
       const parsed = openMeteoCurrentSchema.parse(json);
-      const ready = parseWeatherResponse({
+      const readyResponse = parseWeatherResponse({
         status: "ready",
         temperatureC: parsed.current.temperature_2m,
         weatherCode: parsed.current.weather_code,
         condition: weatherCodeToCondition(parsed.current.weather_code),
         fetchedAt: new Date().toISOString(),
-      }) as CachedReady;
+      });
+      if (readyResponse.status !== "ready") {
+        throw new Error("Open-Meteo response did not produce ready weather");
+      }
+      const ready: CachedReady = readyResponse;
 
       this.cache.set(cacheKey, { ready, expiresAt: now + CACHE_TTL_MS });
       this.trimCache();
@@ -140,7 +145,7 @@ export class WeatherService {
         return cached.ready;
       }
       const message = error instanceof Error ? error.message : String(error);
-      console.error(`[api] weather fetch failed: ${message}`);
+      this.logger.error(`weather fetch failed: ${message}`);
       return parseWeatherResponse({ status: "unavailable" });
     }
   }

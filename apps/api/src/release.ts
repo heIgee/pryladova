@@ -1,4 +1,5 @@
 import { execSync } from "node:child_process";
+import { loadConfig } from "./config.js";
 
 let cachedRelease: string | undefined | null = null;
 
@@ -7,10 +8,10 @@ export const resolveRelease = (): string | undefined => {
     return cachedRelease;
   }
 
-  const fromEnv = process.env.SENTRY_RELEASE?.trim();
-  if (fromEnv) {
-    cachedRelease = fromEnv;
-    return fromEnv;
+  const fromConfig = loadConfig().runtime.sentryRelease;
+  if (fromConfig) {
+    cachedRelease = fromConfig;
+    return fromConfig;
   }
 
   try {
@@ -20,6 +21,7 @@ export const resolveRelease = (): string | undefined => {
     }).trim();
     return cachedRelease;
   } catch {
+    // Git is unavailable outside a checkout; release stays unset.
     cachedRelease = undefined;
     return undefined;
   }

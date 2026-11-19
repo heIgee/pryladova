@@ -1,8 +1,8 @@
-import { forwardRef, Module } from "@nestjs/common";
+import { Module } from "@nestjs/common";
 import { ClassificationModule } from "../classification/classification.module.js";
 import { IngestModule } from "../ingest/ingest.module.js";
 import { PersistenceModule } from "../persistence/persistence.module.js";
-import { RealtimeModule } from "../realtime/realtime.module.js";
+import { RealtimeCoreModule } from "../realtime/realtime-core.module.js";
 import { SettingsModule } from "../settings/settings.module.js";
 import { TelemetryService } from "./telemetry.service.js";
 
@@ -11,8 +11,8 @@ import { TelemetryService } from "./telemetry.service.js";
     ClassificationModule,
     IngestModule,
     PersistenceModule,
-    forwardRef(() => SettingsModule),
-    forwardRef(() => RealtimeModule),
+    RealtimeCoreModule,
+    SettingsModule,
   ],
   providers: [TelemetryService],
   exports: [TelemetryService, IngestModule],

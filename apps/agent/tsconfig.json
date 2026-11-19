@@ -1,8 +1,13 @@
 {
+  "$schema": "https://www.schemastore.org/tsconfig",
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "outDir": "./dist",
-    "rootDir": "./src",
+    "target": "es2025",
+    "lib": ["es2025", "ESNext.Collection", "ESNext.Temporal"],
+    "module": "nodenext",
+    "types": ["node"],
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
     "noEmit": true
   },
   "include": ["src/**/*.ts"]

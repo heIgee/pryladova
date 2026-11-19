@@ -1,11 +1,13 @@
+import { isNetworkErrnoCode, readErrorCode } from "./errno-code.js";
+
 const TRANSIENT_STATUSES = new Set([502, 504]);
 const DEFAULT_MAX_RETRIES = 5;
 const BASE_DELAY_MS = 400;
 const MAX_DELAY_MS = 4_000;
 
 export class ApiUnavailableError extends Error {
-  constructor(message = "API temporarily unavailable") {
-    super(message);
+  constructor(message = "API temporarily unavailable", options?: { cause?: unknown }) {
+    super(message, options);
     this.name = "ApiUnavailableError";
   }
 }
@@ -22,8 +24,7 @@ const isNetworkError = (error: unknown): boolean => {
   if (error instanceof TypeError) {
     return true;
   }
-  const code = (error as NodeJS.ErrnoException).code;
-  return code === "ECONNRESET" || code === "ECONNREFUSED" || code === "ECONNABORTED";
+  return isNetworkErrnoCode(readErrorCode(error));
 };
 
 const isTransientStatus = (status: number): boolean => TRANSIENT_STATUSES.has(status);
@@ -39,6 +40,7 @@ export const apiFetch = async (
 
   for (;;) {
     try {
+      // biome-ignore lint/performance/noAwaitInLoops: retries wait for the previous attempt
       const response = await fetch(input, { ...init, credentials: "include" });
       if (isTransientStatus(response.status) && attempt < maxRetries) {
         attempt += 1;
@@ -50,7 +52,7 @@ export const apiFetch = async (
     } catch (error: unknown) {
       if (!isNetworkError(error) || attempt >= maxRetries) {
         if (isNetworkError(error)) {
-          throw new ApiUnavailableError();
+          throw new ApiUnavailableError("API temporarily unavailable", { cause: error });
         }
         throw error;
       }

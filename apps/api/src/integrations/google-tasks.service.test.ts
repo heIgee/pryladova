@@ -1,32 +1,21 @@
 import { Test } from "@nestjs/testing";
 import { googleTasksStatusResponseSchema } from "@pryladova/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ApiConfig } from "../config.js";
+import { testApiConfig } from "../config.js";
 import { ConfigService } from "../config.service.js";
 import { SettingsService } from "../settings/settings.service.js";
 import { GoogleAccountService } from "./google-account.service.js";
 import { GoogleTasksService } from "./google-tasks.service.js";
 import { GoogleTokenService } from "./google-token.service.js";
 
-const googleConfig: ApiConfig = {
-  geminiApiKey: undefined,
-  geminiModel: "gemini-3.1-flash-lite",
-  ingestSecret: undefined,
-  sentryDsn: undefined,
+const googleConfig = testApiConfig({
   sessionSecret: "test-session-secret-at-least-32-characters",
-  panelPasswordHash: undefined,
-  supabaseUrl: undefined,
-  supabaseSecretKey: undefined,
-  githubToken: undefined,
-  githubUsername: undefined,
-  steamApiKey: undefined,
-  steamId: undefined,
   googleClientId: "google-client-id",
   googleClientSecret: "google-client-secret",
   googleRedirectUri: "http://localhost:5173/api/integrations/google/callback",
   googleRefreshToken: "env-refresh-token",
   integrationEncryptionKey: Buffer.from("0123456789abcdef0123456789abcdef").toString("base64"),
-};
+});
 
 describe("GoogleTasksService", () => {
   afterEach(() => {
@@ -62,7 +51,7 @@ describe("GoogleTasksService", () => {
   it("returns ready payload from Google Tasks API", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async (input: RequestInfo | URL) => {
+      vi.fn(async (input: Parameters<typeof fetch>[0]) => {
         const url = String(input);
         if (url.includes("tasks.googleapis.com/tasks/v1/lists")) {
           return {

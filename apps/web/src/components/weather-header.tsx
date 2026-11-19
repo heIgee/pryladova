@@ -13,7 +13,11 @@ import {
   Sun,
 } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
-import { headerChipClassName, headerIconButtonClassName } from "@/components/layout/shell";
+import {
+  headerChipClassName,
+  headerChipOpenClassName,
+  headerIconButtonSmClassName,
+} from "@/lib/header-chrome";
 import { cn } from "@/lib/utils";
 import type { GeocodeResult } from "@/lib/weather";
 import { reverseGeocodeCity, searchWeatherCities } from "@/lib/weather";
@@ -59,76 +63,31 @@ const MIN_REFRESH_SPIN_MS = 400;
 const popoverRowClassName =
   "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-caption text-foreground transition-colors hover:bg-muted";
 
-export const WeatherHeader = ({
-  weather,
+const WeatherLocationPopover = ({
   locationLabel,
-  usingBrowserLocation = false,
-  onLocationChange,
+  canRefresh,
+  refreshing,
   onRefresh,
+  onLocationChange,
+  onClose,
 }: {
-  weather: WeatherResponse;
   locationLabel: string | null;
-  usingBrowserLocation?: boolean;
+  canRefresh: boolean;
+  refreshing: boolean;
+  onRefresh: () => void;
   onLocationChange: (location: WeatherLocation) => void;
-  onRefresh: () => Promise<void>;
+  onClose: () => void;
 }) => {
-  const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<GeocodeResult[]>([]);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [geoError, setGeoError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-  const refreshGeneration = useRef(0);
-  const refreshTimer = useRef<number | null>(null);
   const searchGeneration = useRef(0);
   const inputId = useId();
   const listboxId = useId();
 
   useEffect(() => {
-    if (!open) {
-      return;
-    }
-
-    const handlePointerDown = (event: MouseEvent): void => {
-      if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
-        setOpen(false);
-      }
-    };
-
-    const handleKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === "Escape") {
-        setOpen(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [open]);
-
-  useEffect(
-    () => () => {
-      if (refreshTimer.current !== null) {
-        window.clearTimeout(refreshTimer.current);
-      }
-    },
-    [],
-  );
-
-  useEffect(() => {
-    if (!open) {
-      setQuery("");
-      setResults([]);
-      setSearchError(null);
-      setGeoError(null);
-      return;
-    }
-
     const trimmed = query.trim();
     if (trimmed.length < 2) {
       setResults([]);
@@ -159,11 +118,11 @@ export const WeatherHeader = ({
     return () => {
       window.clearTimeout(timer);
     };
-  }, [open, query]);
+  }, [query]);
 
   const handlePick = (result: GeocodeResult): void => {
     onLocationChange({ lat: result.lat, lon: result.lon, label: result.label, source: "search" });
-    setOpen(false);
+    onClose();
   };
 
   const handleUseBrowserLocation = (): void => {
@@ -178,7 +137,7 @@ export const WeatherHeader = ({
           label: result.label,
           source: "browser",
         });
-        setOpen(false);
+        onClose();
       })
       .catch((error: unknown) => {
         setGeoError(formatGeolocationError(error));
@@ -187,6 +146,186 @@ export const WeatherHeader = ({
         setBusy(false);
       });
   };
+
+  const usingCurrentLocation = busy;
+  const locationButtonLabel = usingCurrentLocation ? "Using current location" : "Use my location";
+
+  return (
+    <div
+      role="dialog"
+      aria-label="Weather location"
+      className="absolute top-full right-0 z-20 mt-2 w-[min(18rem,calc(100vw-2rem))] overscroll-contain rounded-xl bg-background p-2.5 shadow-lg ring-1 ring-border/60"
+    >
+      <div
+        className={cn(
+          "mb-2 flex items-center gap-2",
+          locationLabel ? "justify-between" : "justify-end",
+        )}
+      >
+        {locationLabel ? (
+          <p className="min-w-0 flex-1 text-micro break-words text-muted-foreground">
+            {locationLabel}
+          </p>
+        ) : null}
+        <button
+          type="button"
+          disabled={!canRefresh}
+          className={headerIconButtonSmClassName}
+          aria-label="Refresh weather"
+          title="Refresh weather"
+          onClick={onRefresh}
+        >
+          <RefreshCw className={cn("size-3.5", refreshing && "animate-spin")} aria-hidden="true" />
+        </button>
+      </div>
+
+      <button
+        type="button"
+        disabled={busy}
+        className={cn(
+          popoverRowClassName,
+          "mb-3 disabled:opacity-50",
+          usingCurrentLocation && "text-muted-foreground",
+        )}
+        onClick={handleUseBrowserLocation}
+      >
+        <LocateFixed className="size-3.5 shrink-0" aria-hidden="true" />
+        {locationButtonLabel}
+      </button>
+
+      {geoError ? (
+        <p className="mb-2 text-micro text-destructive" aria-live="polite">
+          {geoError}
+        </p>
+      ) : null}
+
+      <label htmlFor={inputId} className="mb-1 block text-micro text-muted-foreground">
+        Search city
+      </label>
+      <input
+        id={inputId}
+        name="weather-location-search"
+        type="search"
+        value={query}
+        placeholder="Kyiv, Berlin…"
+        autoComplete="off"
+        role="combobox"
+        aria-controls={listboxId}
+        aria-expanded={results.length > 0}
+        className="mb-2 w-full rounded-lg bg-muted px-2 py-1.5 text-caption text-foreground ring-1 ring-border/60 outline-none focus-visible:ring-2 focus-visible:ring-foreground/20"
+        onChange={(event) => {
+          setQuery(event.target.value);
+        }}
+      />
+
+      {searchError ? (
+        <p className="mb-1 text-micro text-muted-foreground" aria-live="polite">
+          {searchError}
+        </p>
+      ) : null}
+
+      <div id={listboxId} role="listbox" className="max-h-40 overflow-y-auto overscroll-contain">
+        {results.map((result) => (
+          <button
+            key={`${result.lat},${result.lon},${result.label}`}
+            type="button"
+            role="option"
+            className={popoverRowClassName}
+            onClick={() => {
+              handlePick(result);
+            }}
+          >
+            {result.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+export const WeatherHeader = ({
+  weather,
+  locationLabel,
+  usingBrowserLocation: _usingBrowserLocation = false,
+  onLocationChange,
+  onRefresh,
+}: {
+  weather: WeatherResponse;
+  locationLabel: string | null;
+  usingBrowserLocation?: boolean;
+  onLocationChange: (location: WeatherLocation) => void;
+  onRefresh: () => Promise<void>;
+}) => {
+  const [open, setOpen] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const refreshGeneration = useRef(0);
+  const refreshTimer = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    const handlePointerDown = (event: MouseEvent): void => {
+      const target = event.target;
+      if (rootRef.current && target instanceof Node && !rootRef.current.contains(target)) {
+        setOpen(false);
+      }
+    };
+
+    const dialog = rootRef.current?.querySelector<HTMLElement>('[role="dialog"]');
+    const previouslyFocused = document.activeElement;
+    const focusable = (): HTMLElement[] =>
+      dialog
+        ? [...dialog.querySelectorAll<HTMLElement>("button:not([disabled]), input:not([disabled])")]
+        : [];
+    focusable()[0]?.focus();
+
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") {
+        setOpen(false);
+        return;
+      }
+      if (event.key !== "Tab" || !dialog) {
+        return;
+      }
+      const items = focusable();
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (!first || !last) {
+        return;
+      }
+      const active = document.activeElement;
+      const outside = !(active instanceof Node) || !dialog.contains(active);
+      if (event.shiftKey && (active === first || outside)) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (active === last || outside)) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+      if (previouslyFocused instanceof HTMLElement) {
+        previouslyFocused.focus();
+      }
+    };
+  }, [open]);
+
+  useEffect(
+    () => () => {
+      if (refreshTimer.current !== null) {
+        window.clearTimeout(refreshTimer.current);
+      }
+    },
+    [],
+  );
 
   const canRefresh = weather.status !== "disabled";
 
@@ -219,22 +358,20 @@ export const WeatherHeader = ({
     });
   };
 
-  const chipLabel =
-    weather.status === "ready"
-      ? `${Math.round(weather.temperatureC)}° · ${weather.condition}`
-      : weather.status === "unavailable"
-        ? "Unavailable"
-        : "Set location";
+  let chipLabel = "Set location";
+  if (weather.status === "ready") {
+    chipLabel = `${Math.round(weather.temperatureC)}° · ${weather.condition}`;
+  } else if (weather.status === "unavailable") {
+    chipLabel = "Unavailable";
+  }
 
   const Icon = weather.status === "ready" ? weatherCodeToIcon(weather.weatherCode) : MapPin;
-  const usingCurrentLocation = usingBrowserLocation || busy;
-  const locationButtonLabel = usingCurrentLocation ? "Using current location" : "Use my location";
 
   return (
     <div ref={rootRef} className="relative">
       <button
         type="button"
-        className={cn(headerChipClassName, open && "bg-muted text-foreground")}
+        className={open ? headerChipOpenClassName : headerChipClassName}
         aria-expanded={open}
         aria-haspopup="dialog"
         onClick={() => {
@@ -246,91 +383,16 @@ export const WeatherHeader = ({
       </button>
 
       {open ? (
-        <div
-          role="dialog"
-          aria-label="Weather location"
-          className="absolute top-full right-0 z-20 mt-2 w-[min(18rem,calc(100vw-2rem))] rounded-xl bg-background p-2.5 shadow-lg ring-1 ring-border/60"
-        >
-          <div
-            className={cn(
-              "mb-2 flex items-center gap-2",
-              locationLabel ? "justify-between" : "justify-end",
-            )}
-          >
-            {locationLabel ? (
-              <p className="min-w-0 flex-1 text-micro break-words text-muted-foreground">
-                {locationLabel}
-              </p>
-            ) : null}
-            <button
-              type="button"
-              disabled={!canRefresh}
-              className={cn(headerIconButtonClassName, "size-7 shrink-0")}
-              aria-label="Refresh weather"
-              title="Refresh weather"
-              onClick={handleRefresh}
-            >
-              <RefreshCw
-                className={cn("size-3.5", refreshing && "animate-spin")}
-                aria-hidden="true"
-              />
-            </button>
-          </div>
-
-          <button
-            type="button"
-            disabled={busy}
-            className={cn(
-              popoverRowClassName,
-              "mb-3 disabled:opacity-50",
-              usingCurrentLocation && "text-muted-foreground",
-            )}
-            onClick={handleUseBrowserLocation}
-          >
-            <LocateFixed className="size-3.5 shrink-0" aria-hidden="true" />
-            {locationButtonLabel}
-          </button>
-
-          {geoError ? <p className="mb-2 text-micro text-destructive">{geoError}</p> : null}
-
-          <label htmlFor={inputId} className="mb-1 block text-micro text-muted-foreground">
-            Search city
-          </label>
-          <input
-            id={inputId}
-            type="search"
-            value={query}
-            placeholder="Kyiv, Berlin…"
-            autoComplete="off"
-            role="combobox"
-            aria-controls={listboxId}
-            aria-expanded={results.length > 0}
-            className="mb-2 w-full rounded-lg bg-muted px-2 py-1.5 text-caption text-foreground outline-none ring-1 ring-border/60 focus:ring-foreground/20"
-            onChange={(event) => {
-              setQuery(event.target.value);
-            }}
-          />
-
-          {searchError ? (
-            <p className="mb-1 text-micro text-muted-foreground">{searchError}</p>
-          ) : null}
-
-          <div id={listboxId} role="listbox" className="max-h-40 overflow-y-auto">
-            {results.map((result) => (
-              <button
-                key={`${result.lat},${result.lon},${result.label}`}
-                type="button"
-                role="option"
-                className={popoverRowClassName}
-                onClick={() => {
-                  handlePick(result);
-                }}
-              >
-                {result.label}
-              </button>
-            ))}
-          </div>
-        </div>
+        <WeatherLocationPopover
+          locationLabel={locationLabel}
+          canRefresh={canRefresh}
+          refreshing={refreshing}
+          onRefresh={handleRefresh}
+          onLocationChange={onLocationChange}
+          onClose={() => {
+            setOpen(false);
+          }}
+        />
       ) : null}
     </div>
   );

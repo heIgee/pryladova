@@ -2,32 +2,17 @@ import "reflect-metadata";
 import { type INestApplication } from "@nestjs/common";
 import request, { type Agent } from "supertest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ApiConfig } from "../src/config.js";
+import { testApiConfig } from "../src/config.js";
 import { resetReleaseCacheForTests } from "../src/release.js";
 import { createHttpTestApp } from "./http-test-app.js";
 
 const testPanelPassword = "dev";
 const testPanelPasswordHash = "$2b$10$TtcGsCYSJ53WtzGpi0k7lOXLR3yY2n2jrjAnw0grKQFPV9sCEtQuq";
 
-const defaultConfig: ApiConfig = {
-  geminiApiKey: undefined,
-  geminiModel: "gemini-3.1-flash-lite",
-  ingestSecret: undefined,
-  sentryDsn: undefined,
+const defaultConfig = testApiConfig({
   sessionSecret: "test-session-secret-at-least-32-characters",
   panelPasswordHash: testPanelPasswordHash,
-  supabaseUrl: undefined,
-  supabaseSecretKey: undefined,
-  githubToken: undefined,
-  githubUsername: undefined,
-  steamApiKey: undefined,
-  steamId: undefined,
-  googleClientId: undefined,
-  googleClientSecret: undefined,
-  googleRedirectUri: undefined,
-  googleRefreshToken: undefined,
-  integrationEncryptionKey: undefined,
-};
+});
 
 const createApp = createHttpTestApp;
 
@@ -197,7 +182,7 @@ describe("App integration integrations", () => {
   it("GET /api/integrations/google/calendar returns ready when env token is configured", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async (input: RequestInfo | URL) => {
+      vi.fn(async (input: Parameters<typeof fetch>[0]) => {
         const url = String(input);
         if (url.includes("/calendars/primary/events")) {
           return {
@@ -255,7 +240,7 @@ describe("App integration integrations", () => {
   it("GET /api/integrations/google/tasks returns ready when env token is configured", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async (input: RequestInfo | URL) => {
+      vi.fn(async (input: Parameters<typeof fetch>[0]) => {
         const url = String(input);
         if (url.includes("tasks.googleapis.com/tasks/v1/lists")) {
           return {
@@ -301,7 +286,7 @@ describe("App integration integrations", () => {
   it("GET /api/integrations/github returns ready payload when configured", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async (input: RequestInfo | URL) => {
+      vi.fn(async (input: Parameters<typeof fetch>[0]) => {
         const url = String(input);
         if (url.includes("/search/commits")) {
           return { ok: true, json: async () => ({ total_count: 1 }) };

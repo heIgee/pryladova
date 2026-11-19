@@ -34,7 +34,7 @@ const isAllDayCalendarEvent = (event: CalendarEvent): boolean => {
 const allDayCalendarDate = (event: CalendarEvent): string =>
   event.date ?? event.startAt.slice(0, 10);
 
-const formatUpcomingStart = (event: CalendarEvent): string => {
+const formatUpcomingStart = (event: CalendarEvent, nowMs: number): string => {
   if (isAllDayCalendarEvent(event)) {
     return formatIntegrationDateFromKey(allDayCalendarDate(event));
   }
@@ -42,7 +42,7 @@ const formatUpcomingStart = (event: CalendarEvent): string => {
   if (Number.isNaN(date.getTime())) {
     return event.startAt;
   }
-  const now = new Date();
+  const now = new Date(nowMs);
   const time = formatIntegrationTime(event.startAt);
   if (isSameLocalDay(date, now)) {
     return time;
@@ -73,11 +73,23 @@ const EventRow = ({
   </div>
 );
 
+const calendarHeaderDetail = (status: GoogleCalendarTileStatus): string | null | undefined => {
+  if (status.status === "loading") {
+    return null;
+  }
+  if (status.status === "ready" && status.accountEmail) {
+    return status.accountEmail;
+  }
+  return undefined;
+};
+
 export const GoogleCalendarTile = ({
   status,
+  nowMs,
   className,
 }: {
   status: GoogleCalendarTileStatus;
+  nowMs: number;
   className?: string;
 }) => (
   <Card size="sm" className={cn(bentoTileCardClassName, className)}>
@@ -85,7 +97,7 @@ export const GoogleCalendarTile = ({
       testId="google-calendar-tile-header"
       icon={<Calendar className={bentoTileLucideIconClassName} aria-hidden="true" />}
       title="Calendar"
-      detail={status.status === "ready" ? status.accountEmail : null}
+      detail={calendarHeaderDetail(status)}
       action={
         status.status === "ready" ? (
           <>
@@ -117,14 +129,18 @@ export const GoogleCalendarTile = ({
       ) : null}
       {status.status === "misconfigured" ? (
         <div className="grid gap-1">
-          <p className="text-caption text-destructive">GOOGLE_REFRESH_TOKEN is invalid</p>
+          <p className="text-caption text-destructive" aria-live="polite">
+            GOOGLE_REFRESH_TOKEN is invalid
+          </p>
           <p className="text-micro text-muted-foreground/80">
             Fix or remove the env override, then restart the API
           </p>
         </div>
       ) : null}
       {status.status === "unavailable" ? (
-        <p className="text-caption text-destructive">Calendar status unavailable</p>
+        <p className="text-caption text-destructive" aria-live="polite">
+          Calendar status unavailable
+        </p>
       ) : null}
       {status.status === "ready" ? (
         <>
@@ -144,7 +160,7 @@ export const GoogleCalendarTile = ({
                 >
                   <span className="truncate font-medium">{event.title}</span>
                   <span className="shrink-0 text-micro text-muted-foreground tabular-nums">
-                    {formatUpcomingStart(event)}
+                    {formatUpcomingStart(event, nowMs)}
                   </span>
                 </div>
               ))}

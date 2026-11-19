@@ -1,14 +1,5 @@
 {
-  "extends": "../../tsconfig.base.json",
-  "compilerOptions": {
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "outDir": "./dist",
-    "rootDir": "./src",
-    "emitDecoratorMetadata": true,
-    "experimentalDecorators": true,
-    "noEmit": false
-  },
-  "include": ["src/**/*.ts"],
-  "exclude": ["src/**/*.test.ts"]
+  "$schema": "https://www.schemastore.org/tsconfig",
+  "files": [],
+  "references": [{ "path": "./tsconfig.typecheck.json" }]
 }

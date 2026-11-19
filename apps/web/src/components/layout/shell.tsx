@@ -1,14 +1,9 @@
 import { Moon, RotateCcw, Sun } from "lucide-react";
 import type { ReactNode } from "react";
+import { headerIconButtonClassName } from "@/lib/header-chrome";
 import { formatReleaseShort, readAppRelease } from "@/lib/release";
 import type { Theme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
-
-export const headerChipClassName =
-  "inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg px-2.5 font-sans text-micro tabular-nums text-muted-foreground ring-1 ring-border/60 transition-colors hover:bg-muted hover:text-foreground";
-
-export const headerIconButtonClassName =
-  "inline-flex size-9 shrink-0 items-center justify-center rounded-lg font-sans text-muted-foreground ring-1 ring-border/60 transition-colors hover:bg-muted hover:text-foreground";
 
 export const ReleaseTag = () => {
   const release = readAppRelease();
@@ -16,7 +11,7 @@ export const ReleaseTag = () => {
 
   return (
     <p
-      className="pb-6 text-center font-sans text-micro tabular-nums text-muted-foreground/50"
+      className="pb-6 text-center font-sans text-micro text-muted-foreground/50 tabular-nums"
       title={`Web build ${release}`}
     >
       {short}
@@ -46,6 +41,7 @@ export const Shell = ({
 
 const PANEL_SUBTITLES = {
   live: "Live desktop presence",
+  connecting: "Connecting…",
   "api-unavailable": "Cannot reach the API. Check that the server is running.",
   "agent-unavailable": "Not receiving updates. Check that the agent is running.",
 } as const;
@@ -63,7 +59,9 @@ export const PageHeader = ({
       <p
         className={cn(
           "text-caption",
-          subtitle === "live" ? "text-muted-foreground" : "text-destructive",
+          subtitle === "live" || subtitle === "connecting"
+            ? "text-muted-foreground"
+            : "text-destructive",
         )}
       >
         {PANEL_SUBTITLES[subtitle]}

@@ -1,4 +1,5 @@
 import type { HostMedia } from "@pryladova/shared";
+import { agentLog } from "./logger.js";
 import {
   advanceThumbnailBustState,
   createThumbnailBustState,
@@ -9,8 +10,6 @@ import {
   trackMediaKey,
 } from "./now-playing-core.js";
 import { getNowPlayingRuntime, resetNowPlayingRuntimeForHotReload } from "./now-playing-runtime.js";
-
-export { resolveHostMediaThumbnail } from "./now-playing-core.js";
 
 resetNowPlayingRuntimeForHotReload();
 
@@ -106,7 +105,7 @@ const runThumbnailBust = async (trackKey: string): Promise<void> => {
   } catch (error: unknown) {
     if (!state.smtcErrorLogged) {
       const message = error instanceof Error ? error.message : String(error);
-      console.warn(`[agent] SMTC thumbnail retry failed: ${message}`);
+      agentLog.warn(`SMTC thumbnail retry failed: ${message}`);
       state.smtcErrorLogged = true;
     }
     clearThumbnailBust();
@@ -183,7 +182,7 @@ export const readNowPlaying = async (): Promise<HostMedia | null> => {
     const state = runtime();
     if (!state.smtcErrorLogged) {
       const message = error instanceof Error ? error.message : String(error);
-      console.warn(`[agent] SMTC read failed: ${message}`);
+      agentLog.warn(`SMTC read failed: ${message}`);
       state.smtcErrorLogged = true;
     }
     return null;

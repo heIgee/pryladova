@@ -16,13 +16,14 @@ export const parseGoogleIdTokenEmail = (idToken: string | undefined): string | n
   }
 
   const parts = idToken.split(".");
-  if (parts.length !== 3) {
+  const payloadPart = parts[1];
+  if (parts.length !== 3 || payloadPart === undefined) {
     return null;
   }
 
   try {
     const payload = googleIdTokenPayloadSchema.parse(
-      JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8")),
+      JSON.parse(Buffer.from(payloadPart, "base64url").toString("utf8")),
     );
     return payload.email ?? null;
   } catch {

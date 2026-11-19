@@ -1,8 +1,16 @@
 {
-  "editor.defaultFormatter": "biomejs.biome",
+  "json.schemaDownload.enable": true,
   "editor.formatOnSave": true,
   "editor.codeActionsOnSave": {
-    "source.organizeImports.biome": "explicit"
+    "source.organizeImports.biome": "explicit",
+    "source.fixAll.biome": "explicit"
+  },
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "terminal.integrated.automationProfile.windows": {
+    "path": "powershell.exe",
+    "env": {
+      "PATH": "C:\\Program Files\\nodejs;${env:PATH}"
+    }
   },
   "[typescript]": {
     "editor.defaultFormatter": "biomejs.biome"
@@ -10,13 +18,19 @@
   "[typescriptreact]": {
     "editor.defaultFormatter": "biomejs.biome"
   },
+  "[javascript]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "[javascriptreact]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  },
   "[json]": {
     "editor.defaultFormatter": "biomejs.biome"
   },
-  "terminal.integrated.automationProfile.windows": {
-    "path": "powershell.exe",
-    "env": {
-      "PATH": "C:\\Program Files\\nodejs;${env:PATH}"
-    }
+  "[jsonc]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "[css]": {
+    "editor.defaultFormatter": "biomejs.biome"
   }
 }

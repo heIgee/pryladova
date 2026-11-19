@@ -1,4 +1,5 @@
 import type koffiType from "koffi";
+import { agentLog } from "./logger.js";
 
 type FileTimeParts = {
   dwLowDateTime: number;
@@ -26,7 +27,7 @@ let metricsErrorLogged = false;
 
 const logMetricsError = (message: string): void => {
   if (!metricsErrorLogged) {
-    console.warn(`[agent] host metrics failed: ${message}`);
+    agentLog.warn(`host metrics failed: ${message}`);
     metricsErrorLogged = true;
   }
 };
@@ -94,9 +95,10 @@ const fileTimeToBigInt = (ft: FileTimeParts): bigint =>
   (BigInt(ft.dwHighDateTime) << 32n) | BigInt(ft.dwLowDateTime);
 
 const readCpuSample = (loaded: HostMetricsNative): CpuSample | null => {
-  const idle = {} as FileTimeParts;
-  const kernel = {} as FileTimeParts;
-  const user = {} as FileTimeParts;
+  // Koffi fills these out-parameters in place; empty structs are the required shape.
+  const idle: FileTimeParts = { dwLowDateTime: 0, dwHighDateTime: 0 };
+  const kernel: FileTimeParts = { dwLowDateTime: 0, dwHighDateTime: 0 };
+  const user: FileTimeParts = { dwLowDateTime: 0, dwHighDateTime: 0 };
   if (!loaded.GetSystemTimes(idle, kernel, user)) {
     logMetricsError("GetSystemTimes returned false");
     return null;

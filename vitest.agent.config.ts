@@ -1,12 +1,12 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig, mergeConfig } from "vitest/config";
-import shared from "./vitest.shared.js";
+import { vitestShared } from "./vitest.shared.ts";
 
 const repoRoot = path.dirname(fileURLToPath(import.meta.url));
 
 export default mergeConfig(
-  shared,
+  vitestShared,
   defineConfig({
     resolve: {
       alias: {

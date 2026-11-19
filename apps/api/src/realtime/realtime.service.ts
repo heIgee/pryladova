@@ -8,15 +8,21 @@ import {
 } from "@pryladova/shared";
 import WebSocket from "ws";
 
+export type PanelSocket = {
+  readyState: number;
+  send(data: string): void;
+  close(code?: number, reason?: string): void;
+};
+
 @Injectable()
 export class RealtimeService {
-  private readonly panelClients = new Set<WebSocket>();
+  private readonly panelClients = new Set<PanelSocket>();
 
-  addPanelClient(client: WebSocket): void {
+  addPanelClient(client: PanelSocket): void {
     this.panelClients.add(client);
   }
 
-  removePanelClient(client: WebSocket): void {
+  removePanelClient(client: PanelSocket): void {
     this.panelClients.delete(client);
   }
 

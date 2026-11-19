@@ -14,8 +14,8 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -b",
     "lint": "biome check .",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage"
@@ -25,7 +25,7 @@
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^4.1.10",
-    "typescript": "^5.9.2",
+    "typescript": "6.0.3",
     "vitest": "^4.1.10"
   }
 }

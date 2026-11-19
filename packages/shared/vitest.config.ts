@@ -1,8 +1,8 @@
 import { defineConfig, mergeConfig } from "vitest/config";
-import shared from "../../vitest.shared.js";
+import { vitestShared } from "../../vitest.shared.ts";
 
 export default mergeConfig(
-  shared,
+  vitestShared,
   defineConfig({
     test: {
       name: "shared",

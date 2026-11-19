@@ -1,20 +1,38 @@
 {
-  "$schema": "https://turbo.build/schema.json",
+  "$schema": "https://turborepo.dev/schema.json",
+  "globalDependencies": ["tsconfig.base.json", "biome.jsonc", "vitest.shared.ts"],
+  "globalPassThroughEnv": ["*"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**"]
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "!**/*.test.ts",
+        "!**/*.test.tsx",
+        "!**/*.spec.ts",
+        "!**/*.spec.tsx",
+        "!vitest.config.ts"
+      ],
+      "outputs": ["dist/**", ".next/**"]
     },
     "typecheck": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
+    "lint": {
       "dependsOn": ["^build"]
     },
-    "lint": {},
     "test": {
       "dependsOn": ["^build"]
     },
     "test:coverage": {
       "dependsOn": ["^build"],
       "outputs": ["coverage/**"]
+    },
+    "dev": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "persistent": true
     }
   }
 }

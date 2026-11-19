@@ -1,8 +1,11 @@
 import { BadRequestException, ServiceUnavailableException } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import { describe, expect, it, vi } from "vitest";
+import { testApiConfig } from "../config.js";
+import type { ConfigService } from "../config.service.js";
 import { AgentBindingService } from "../ingest/agent-binding.service.js";
 import { HistoryController } from "./history.controller.js";
+import { HistoryService } from "./history.service.js";
 import { SupabaseService } from "./supabase.service.js";
 
 const createController = async (options: {
@@ -23,13 +26,16 @@ const createController = async (options: {
     },
   );
   const boundAgentId = options.boundAgentId === undefined ? "desk-pc" : options.boundAgentId;
-  const agentBindingService = new AgentBindingService();
+  const agentBindingService = new AgentBindingService({
+    config: testApiConfig(),
+  } as ConfigService);
   if (boundAgentId) {
     agentBindingService.rememberAgentId(boundAgentId);
   }
   const moduleRef = await Test.createTestingModule({
     controllers: [HistoryController],
     providers: [
+      HistoryService,
       {
         provide: SupabaseService,
         useValue: {

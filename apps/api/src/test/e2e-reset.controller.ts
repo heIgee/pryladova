@@ -5,12 +5,14 @@ import {
   releaseE2eClassificationGate,
   resetE2eClassificationGate,
 } from "../classification/e2e-classification.gate.js";
+import { ConfigService } from "../config.service.js";
 import { AgentBindingService } from "../ingest/agent-binding.service.js";
 import { TelemetryService } from "../telemetry/telemetry.service.js";
 
 @Controller()
 export class E2eResetController {
   constructor(
+    private readonly configService: ConfigService,
     private readonly classificationService: ClassificationService,
     private readonly telemetryService: TelemetryService,
     private readonly agentBindingService: AgentBindingService,
@@ -19,7 +21,7 @@ export class E2eResetController {
   @Public()
   @Post("api/test/e2e/reset")
   reset(): { ok: true } {
-    if (process.env.NODE_ENV !== "test") {
+    if (!this.configService.config.runtime.isTest) {
       throw new NotFoundException();
     }
 
@@ -33,7 +35,7 @@ export class E2eResetController {
   @Public()
   @Post("api/test/e2e/classification/release")
   releaseClassification(): { released: number } {
-    if (process.env.NODE_ENV !== "test") {
+    if (!this.configService.config.runtime.isTest) {
       throw new NotFoundException();
     }
 

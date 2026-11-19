@@ -1,5 +1,6 @@
 import { AGENT_WS_ROUTE, type HostPayload, type TelemetryPayload } from "@pryladova/shared";
 import WebSocket from "ws";
+import { agentLog } from "./logger.js";
 
 const WS_CONNECT_TIMEOUT_MS = 30_000;
 const HUB_BOUND_CLOSE_CODE = 4403;
@@ -51,7 +52,7 @@ export const connectAgentWs = (
     socket.on("close", (code, reason) => {
       if (code === HUB_BOUND_CLOSE_CODE) {
         const detail = reason.toString() || "Hub already bound to another agent";
-        console.error(`[agent] ws closed (${code}): ${detail}`);
+        agentLog.error(`ws closed (${code}): ${detail}`);
         rejectHubBound?.(new Error(detail));
         return;
       }

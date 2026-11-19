@@ -63,6 +63,10 @@ export const SteamStatusTile = ({
   const recentGames = status.status === "ready" ? status.recentlyPlayed.slice(0, listCap) : [];
   const profileHref = status.status === "ready" ? safeHttpUrl(status.profileUrl) : null;
   const avatarSrc = status.status === "ready" ? safeHttpUrl(status.avatarUrl) : null;
+  let badgeTitle: string | undefined;
+  if (status.status === "ready") {
+    badgeTitle = status.currentGame ? status.currentGame.name : "Steam presence";
+  }
 
   return (
     <Card size="sm" className={cn(bentoTileCardClassName, className)} data-testid="steam-tile">
@@ -74,20 +78,14 @@ export const SteamStatusTile = ({
           <Badge
             variant={status.status === "ready" ? headerBadgeVariant(status) : "outline"}
             className={status.status !== "ready" ? "invisible" : "max-w-36 truncate"}
-            title={
-              status.status !== "ready"
-                ? undefined
-                : status.currentGame
-                  ? status.currentGame.name
-                  : "Steam presence"
-            }
+            title={badgeTitle}
           >
             {status.status === "ready" ? headerBadgeLabel(status) : "Offline"}
           </Badge>
         }
       />
       <CardContent
-        className={cn("flex-1 min-h-0", steamLayoutClasses.body)}
+        className={cn("min-h-0 flex-1", steamLayoutClasses.body)}
         data-bento-list-cap={listCap}
       >
         {isIntegrationLoading(status) ? <IntegrationTileSkeleton /> : null}
@@ -98,7 +96,9 @@ export const SteamStatusTile = ({
           </div>
         ) : null}
         {status.status === "unavailable" ? (
-          <p className="text-caption text-destructive">Steam status unavailable</p>
+          <p className="text-caption text-destructive" aria-live="polite">
+            Steam status unavailable
+          </p>
         ) : null}
         {status.status === "ready" ? (
           <>
@@ -129,7 +129,7 @@ export const SteamStatusTile = ({
                   )}
                 </div>
               )}
-              <div className="min-w-0 flex-1 grid gap-0.5">
+              <div className="grid min-w-0 flex-1 gap-0.5">
                 {profileHref ? (
                   <a
                     href={profileHref}
@@ -170,7 +170,7 @@ export const SteamStatusTile = ({
                         )}
                       </div>
                       <span className="min-w-0 flex-1 truncate">{game.name}</span>
-                      <span className="shrink-0 tabular-nums text-muted-foreground">
+                      <span className="shrink-0 text-muted-foreground tabular-nums">
                         {formatPlaytimeMinutes(game.playtime2WeeksMin)}
                       </span>
                     </div>

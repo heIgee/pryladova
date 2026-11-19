@@ -1,41 +1,33 @@
 import { ServiceUnavailableException } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
-import type { Request, Response } from "express";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ApiConfig } from "../config.js";
+import { type ApiConfig, testApiConfig } from "../config.js";
 import { ConfigService } from "../config.service.js";
 import { SettingsService } from "../settings/settings.service.js";
 import { GoogleAccountService } from "./google-account.service.js";
-import { GoogleOauthController } from "./google-oauth.controller.js";
+import {
+  GoogleOauthController,
+  type OAuthHttpRequest,
+  type OAuthHttpResponse,
+} from "./google-oauth.controller.js";
 import {
   createOAuthStateToken,
   decodeOAuthStateCookie,
   encodeOAuthStateCookie,
   GOOGLE_OAUTH_STATE_COOKIE,
 } from "./google-oauth.logic.js";
+import { GoogleOauthCallbackService } from "./google-oauth-callback.service.js";
 import { GoogleTokenService } from "./google-token.service.js";
 
 const SECRET = "test-session-secret-0123456789abcdef";
 
-const baseConfig: ApiConfig = {
-  geminiApiKey: undefined,
-  geminiModel: "gemini-3.1-flash-lite",
-  ingestSecret: undefined,
-  sentryDsn: undefined,
+const baseConfig = testApiConfig({
   sessionSecret: SECRET,
-  panelPasswordHash: undefined,
-  supabaseUrl: undefined,
-  supabaseSecretKey: undefined,
-  githubToken: undefined,
-  githubUsername: undefined,
-  steamApiKey: undefined,
-  steamId: undefined,
   googleClientId: "client-id",
   googleClientSecret: "client-secret",
   googleRedirectUri: "https://hub.example/api/integrations/google/callback",
-  googleRefreshToken: undefined,
   integrationEncryptionKey: "key",
-};
+});
 
 type ResponseRecorder = {
   cookies: Record<string, string>;
@@ -45,7 +37,7 @@ type ResponseRecorder = {
   body: string | null;
 };
 
-const createResponse = (): { response: Response; recorded: ResponseRecorder } => {
+const createResponse = (): { response: OAuthHttpResponse; recorded: ResponseRecorder } => {
   const recorded: ResponseRecorder = {
     cookies: {},
     cleared: [],
@@ -53,7 +45,7 @@ const createResponse = (): { response: Response; recorded: ResponseRecorder } =>
     statusCode: null,
     body: null,
   };
-  const response = {
+  const response: OAuthHttpResponse = {
     cookie: (name: string, value: string) => {
       recorded.cookies[name] = value;
     },
@@ -65,17 +57,19 @@ const createResponse = (): { response: Response; recorded: ResponseRecorder } =>
     },
     status(code: number) {
       recorded.statusCode = code;
-      return this;
-    },
-    send: (body: string) => {
-      recorded.body = body;
+      return {
+        send: (body: string) => {
+          recorded.body = body;
+        },
+      };
     },
   };
-  return { response: response as unknown as Response, recorded };
+  return { response, recorded };
 };
 
-const requestWithCookie = (value: string | undefined): Request =>
-  ({ cookies: value ? { [GOOGLE_OAUTH_STATE_COOKIE]: value } : {} }) as unknown as Request;
+const requestWithCookie = (value: string | undefined): OAuthHttpRequest => ({
+  cookies: value ? { [GOOGLE_OAUTH_STATE_COOKIE]: value } : {},
+});
 
 const createController = async (overrides?: {
   config?: Partial<ApiConfig>;
@@ -105,21 +99,24 @@ const createController = async (overrides?: {
     fetchAndPersistAccountEmail: vi.fn(async () => undefined),
     clearEnvAccountEmailCache: vi.fn(),
   };
-
   const moduleRef = await Test.createTestingModule({
     controllers: [GoogleOauthController],
     providers: [
-      { provide: ConfigService, useValue: { config: { ...baseConfig, ...overrides?.config } } },
+      {
+        provide: ConfigService,
+        useValue: { config: { ...baseConfig, ...overrides?.config } },
+      },
       { provide: SettingsService, useValue: settings },
       { provide: GoogleTokenService, useValue: token },
       { provide: GoogleAccountService, useValue: account },
+      GoogleOauthCallbackService,
     ],
   }).compile();
 
   return { controller: moduleRef.get(GoogleOauthController), settings, token, account };
 };
 
-const validCallbackRequest = (): { state: string; request: Request } => {
+const validCallbackRequest = (): { state: string; request: OAuthHttpRequest } => {
   const state = createOAuthStateToken(SECRET);
   const cookie = encodeOAuthStateCookie(SECRET, { state, codeVerifier: "verifier" });
   return { state, request: requestWithCookie(cookie) };
@@ -185,6 +182,7 @@ describe("GoogleOauthController.callback", () => {
 
     for (const request of [requestWithCookie(undefined), requestWithCookie("forged.cookie")]) {
       const { response, recorded } = createResponse();
+      // biome-ignore lint/performance/noAwaitInLoops: each cookie is a separate response assertion
       await controller.callback("code", state, undefined, request, response);
       expect(recorded.statusCode).toBe(400);
       expect(recorded.cleared).toContain(GOOGLE_OAUTH_STATE_COOKIE);
@@ -275,7 +273,6 @@ describe("GoogleOauthController.callback", () => {
   });
 
   it("reports exchange failures", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => {});
     const { controller } = await createController({
       token: {
         exchangeAuthorizationCode: vi.fn(async () => {

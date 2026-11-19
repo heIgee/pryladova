@@ -2,6 +2,7 @@ import type { TelemetryState } from "@pryladova/shared";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { resetHistoryDayOffsetStore } from "@/lib/history-day-url";
 import { useHistory } from "./use-history.js";
 
 const telemetry = (appName: string, capturedAt: string): TelemetryState => ({
@@ -19,6 +20,16 @@ const jsonResponse = (entries: { appName: string; durationSec: number }[]) => ({
   json: async () => ({ entries }),
 });
 
+let historyApi: ReturnType<typeof useHistory> | null = null;
+let setHistoryTelemetry: (next: TelemetryState) => void = () => {};
+
+const HistoryProbe = () => {
+  const [current, setCurrent] = useState(telemetry("Edge", "2026-10-19T12:00:00.000Z"));
+  setHistoryTelemetry = setCurrent;
+  historyApi = useHistory(true, current, null);
+  return createElement("p", { "data-testid": "entries" }, JSON.stringify(historyApi.history));
+};
+
 describe("useHistory", () => {
   let container: HTMLDivElement;
   let root: Root;
@@ -30,6 +41,7 @@ describe("useHistory", () => {
     container.remove();
     vi.unstubAllGlobals();
     vi.useRealTimers();
+    resetHistoryDayOffsetStore();
   });
 
   const renderHistory = () => {
@@ -37,26 +49,18 @@ describe("useHistory", () => {
     document.body.appendChild(container);
     root = createRoot(container);
 
-    let api: ReturnType<typeof useHistory> | null = null;
-    let setTelemetry: (next: TelemetryState) => void = () => {};
-
-    const Probe = () => {
-      const [current, setCurrent] = useState(telemetry("Edge", "2026-10-19T12:00:00.000Z"));
-      setTelemetry = setCurrent;
-      api = useHistory(true, current, null);
-      return createElement("p", { "data-testid": "entries" }, JSON.stringify(api.history));
-    };
+    historyApi = null;
 
     return {
-      probe: Probe,
+      probe: HistoryProbe,
       read: () => {
-        if (!api) {
+        if (!historyApi) {
           throw new Error("history hook did not render");
         }
-        return api;
+        return historyApi;
       },
       setTelemetry: (next: TelemetryState) => {
-        setTelemetry(next);
+        setHistoryTelemetry(next);
       },
     };
   };

@@ -2,7 +2,7 @@ export const readApiErrorMessage = async (response: Response): Promise<string> =
   try {
     const json: unknown = await response.json();
     if (json && typeof json === "object" && "message" in json) {
-      const { message } = json as { message?: unknown };
+      const message = json.message;
       if (typeof message === "string") {
         return message;
       }

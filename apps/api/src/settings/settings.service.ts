@@ -1,13 +1,13 @@
 import { Injectable, Logger, type OnModuleInit } from "@nestjs/common";
 import type { Settings, SettingsPutResponse } from "@pryladova/shared";
-import { readE2eClassificationEnabled } from "../classification/e2e-classification.stub.js";
 import {
   formatPersistenceError,
   isPermissionDeniedError,
   isSchemaMissingError,
   PERMISSION_DENIED_MESSAGE,
   SCHEMA_MISSING_MESSAGE,
-} from "../persistence/persistence-error.js";
+} from "@pryladova/shared";
+import { ConfigService } from "../config.service.js";
 import { SupabaseService } from "../persistence/supabase.service.js";
 
 @Injectable()
@@ -18,11 +18,14 @@ export class SettingsService implements OnModuleInit {
   private googleAccountEmail: string | null = null;
   private schemaMissingLogged = false;
 
-  constructor(private readonly supabaseService: SupabaseService) {}
+  constructor(
+    private readonly supabaseService: SupabaseService,
+    private readonly configService: ConfigService,
+  ) {}
 
   async onModuleInit(): Promise<void> {
     await this.loadFromDatabase();
-    if (readE2eClassificationEnabled()) {
+    if (this.configService.config.runtime.e2eClassificationEnabled) {
       this.classificationEnabled = true;
     }
   }

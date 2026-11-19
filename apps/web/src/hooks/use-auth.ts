@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { ApiUnavailableError } from "@/lib/api-fetch.js";
 import { checkSession, login as loginRequest } from "@/lib/auth.js";
+import { subscribePanelSessionLost } from "@/lib/panel-poll.js";
 
 export type AuthStatus = "loading" | "anonymous" | "authenticated";
 
@@ -15,6 +16,15 @@ export const useAuth = (): {
   const [status, setStatus] = useState<AuthStatus>("loading");
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(
+    () =>
+      subscribePanelSessionLost(() => {
+        setStatus("anonymous");
+        setError("Session expired. Sign in again.");
+      }),
+    [],
+  );
+
   useEffect(() => {
     let active = true;
     let delayMs = SESSION_RETRY_BASE_MS;
@@ -22,6 +32,7 @@ export const useAuth = (): {
     const load = async (): Promise<void> => {
       while (active) {
         try {
+          // biome-ignore lint/performance/noAwaitInLoops: session poll retries until it answers
           const authenticated = await checkSession();
           if (active) {
             setStatus(authenticated ? "authenticated" : "anonymous");
@@ -51,22 +62,22 @@ export const useAuth = (): {
     };
   }, []);
 
-  const login = useCallback(async (password: string): Promise<void> => {
+  const login = async (password: string): Promise<void> => {
     setError(null);
     try {
       await loginRequest(password);
       setStatus("authenticated");
     } catch (loginError: unknown) {
-      const message =
-        loginError instanceof ApiUnavailableError
-          ? "API is restarting — try again in a moment"
-          : loginError instanceof Error
-            ? loginError.message
-            : "Login failed";
+      let message = "Login failed";
+      if (loginError instanceof ApiUnavailableError) {
+        message = "API is restarting — try again in a moment";
+      } else if (loginError instanceof Error) {
+        message = loginError.message;
+      }
       setError(message);
       setStatus("anonymous");
     }
-  }, []);
+  };
 
   return { status, error, login };
 };

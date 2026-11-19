@@ -56,16 +56,11 @@ const defaultLayoutSeed = {
   gap: 16,
 };
 
-const visibleShellOrder = async (page: Page): Promise<string[]> =>
-  page
-    .locator("[data-testid^='dashboard-tile-shell-']")
-    .evaluateAll((nodes) =>
-      nodes
-        .map((node) => node.getAttribute("data-testid")?.replace("dashboard-tile-shell-", "") ?? "")
-        .filter(Boolean),
-    );
-
-const dragHeaderTo = async (source: Locator, target: Locator): Promise<void> => {
+const dragHeaderTo = async (
+  source: Locator,
+  target: Locator,
+  dropTargetShell: Locator,
+): Promise<void> => {
   const sourceBox = await source.boundingBox();
   const targetBox = await target.boundingBox();
   if (!sourceBox || !targetBox) {
@@ -83,7 +78,7 @@ const dragHeaderTo = async (source: Locator, target: Locator): Promise<void> => 
   await page.mouse.down();
   await page.mouse.move(startX + 12, startY, { steps: 2 });
   await page.mouse.move(endX, endY, { steps: 16 });
-  await page.waitForTimeout(100);
+  await expect(dropTargetShell).toHaveClass(/ring-primary/);
   await page.mouse.up();
 };
 
@@ -207,6 +202,7 @@ test.describe("dashboard layout", () => {
     await dragHeaderTo(
       tasksShell.getByTestId("dashboard-tile-drag-handle"),
       steamShell.getByTestId("dashboard-tile-drag-handle"),
+      steamShell,
     );
 
     await expect

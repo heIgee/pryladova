@@ -1,4 +1,4 @@
-import { forwardRef, Inject, Injectable } from "@nestjs/common";
+import { Injectable, type OnModuleDestroy } from "@nestjs/common";
 import {
   HOST_MEDIA_HOLD_MS,
   type HostPayload,
@@ -12,6 +12,7 @@ import {
   type WindowClassification,
 } from "@pryladova/shared";
 import { ClassificationService } from "../classification/classification.service.js";
+import { ConfigService } from "../config.service.js";
 import { AgentBindingService } from "../ingest/agent-binding.service.js";
 import { SegmentService } from "../persistence/segment.service.js";
 import { RealtimeService } from "../realtime/realtime.service.js";
@@ -45,7 +46,7 @@ const resolveResultStatus = (
 };
 
 @Injectable()
-export class TelemetryService {
+export class TelemetryService implements OnModuleDestroy {
   private state: TelemetryState | null = null;
   private pendingHost: HostPayload | null = null;
   private ingestGeneration = 0;
@@ -55,13 +56,17 @@ export class TelemetryService {
   private mediaHoldTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
+    private readonly configService: ConfigService,
     private readonly classificationService: ClassificationService,
     private readonly settingsService: SettingsService,
     private readonly segmentService: SegmentService,
     private readonly agentBindingService: AgentBindingService,
-    @Inject(forwardRef(() => RealtimeService))
     private readonly realtimeService: RealtimeService,
   ) {}
+
+  onModuleDestroy(): void {
+    this.clearMediaHoldTimer();
+  }
 
   private publishState(): void {
     if (this.publishQueued) {
@@ -216,7 +221,7 @@ export class TelemetryService {
   }
 
   resetForE2e(): void {
-    if (process.env.NODE_ENV !== "test") {
+    if (!this.configService.config.runtime.isTest) {
       return;
     }
     this.state = null;

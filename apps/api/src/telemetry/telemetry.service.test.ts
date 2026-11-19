@@ -2,6 +2,8 @@ import { Test } from "@nestjs/testing";
 import { SECURE_APP_NAME, SECURE_WINDOW_TITLE, type WindowClassification } from "@pryladova/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ClassificationService } from "../classification/classification.service.js";
+import { testApiConfig } from "../config.js";
+import { ConfigService } from "../config.service.js";
 import { AgentBindingService } from "../ingest/agent-binding.service.js";
 import { SegmentService } from "../persistence/segment.service.js";
 import { SupabaseService } from "../persistence/supabase.service.js";
@@ -23,11 +25,16 @@ const classification: WindowClassification = {
 };
 
 const createService = async (classifyImpl?: ClassificationService["classify"]) => {
+  const realtime = {
+    broadcastPanelState: vi.fn(),
+    broadcastPanelHost: vi.fn(),
+  };
   const moduleRef = await Test.createTestingModule({
     providers: [
       TelemetryService,
       SettingsService,
       AgentBindingService,
+      { provide: ConfigService, useValue: { config: testApiConfig() } },
       {
         provide: ClassificationService,
         useValue: {
@@ -37,10 +44,7 @@ const createService = async (classifyImpl?: ClassificationService["classify"]) =
       },
       {
         provide: RealtimeService,
-        useValue: {
-          broadcastPanelState: vi.fn(),
-          broadcastPanelHost: vi.fn(),
-        },
+        useValue: realtime,
       },
       {
         provide: SegmentService,
@@ -57,6 +61,7 @@ const createService = async (classifyImpl?: ClassificationService["classify"]) =
     telemetryService: moduleRef.get(TelemetryService),
     settingsService: moduleRef.get(SettingsService),
     classify: moduleRef.get(ClassificationService).classify as ReturnType<typeof vi.fn>,
+    realtime,
   };
 };
 
@@ -113,20 +118,9 @@ describe("TelemetryService", () => {
   });
 
   it("ingestAgentUpdate publishes full state once for host and telemetry together", async () => {
-    const { telemetryService } = await createService();
-    const broadcastState = vi.fn();
-    const broadcastHost = vi.fn();
-    (
-      telemetryService as unknown as {
-        realtimeService: {
-          broadcastPanelState: typeof broadcastState;
-          broadcastPanelHost: typeof broadcastHost;
-        };
-      }
-    ).realtimeService = {
-      broadcastPanelState: broadcastState,
-      broadcastPanelHost: broadcastHost,
-    };
+    const { telemetryService, realtime } = await createService();
+    realtime.broadcastPanelState.mockClear();
+    realtime.broadcastPanelHost.mockClear();
 
     telemetryService.ingestAgentUpdate(
       "test-agent",
@@ -142,8 +136,8 @@ describe("TelemetryService", () => {
     );
 
     await Promise.resolve();
-    expect(broadcastState).toHaveBeenCalledTimes(1);
-    expect(broadcastHost).not.toHaveBeenCalled();
+    expect(realtime.broadcastPanelState).toHaveBeenCalledTimes(1);
+    expect(realtime.broadcastPanelHost).not.toHaveBeenCalled();
     expect(telemetryService.getState()?.host?.cpuPercent).toBe(10);
   });
 
@@ -154,6 +148,7 @@ describe("TelemetryService", () => {
         TelemetryService,
         SettingsService,
         AgentBindingService,
+        { provide: ConfigService, useValue: { config: testApiConfig() } },
         {
           provide: ClassificationService,
           useValue: {
@@ -197,11 +192,11 @@ describe("TelemetryService", () => {
   it("persists focus boundaries before host ticks on ingest", async () => {
     const segmentMock = createSegmentServiceMock();
     const callOrder: string[] = [];
-    segmentMock.onFocusChange.mockImplementation(async () => {
+    vi.mocked(segmentMock.onFocusChange).mockImplementation(async () => {
       callOrder.push("focus");
       return "seg-1";
     });
-    segmentMock.onHostTick.mockImplementation(async () => {
+    vi.mocked(segmentMock.onHostTick).mockImplementation(async () => {
       callOrder.push("host");
     });
 
@@ -210,6 +205,7 @@ describe("TelemetryService", () => {
         TelemetryService,
         SettingsService,
         AgentBindingService,
+        { provide: ConfigService, useValue: { config: testApiConfig() } },
         {
           provide: ClassificationService,
           useValue: {
@@ -252,6 +248,7 @@ describe("TelemetryService", () => {
         TelemetryService,
         SettingsService,
         AgentBindingService,
+        { provide: ConfigService, useValue: { config: testApiConfig() } },
         {
           provide: ClassificationService,
           useValue: {
@@ -361,20 +358,9 @@ describe("TelemetryService", () => {
   });
 
   it("publishes full state when a thumbnail arrives after the first host post", async () => {
-    const { telemetryService } = await createService();
-    const broadcastState = vi.fn();
-    const broadcastHost = vi.fn();
-    (
-      telemetryService as unknown as {
-        realtimeService: {
-          broadcastPanelState: typeof broadcastState;
-          broadcastPanelHost: typeof broadcastHost;
-        };
-      }
-    ).realtimeService = {
-      broadcastPanelState: broadcastState,
-      broadcastPanelHost: broadcastHost,
-    };
+    const { telemetryService, realtime } = await createService();
+    realtime.broadcastPanelState.mockClear();
+    realtime.broadcastPanelHost.mockClear();
 
     telemetryService.setState(telemetryPayload);
     telemetryService.setHost({
@@ -393,8 +379,8 @@ describe("TelemetryService", () => {
       capturedAt: "2026-01-01T12:00:01.000Z",
     });
     await Promise.resolve();
-    broadcastState.mockClear();
-    broadcastHost.mockClear();
+    realtime.broadcastPanelState.mockClear();
+    realtime.broadcastPanelHost.mockClear();
 
     telemetryService.setHost({
       idleMs: 0,
@@ -413,28 +399,17 @@ describe("TelemetryService", () => {
     });
 
     await Promise.resolve();
-    expect(broadcastState).toHaveBeenCalledTimes(1);
-    expect(broadcastHost).not.toHaveBeenCalled();
+    expect(realtime.broadcastPanelState).toHaveBeenCalledTimes(1);
+    expect(realtime.broadcastPanelHost).not.toHaveBeenCalled();
     expect(telemetryService.getState()?.host?.media?.thumbnailDataUrl).toBe(
       "data:image/jpeg;base64,abc",
     );
   });
 
   it("publishes full state when a new track arrives with a different thumbnail", async () => {
-    const { telemetryService } = await createService();
-    const broadcastState = vi.fn();
-    const broadcastHost = vi.fn();
-    (
-      telemetryService as unknown as {
-        realtimeService: {
-          broadcastPanelState: typeof broadcastState;
-          broadcastPanelHost: typeof broadcastHost;
-        };
-      }
-    ).realtimeService = {
-      broadcastPanelState: broadcastState,
-      broadcastPanelHost: broadcastHost,
-    };
+    const { telemetryService, realtime } = await createService();
+    realtime.broadcastPanelState.mockClear();
+    realtime.broadcastPanelHost.mockClear();
 
     telemetryService.setState(telemetryPayload);
     telemetryService.setHost({
@@ -453,8 +428,8 @@ describe("TelemetryService", () => {
       capturedAt: "2026-01-01T12:00:01.000Z",
     });
     await Promise.resolve();
-    broadcastState.mockClear();
-    broadcastHost.mockClear();
+    realtime.broadcastPanelState.mockClear();
+    realtime.broadcastPanelHost.mockClear();
 
     telemetryService.setHost({
       idleMs: 0,
@@ -473,33 +448,22 @@ describe("TelemetryService", () => {
     });
 
     await Promise.resolve();
-    expect(broadcastState).toHaveBeenCalledTimes(1);
-    expect(broadcastHost).not.toHaveBeenCalled();
+    expect(realtime.broadcastPanelState).toHaveBeenCalledTimes(1);
+    expect(realtime.broadcastPanelHost).not.toHaveBeenCalled();
     expect(telemetryService.getState()?.host?.media?.thumbnailDataUrl).toBe(
       "data:image/jpeg;base64,bbb",
     );
   });
 
   it("publishes host-only panel updates without full telemetry", async () => {
-    const { telemetryService } = await createService();
-    const broadcastState = vi.fn();
-    const broadcastHost = vi.fn();
-    (
-      telemetryService as unknown as {
-        realtimeService: {
-          broadcastPanelState: typeof broadcastState;
-          broadcastPanelHost: typeof broadcastHost;
-        };
-      }
-    ).realtimeService = {
-      broadcastPanelState: broadcastState,
-      broadcastPanelHost: broadcastHost,
-    };
+    const { telemetryService, realtime } = await createService();
+    realtime.broadcastPanelState.mockClear();
+    realtime.broadcastPanelHost.mockClear();
 
     telemetryService.setState(telemetryPayload);
     await Promise.resolve();
-    broadcastState.mockClear();
-    broadcastHost.mockClear();
+    realtime.broadcastPanelState.mockClear();
+    realtime.broadcastPanelHost.mockClear();
 
     telemetryService.setHost({
       idleMs: 0,
@@ -511,8 +475,8 @@ describe("TelemetryService", () => {
     });
 
     await Promise.resolve();
-    expect(broadcastHost).toHaveBeenCalledTimes(1);
-    expect(broadcastState).not.toHaveBeenCalled();
+    expect(realtime.broadcastPanelHost).toHaveBeenCalledTimes(1);
+    expect(realtime.broadcastPanelState).not.toHaveBeenCalled();
   });
 
   it("marks misconfigured when classification enabled without Gemini key", async () => {
@@ -521,9 +485,12 @@ describe("TelemetryService", () => {
       providers: [
         TelemetryService,
         AgentBindingService,
+        { provide: ConfigService, useValue: { config: testApiConfig() } },
         {
           provide: SettingsService,
-          useValue: new SettingsService(createSupabaseServiceMock()),
+          useValue: new SettingsService(createSupabaseServiceMock(), {
+            config: testApiConfig(),
+          } as ConfigService),
         },
         {
           provide: ClassificationService,

@@ -1,0 +1,27 @@
+---
+description: Stylesheet tokens, Tailwind v4 theme mapping, and @apply
+globs: **/*.css,**/*.scss,**/*.sass,**/*.less,**/*.pcss
+alwaysApply: false
+---
+
+# Stylesheets
+
+## Tokens
+
+- Define color and radius tokens on `:root` and `.dark`, outside any `@layer`.
+- Store full `oklch(...)` values on the variable (`--background: oklch(1 0 0)`). Never bare channels (`0 0% 100%`), hex, `rgb()`, or `hsl()`. `.dark` gets its own explicit values.
+- Map color tokens in `@theme inline` as plain `var()` with no color-function wrapper: `--color-background: var(--background)`. Radius steps may be `calc(var(--radius) * n)`. A literal `--font-sans` stack is the theme font.
+- Name tokens by role so utilities match (`--color-muted-foreground` → `text-muted-foreground`). Never by swatch (`--bright-red`) or palette step (`--zinc-800`).
+- Rules consume tokens (`color: var(--foreground)`). No second palette of hex, palette names (`red`, `gray`), or raw palette variables. `transparent` is not a palette color.
+- The dark theme sets `color-scheme: dark`.
+
+## @apply
+
+- `@apply` only inside `@layer base` for element defaults (`html`, `body`, `*`, scrollbars).
+- Never `@apply` to build component classes (`.btn`, `.card`) or repeated utility bundles. Extract a React component.
+- Never `@apply` raw palette utilities. Use token utilities.
+
+## Motion
+
+- Inside `@media (prefers-reduced-motion: reduce)`, set `animation: none; transition: none` on non-essential motion. A spinner showing in-progress work may stay; comment the exception.
+- Never `transition: all`. Name the properties.

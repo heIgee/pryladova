@@ -1,7 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
+import { testApiConfig } from "../config.js";
+import type { ConfigService } from "../config.service.js";
 import type { SupabaseService } from "../persistence/supabase.service.js";
-import { createSupabaseServiceMock } from "../test/persistence-mocks.js";
+import { createSupabaseServiceMock, supabaseServiceFromClient } from "../test/persistence-mocks.js";
 import { SettingsService } from "./settings.service.js";
+
+const configService = { config: testApiConfig() } as ConfigService;
+const createSettingsService = (supabase: SupabaseService): SettingsService =>
+  new SettingsService(supabase, configService);
 
 const createConfiguredSupabaseMock = (options?: {
   upsertError?: Error | null;
@@ -25,15 +31,12 @@ const createConfiguredSupabaseMock = (options?: {
     };
   });
 
-  return {
-    isConfigured: () => true,
-    getClient: () => ({ from }),
-  } as unknown as SupabaseService;
+  return supabaseServiceFromClient({ from });
 };
 
 describe("SettingsService", () => {
   it("defaults classification to disabled and applies toggles in memory", () => {
-    const service = new SettingsService(createSupabaseServiceMock());
+    const service = createSettingsService(createSupabaseServiceMock());
     expect(service.getSettings()).toEqual({ classificationEnabled: false });
 
     service.applySettings({ classificationEnabled: true });
@@ -45,19 +48,19 @@ describe("SettingsService", () => {
   });
 
   it("returns persisted false when Supabase is not configured", async () => {
-    const service = new SettingsService(createSupabaseServiceMock());
+    const service = createSettingsService(createSupabaseServiceMock());
     const result = await service.saveSettings({ classificationEnabled: true });
     expect(result).toEqual({ classificationEnabled: true, persisted: false });
   });
 
   it("returns persisted true when Supabase upsert succeeds", async () => {
-    const service = new SettingsService(createConfiguredSupabaseMock());
+    const service = createSettingsService(createConfiguredSupabaseMock());
     const result = await service.saveSettings({ classificationEnabled: true });
     expect(result).toEqual({ classificationEnabled: true, persisted: true });
   });
 
   it("loads settings from the database on boot", async () => {
-    const service = new SettingsService(
+    const service = createSettingsService(
       createConfiguredSupabaseMock({ bootRow: { classification_enabled: true } }),
     );
     await service.onModuleInit();
@@ -91,10 +94,7 @@ const createHubSettingsMock = (options: {
     }),
   }));
 
-  const supabase = {
-    isConfigured: () => true,
-    getClient: () => ({ from }),
-  } as unknown as SupabaseService;
+  const supabase = supabaseServiceFromClient({ from });
 
   return { supabase, upserts, selectedColumns };
 };
@@ -113,7 +113,7 @@ describe("SettingsService Google OAuth storage", () => {
         },
       ],
     });
-    const service = new SettingsService(supabase);
+    const service = createSettingsService(supabase);
     await service.onModuleInit();
 
     expect(service.hasGoogleRefreshTokenEncrypted()).toBe(true);
@@ -132,7 +132,7 @@ describe("SettingsService Google OAuth storage", () => {
         },
       ],
     });
-    const service = new SettingsService(supabase);
+    const service = createSettingsService(supabase);
     await service.onModuleInit();
 
     expect(selectedColumns).toEqual([
@@ -148,7 +148,7 @@ describe("SettingsService Google OAuth storage", () => {
     const { supabase } = createHubSettingsMock({
       selectResults: [{ data: null, error: { message: "boom" } }],
     });
-    const service = new SettingsService(supabase);
+    const service = createSettingsService(supabase);
     await service.onModuleInit();
 
     expect(service.getSettings()).toEqual({ classificationEnabled: false });
@@ -159,7 +159,7 @@ describe("SettingsService Google OAuth storage", () => {
     const { supabase, upserts } = createHubSettingsMock({
       upsertErrors: [{ message: "write failed" }],
     });
-    const service = new SettingsService(supabase);
+    const service = createSettingsService(supabase);
 
     await expect(service.saveGoogleRefreshTokenEncrypted("enc-1")).resolves.toBe(false);
     expect(service.hasGoogleRefreshTokenEncrypted()).toBe(false);
@@ -170,7 +170,7 @@ describe("SettingsService Google OAuth storage", () => {
   });
 
   it("does not persist the token without Supabase", async () => {
-    const service = new SettingsService(createSupabaseServiceMock());
+    const service = createSettingsService(createSupabaseServiceMock());
     await expect(service.saveGoogleRefreshTokenEncrypted("enc")).resolves.toBe(false);
     expect(service.hasGoogleRefreshTokenEncrypted()).toBe(false);
     expect(service.canPersistGoogleOAuth()).toBe(false);
@@ -178,7 +178,7 @@ describe("SettingsService Google OAuth storage", () => {
 
   it("keeps the stored token when classification settings are persisted", async () => {
     const { supabase, upserts } = createHubSettingsMock({});
-    const service = new SettingsService(supabase);
+    const service = createSettingsService(supabase);
     await service.saveGoogleRefreshTokenEncrypted("enc");
 
     await expect(service.saveSettings({ classificationEnabled: true })).resolves.toEqual({
@@ -193,7 +193,7 @@ describe("SettingsService Google OAuth storage", () => {
 
   it("reports persisted false when the settings upsert fails", async () => {
     const { supabase } = createHubSettingsMock({ upsertErrors: [{ message: "nope" }] });
-    const service = new SettingsService(supabase);
+    const service = createSettingsService(supabase);
     await expect(service.saveSettings({ classificationEnabled: true })).resolves.toEqual({
       classificationEnabled: true,
       persisted: false,
@@ -204,19 +204,19 @@ describe("SettingsService Google OAuth storage", () => {
     const { supabase } = createHubSettingsMock({
       upsertErrors: [{ message: "permission denied", code: "42501" }],
     });
-    const service = new SettingsService(supabase);
+    const service = createSettingsService(supabase);
 
     await expect(service.saveGoogleAccountEmail("me@example.com")).resolves.toBe(false);
     expect(service.getGoogleAccountEmail()).toBe("me@example.com");
 
-    const offline = new SettingsService(createSupabaseServiceMock());
+    const offline = createSettingsService(createSupabaseServiceMock());
     await expect(offline.saveGoogleAccountEmail("me@example.com")).resolves.toBe(false);
     expect(offline.getGoogleAccountEmail()).toBe("me@example.com");
   });
 
   it("clears the token and email, then nulls the email column", async () => {
     const { supabase, upserts } = createHubSettingsMock({});
-    const service = new SettingsService(supabase);
+    const service = createSettingsService(supabase);
     await service.saveGoogleRefreshTokenEncrypted("enc");
     await service.saveGoogleAccountEmail("me@example.com");
 
@@ -232,7 +232,7 @@ describe("SettingsService Google OAuth storage", () => {
 
   it("keeps the token when clearing fails", async () => {
     const { supabase } = createHubSettingsMock({ upsertErrors: [null, { message: "down" }] });
-    const service = new SettingsService(supabase);
+    const service = createSettingsService(supabase);
     await service.saveGoogleRefreshTokenEncrypted("enc");
 
     await expect(service.clearGoogleRefreshTokenEncrypted()).resolves.toBe(false);
@@ -240,7 +240,7 @@ describe("SettingsService Google OAuth storage", () => {
   });
 
   it("clears in memory without Supabase", async () => {
-    const service = new SettingsService(createSupabaseServiceMock());
+    const service = createSettingsService(createSupabaseServiceMock());
     await service.saveGoogleAccountEmail("me@example.com");
 
     await expect(service.clearGoogleRefreshTokenEncrypted()).resolves.toBe(true);

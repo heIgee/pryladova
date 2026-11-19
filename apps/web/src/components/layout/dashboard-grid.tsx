@@ -12,7 +12,8 @@ import {
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
-import { type ReactNode, useCallback, useState } from "react";
+import type { CSSProperties, ReactNode } from "react";
+import { useState } from "react";
 import { DashboardRowBandResizeHandle } from "@/components/layout/dashboard-row-band-resize-handle";
 import {
   type ColSpan,
@@ -21,6 +22,7 @@ import {
   DEFAULT_GAP,
   type FreeDropSlot,
   listFreeDropSlots,
+  parseDashboardTileId,
   parseFreeDropSlotId,
   type RowBand,
   type RowSpan,
@@ -100,39 +102,47 @@ export const DashboardGrid = ({
       ? []
       : listFreeDropSlots(placements, activeId, resolveColSpan(activeId), resolveRowSpan(activeId));
 
-  const handleDragStart = useCallback((event: DragStartEvent) => {
-    const id = event.active.id as DashboardTileId;
+  const clearDrag = () => {
+    setActiveId(null);
+    setOverlaySize(null);
+  };
+
+  const handleDragStart = (event: DragStartEvent) => {
+    const id = parseDashboardTileId(event.active.id);
+    if (!id) {
+      return;
+    }
     setActiveId(id);
     const shell = document.querySelector(`[data-testid="dashboard-tile-shell-${id}"]`);
     const bounds = shell?.getBoundingClientRect();
     setOverlaySize(bounds ? { width: bounds.width, height: bounds.height } : null);
-  }, []);
+  };
 
-  const clearDrag = useCallback(() => {
-    setActiveId(null);
-    setOverlaySize(null);
-  }, []);
-
-  const handleDragEnd = useCallback(
-    (event: DragEndEvent) => {
-      const { active, over } = event;
-      const slot = over ? parseFreeDropSlotId(over.id) : null;
-      if (slot) {
-        onPlaceTile(active.id as DashboardTileId, slot);
-      } else if (over && active.id !== over.id) {
-        onSwapTiles(active.id as DashboardTileId, over.id as DashboardTileId);
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    const activeId = parseDashboardTileId(active.id);
+    const slot = over ? parseFreeDropSlotId(over.id) : null;
+    if (activeId && slot) {
+      onPlaceTile(activeId, slot);
+    } else if (activeId && over) {
+      const overId = parseDashboardTileId(over.id);
+      if (overId && activeId !== overId) {
+        onSwapTiles(activeId, overId);
       }
-      clearDrag();
-    },
-    [clearDrag, onPlaceTile, onSwapTiles],
-  );
+    }
+    clearDrag();
+  };
 
-  const handleDragCancel = useCallback(
-    (_event: DragCancelEvent) => {
-      clearDrag();
-    },
-    [clearDrag],
-  );
+  const handleDragCancel = (_event: DragCancelEvent) => {
+    clearDrag();
+  };
+
+  const gridStyle: CSSProperties & Record<"--dashboard-gap" | "--dashboard-row-height", string> = {
+    gap: `${DEFAULT_GAP}px`,
+    "--dashboard-gap": `${DEFAULT_GAP}px`,
+    "--dashboard-row-height": `${DASHBOARD_ROW_HEIGHT}px`,
+    gridAutoRows: "var(--dashboard-row-height)",
+  };
 
   return (
     <DndContext
@@ -143,16 +153,7 @@ export const DashboardGrid = ({
       onDragCancel={handleDragCancel}
     >
       <div className="relative">
-        <div
-          className="grid grid-cols-12"
-          style={{
-            gap: `${DEFAULT_GAP}px`,
-            ["--dashboard-gap" as string]: `${DEFAULT_GAP}px`,
-            ["--dashboard-row-height" as string]: `${DASHBOARD_ROW_HEIGHT}px`,
-            gridAutoRows: "var(--dashboard-row-height)",
-          }}
-          data-testid="dashboard-grid"
-        >
+        <div className="grid grid-cols-12" style={gridStyle} data-testid="dashboard-grid">
           {visibleTileIds.map((id) => renderTile(id, false, isDragging && id === activeId))}
           {freeDropSlots.map((slot) => (
             <FreeDropFrame key={slot.id} slot={slot} />

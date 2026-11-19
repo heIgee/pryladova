@@ -3,107 +3,25 @@ description: Cross-cutting conventions for the pryladova monorepo
 alwaysApply: true
 ---
 
-# Pryladova Monorepo
+# Pryladova
 
-## Agent Communication
+## Repo
 
-- Terse, technical, no-fluff responses.
-- Drop filler, pleasantries, hedging.
-- Direct answers, code snippets, exact commands only. No yapping.
+- `apps/agent` is Windows-only and has native deps. Default install: `pnpm install --filter "!agent"`. Full install only on Windows, to build the agent.
+- `packages/*` never import `apps/*`. Apps never import each other. Shared code goes in `packages/shared`.
+- Add dependencies with `pnpm --filter <workspace-name> add <pkg>`. The workspace that imports a package declares it in its own `package.json`. No npm or yarn.
+- OS-specific native modules are not top-level imports of files that cross-platform tests load. Use a dynamic import, or split the pure logic out.
+- Env templates are the per-app `.env.example` files. They hold local fixtures, including a dev ingest secret and an e2e stub hash. Never commit `.env`. Never hardcode a production secret in source. New config uses the existing env loader.
+- Stay inside the requested app or package. Do not edit unrelated files in the same change.
 
-## Environment & Tooling
+## Docs
 
-- OS: Windows. Terminal: PowerShell. No Bash-specific syntax.
+- Behavior, deploy, env, or CI changes update the matching doc in the same change: `deploy/*` → `deploy/README.md`, local dev → `README.md`, planned work → `ROADMAP.md`. Remove or move a `ROADMAP.md` item when it ships.
+- Docs say what to run and where config lives. Commands live in `package.json` and the README scripts table; don't paste script bodies. Env names live in `.env.example`.
+- No session-specific fixes, version pins, workarounds, or chat context in any repo file.
 
-## Repo map
+## Checks
 
-- `apps/api` — NestJS. `apps/web` — React + Vite. `apps/agent` — Windows-only capture, native deps, `tsx`, no build step. `packages/shared` — Zod contracts, built before dev and e2e.
-- `agent` is excluded from the default install (`pnpm install --filter "!agent"`) and gated in its own `windows-latest` CI job.
-- Env samples are per app: `apps/api/.env.example`, `apps/web/.env.example`, `apps/agent/.env.example`.
-
-## Runtime versions
-
-- Never pin or cite Node, pnpm, or dependency versions from memory.
-- Repo wins: `.node-version` (CI resolves Node from it), `package.json` (`engines`, `packageManager`), lockfile.
-- Local: `node -v`, `pnpm -v` when tooling targets this machine.
-- Upstream: `npm view <pkg> version` before greenfield defaults or version advice.
-- After verify: new production work uses Active LTS; not EOL majors (18, 20, …) unless a dependency forces it.
-- If not verified, say so — do not invent a version.
-
-## Before changing code
-
-- Read sibling files in app/package; match naming, layout, patterns.
-- Smallest correct diff. No refactor/reformat outside scope.
-- Stay inside requested app/package.
-- Packages disagree → follow local package. Don't "standardize" unasked.
-
-## Simplicity
-
-- Prefer the fix with less code: delete or simplify before adding hooks, listeners, observers, or dependencies.
-- Optional presentation that misbehaves → remove it; do not add logic to preserve it.
-- A plan describes intent, not a mandatory design. A simpler approach that meets the goal is fine — note the change briefly.
-- New dependency or runtime machinery needs a concrete reason existing code cannot cover it. No good reason → do not add it.
-- Passing CI does not justify extra machinery. Correct and small beats correct and elaborate.
-
-## Docs and comments
-
-- No session-specific fixes, version pins, workarounds, or chat context in repo files.
-- Docs state what to run and where config lives — not how we debugged it once.
-- Behavior, deploy, env, or CI changes → update `README.md` and/or `deploy/README.md` in the **same change** when relevant. Do not wait to be asked.
-- README edits stay **concise**: onboarding, commands, where config lives. No overspecific facts — point to `.env.example`, migrations, or code instead.
-- `ROADMAP.md` for planned work only; remove or move items when shipped.
-- Comments: why non-obvious, not what the code already says.
-
-## Monorepo discipline
-
-- Shared code → shared packages. No copy-paste across apps.
-- `packages/*` never imports `apps/*`. Apps never import each other directly.
-- Single pnpm workspace, single `pnpm-lock.yaml`. No npm/yarn artifacts.
-- Flag new dependencies before adding. No duplicate library where one exists.
-- Dependency additions: Always `pnpm --filter <workspace-name> add <pkg>`. Never `npm install`.
-
-## Git
-
-- Never commit, stage, or push. User runs all git ops.
-- Active task on X — don't touch unrelated Y (other apps, packages, or files) for commit separation.
-
-## Quality bar
-
-- Applies to **all** repo changes — code, workflows, Docker, config.
-- Complete, working changes for requested scope only. No placeholders or stubs unless asked; include the imports, types, and wiring needed to run.
-- Shared type/API contract changed → update callers, typecheck before done.
-- Passing build/lint/typecheck is necessary, not sufficient.
-- **Root cause only.** A symptom fix makes the check pass without removing why it failed — wrong scope, skip/bypass flags, silencing, loosening. Forbidden, including `@ts-ignore` / `@ts-expect-error`, blanket `eslint-disable` / `biome-ignore`, commented-out logic, deleted validation, stub returns, config loosening (`strict: false`, `skipLibCheck` hacks), unrelated `// @ts-nocheck`, and the same class of bypass in workflows/Docker/config.
-- Proper fix blocked or out of scope → **stop and report**. Do not land a workaround.
-
-## Commit-ready (agent)
-
-Before calling work **done**, **QA pass**, or **commit-ready** — run full local CI and fix until green:
-
-```powershell
-pnpm verify
-```
-
-Mirrors `.github/workflows/ci.yml` (`ci` + `e2e` + `agent` jobs). Exit 0 required. Re-run after fixes.
-
-| Step | Command (inside `pnpm verify`) |
-|---|---|
-| Build gate | `turbo run typecheck lint build --filter=!agent` |
-| Tests + coverage | `pnpm test:coverage` |
-| E2E | `pnpm test:e2e` |
-| Deps/exports | `pnpm knip` |
-| Agent | `turbo run typecheck lint --filter=agent` |
-
-- Expensive (full build, coverage, Playwright, knip). Run it once at the end, not per edit; `pnpm check` is the inner loop.
-- Partial checks (`pnpm test`, `pnpm check`, lint-only, typecheck-only) and the pre-commit hook do not substitute for it.
-- First-time E2E on a machine: `pnpm exec playwright install chromium`.
-- Report failures with command + error excerpt. Do not suggest commit until `pnpm verify` passes.
-
-**Dependency hygiene** (CI catches these; verify in the same pass):
-
-- Direct `import` of a package → declare it in **that** workspace `package.json`. Never rely on hoisting from siblings.
-- OS/CPU-specific deps (e.g. win32 native) → no top-level import in modules loaded by cross-platform tests; use dynamic import or split pure logic.
-
-## Env & secrets
-
-- Never commit `.env` or hardcode secrets. New config → existing env-loading pattern.
+- Don't delete or weaken a check to make a failure go green. `skipLibCheck`, the Nest Biome overrides, package entry barrels, Docker `--ignore-scripts`, and Knip ignores are config. If the real fix is out of scope, stop and report.
+- During edits, `pnpm check`. Before calling work done or commit-ready, `pnpm verify` must exit 0. What it runs is in the README scripts table and `.github/workflows/ci.yml`.
+- Report a failure with the command and the error excerpt.

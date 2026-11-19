@@ -1,5 +1,6 @@
 import "./instrument.js";
 import "reflect-metadata";
+import { Logger } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import { WsAdapter } from "@nestjs/platform-ws";
@@ -17,13 +18,16 @@ const bootstrap = async (): Promise<void> => {
   const config = app.get(ConfigService).config;
   assertPanelAuthConfig(config);
   assertProductionIngestSecret(config);
+  if (!config.ingestSecret && !config.runtime.isProduction) {
+    Logger.warn("INGEST_SECRET unset — agent ingest is rejected", "Bootstrap");
+  }
   app.useWebSocketAdapter(new WsAdapter(app));
   app.enableCors({
     origin: ["http://localhost:5173", "http://127.0.0.1:5173"],
     credentials: true,
   });
-  const port = Number(process.env.PORT ?? 3000);
-  if (process.env.NODE_ENV === "test") {
+  const { port, isTest } = config.runtime;
+  if (isTest) {
     await app.listen(port, "127.0.0.1");
   } else {
     await app.listen(port);
@@ -32,6 +36,6 @@ const bootstrap = async (): Promise<void> => {
 
 void bootstrap().catch((error: unknown) => {
   const message = error instanceof Error ? error.message : String(error);
-  console.error(`[api] fatal: ${message}`);
+  process.stderr.write(`[api] fatal: ${message}\n`);
   process.exit(1);
 });

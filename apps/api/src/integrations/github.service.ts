@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import {
   type CiCheckStatus,
   type GithubStatusResponse,
@@ -113,6 +113,7 @@ const mapActionsHttpStatus = (httpStatus: number): CiCheckStatus => {
 
 @Injectable()
 export class GithubService {
+  private readonly logger = new Logger(GithubService.name);
   private cached: { ready: CachedReady; expiresAt: number } | null = null;
 
   constructor(private readonly configService: ConfigService) {}
@@ -142,7 +143,7 @@ export class GithubService {
         return this.cached.ready;
       }
       const message = error instanceof Error ? error.message : String(error);
-      console.error(`[api] github status fetch failed: ${message}`);
+      this.logger.error(`github status fetch failed: ${message}`);
       return parseGithubStatusResponse({ status: "unavailable" });
     }
   }
@@ -195,7 +196,7 @@ export class GithubService {
       }),
     );
 
-    return parseGithubStatusResponse({
+    const readyResponse = parseGithubStatusResponse({
       status: "ready",
       username,
       avatarUrl: user.avatar_url,
@@ -206,7 +207,11 @@ export class GithubService {
       openPullRequests,
       checks,
       fetchedAt: new Date().toISOString(),
-    }) as CachedReady;
+    });
+    if (readyResponse.status !== "ready") {
+      throw new Error("GitHub status response was not ready");
+    }
+    return readyResponse;
   }
 
   private async fetchOpenPullRequestCount(token: string): Promise<number> {

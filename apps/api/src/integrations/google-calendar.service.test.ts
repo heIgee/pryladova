@@ -1,7 +1,7 @@
 import { Test } from "@nestjs/testing";
 import { googleCalendarStatusResponseSchema } from "@pryladova/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ApiConfig } from "../config.js";
+import { type ApiConfig, testApiConfig } from "../config.js";
 import { ConfigService } from "../config.service.js";
 import { SettingsService } from "../settings/settings.service.js";
 import { GoogleAccountService } from "./google-account.service.js";
@@ -10,25 +10,14 @@ import { GoogleTokenRefreshError, GoogleTokenService } from "./google-token.serv
 
 const encryptionKey = Buffer.from("0123456789abcdef0123456789abcdef").toString("base64");
 
-const googleConfig: ApiConfig = {
-  geminiApiKey: undefined,
-  geminiModel: "gemini-3.1-flash-lite",
-  ingestSecret: undefined,
-  sentryDsn: undefined,
+const googleConfig = testApiConfig({
   sessionSecret: "test-session-secret-at-least-32-characters",
-  panelPasswordHash: undefined,
-  supabaseUrl: undefined,
-  supabaseSecretKey: undefined,
-  githubToken: undefined,
-  githubUsername: undefined,
-  steamApiKey: undefined,
-  steamId: undefined,
   googleClientId: "google-client-id",
   googleClientSecret: "google-client-secret",
   googleRedirectUri: "http://localhost:5173/api/integrations/google/callback",
   googleRefreshToken: "env-refresh-token",
   integrationEncryptionKey: encryptionKey,
-};
+});
 
 const createService = async (
   config: ApiConfig = googleConfig,
@@ -84,7 +73,7 @@ describe("GoogleCalendarService", () => {
   it("returns ready payload from Google Calendar API", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async (input: RequestInfo | URL) => {
+      vi.fn(async (input: Parameters<typeof fetch>[0]) => {
         const url = String(input);
         if (url.includes("/calendars/primary/events")) {
           return {

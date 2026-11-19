@@ -1,0 +1,46 @@
+---
+description: React render purity, Effects, state structure, and app boundaries
+globs: **/*.tsx,**/*.jsx,**/use-*.ts,**/hooks/**/*.ts
+alwaysApply: false
+---
+
+# React
+
+React 19. Ban hand-written `useMemo`, `useCallback`, and `memo` only when the React Compiler is enabled. Add one only when profiling shows the compiler missed a case.
+
+## Render is pure
+
+- Same props, state, and context produce the same output. Render code is everything in a component or Hook body outside handlers and Effects.
+- Never read the clock or randomness during render: `Date.now()`, `new Date()` with no argument, `Math.random()`. `new Date(existingValue)` formats a value you already have. Pass clock time in from a handler.
+- Never read or write the DOM during render: `document`, globals, `getBoundingClientRect`, `offsetHeight`, `scrollTop`.
+- Never mutate props, state, Hook arguments, Hook return values, values already passed to JSX, or anything declared outside the component. Copy, then change. Mutating a local built in the same render is fine.
+## You probably don't need an Effect
+
+Client Components only. A Server Component awaits its data in the body and has no Effects.
+
+- Derive values during render. Never `useEffect` + `setState` to compute something from props or state.
+- User-caused work goes in the handler (POST, notify, parent `onChange` in the same handler as `setState`), not an Effect on that state.
+- No Effect chains. Compute the next state in the handler.
+- Reset a subtree when an identity changes by giving it `key={id}`, not with an Effect that clears state.
+- Children get data from the parent as props. Never push data up through an Effect.
+- Use an Effect only to sync with something outside React: network, timers, browser APIs, non-React widgets. Every Effect returns a cleanup that unsubscribes, clears, or aborts.
+- Fetch Effects guard against stale responses with an `ignore` flag or `AbortController`.
+- Read external mutable sources (browser APIs, module-level stores, sockets) with `useSyncExternalStore`, not a subscribe-in-Effect.
+
+## State structure
+
+Client Components only.
+
+- Keep state in the narrowest component that needs it. Lift only when a sibling needs it.
+- Never store what can be computed from props or other state.
+- Store selection as an ID and derive the object with `find`. Never keep a second copy of an entity.
+- Merge fields that always change together into one object. Spread the rest on partial updates.
+- Flatten deep trees into `id → record` maps with child ID lists.
+- `useState(prop)` only for an intentional seed, named `initialX` or `defaultX`. Otherwise use the prop.
+- `useReducer` when one action updates several related fields.
+
+## App boundaries
+
+- Imports flow one way: shared (`components/ui`, `hooks`, `lib`, `utils`) → features → shell. Shared code never imports features or the shell. A feature is a product area; chrome several features render is shared even beside a feature file. Features do not import each other. The shell composes concrete modules and may live in `lib`. No re-export-only file.
+- Don't copy server data into a second global store. With no cache library, that store is component state for the latest response, or a socket the UI already listens to.
+- Bookmarkable filters, pagination, and a selected id live in the URL. A layout arranged on one machine stays in local storage.

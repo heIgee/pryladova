@@ -1,5 +1,5 @@
 import type { WeatherResponse } from "@pryladova/shared";
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import type {
   GithubTileStatus,
   GoogleCalendarTileStatus,
@@ -25,6 +25,7 @@ import {
 } from "@/lib/panel";
 import { getPanelPollSnapshot, refreshPanelPoll, subscribePanelPoll } from "@/lib/panel-poll";
 import { persistTheme, resolveTheme, type Theme } from "@/lib/theme";
+import { getWallClockMs, getWallClockServerMs, subscribeWallClock } from "@/lib/wall-clock";
 import { fetchWeather } from "@/lib/weather";
 import {
   persistWeatherLocation,
@@ -33,18 +34,18 @@ import {
 } from "@/lib/weather-location";
 
 export const useDashboard = () => {
-  const { panel, streamConnected } = useSyncExternalStore(
+  const { panel, streamConnected, connectFailed } = useSyncExternalStore(
     subscribePanelPoll,
     getPanelPollSnapshot,
     getPanelPollSnapshot,
   );
+  const nowMs = useSyncExternalStore(subscribeWallClock, getWallClockMs, getWallClockServerMs);
   const [classificationEnabled, setClassificationEnabled] = useState(() =>
     readStoredClassificationEnabled(),
   );
   const [settingsError, setSettingsError] = useState<string | null>(null);
   const [settingsSyncing, setSettingsSyncing] = useState(false);
   const [settingsReady, setSettingsReady] = useState(false);
-  const [nowMs, setNowMs] = useState(() => Date.now());
   const [theme, setTheme] = useState<Theme>(() => resolveTheme());
   const [weather, setWeather] = useState<WeatherResponse>({ status: "disabled" });
   const [githubStatus, setGithubStatus] = useState<GithubTileStatus>(integrationLoading);
@@ -57,13 +58,10 @@ export const useDashboard = () => {
     readStoredWeatherLocation(),
   );
 
-  const loadWeather = useCallback(
-    async (location: WeatherLocation | null, refresh = false): Promise<void> => {
-      const next = await fetchWeather(location, { refresh });
-      setWeather(next);
-    },
-    [],
-  );
+  const loadWeather = async (location: WeatherLocation | null, refresh = false): Promise<void> => {
+    const next = await fetchWeather(location, { refresh });
+    setWeather(next);
+  };
 
   useEffect(() => {
     let active = true;
@@ -124,19 +122,19 @@ export const useDashboard = () => {
   useEffect(() => {
     let active = true;
 
-    const refreshIntegrations = async (refresh = false): Promise<void> => {
-      const [github, steam, googleCalendar, googleTasks] = await Promise.all([
-        fetchGithubStatus({ refresh }),
-        fetchSteamStatus({ refresh }),
-        fetchGoogleCalendarStatus({ refresh }),
-        fetchGoogleTasksStatus({ refresh }),
-      ]);
-      if (active) {
-        setGithubStatus(github);
-        setSteamStatus(steam);
-        setGoogleCalendarStatus(googleCalendar);
-        setGoogleTasksStatus(googleTasks);
-      }
+    const refreshIntegrations = (refresh = false): void => {
+      const publish = <T>(load: () => Promise<T>, apply: (value: T) => void): void => {
+        void load().then((value) => {
+          if (active) {
+            apply(value);
+          }
+        });
+      };
+
+      publish(() => fetchGithubStatus({ refresh }), setGithubStatus);
+      publish(() => fetchSteamStatus({ refresh }), setSteamStatus);
+      publish(() => fetchGoogleCalendarStatus({ refresh }), setGoogleCalendarStatus);
+      publish(() => fetchGoogleTasksStatus({ refresh }), setGoogleTasksStatus);
     };
 
     void refreshIntegrations(true);
@@ -150,21 +148,7 @@ export const useDashboard = () => {
     };
   }, []);
 
-  useEffect(() => {
-    if (panel.status !== "ready") {
-      return;
-    }
-
-    const timer = window.setInterval(() => {
-      setNowMs(Date.now());
-    }, 1_000);
-
-    return () => {
-      window.clearInterval(timer);
-    };
-  }, [panel.status]);
-
-  const panelSubtitle = resolvePanelSubtitle(panel, streamConnected, nowMs);
+  const panelSubtitle = resolvePanelSubtitle(panel, streamConnected, nowMs, connectFailed);
   const showAgentHint = panelSubtitle === "agent-unavailable";
   const agentLive = streamConnected && isAgentLive(panel, nowMs);
 
@@ -219,6 +203,7 @@ export const useDashboard = () => {
     showAgentHint,
     agentLive,
     streamConnected,
+    connectFailed,
     theme,
     weather,
     weatherLocation,
@@ -226,6 +211,7 @@ export const useDashboard = () => {
     steamStatus,
     googleCalendarStatus,
     googleTasksStatus,
+    nowMs,
     handleClassificationToggle,
     handleThemeChange,
     handleWeatherLocationChange,

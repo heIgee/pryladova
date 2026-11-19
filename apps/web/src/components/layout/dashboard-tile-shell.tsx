@@ -1,7 +1,7 @@
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import type { ReactNode } from "react";
 import { DashboardTileResizeHandle } from "@/components/layout/dashboard-tile-resize-handle";
-import { DashboardTileShellProvider } from "@/components/layout/dashboard-tile-shell-context";
+import { DashboardTileShellProvider } from "@/components/tiles/dashboard-tile-shell-context";
 import { BentoTileSizeProvider } from "@/hooks/use-bento-tile-size";
 import type {
   ColGrowPushResult,
@@ -129,7 +129,7 @@ export const DashboardTileShell = ({
               }
         }
         className={cn(
-          "group/shell relative z-0 h-full min-h-0 min-w-0 hover:z-10 focus-within:z-10",
+          "group/shell relative z-0 h-full min-h-0 min-w-0 focus-within:z-10 hover:z-10",
           isDragSource && "pointer-events-none invisible",
           isOver && !isDragSource && "z-20 ring-2 ring-primary/40 ring-inset",
         )}
@@ -147,14 +147,10 @@ export const DashboardTileShell = ({
             span={effectiveColSpan}
             neighborId={rightNeighborId}
             neighborSpan={rightNeighborColSpan}
-            onDraftSpan={(span) => onDraftColSpan(span as ColSpan)}
-            onDraftBoundary={(leftId, leftSpan, rightId, rightSpan) =>
-              onDraftColBoundary(leftId, leftSpan as ColSpan, rightId, rightSpan as ColSpan)
-            }
-            onCommitSpan={(span) => onCommitColSpan(span as ColSpan)}
-            onCommitBoundary={(leftId, leftSpan, rightId, rightSpan) =>
-              onCommitColBoundary(leftId, leftSpan as ColSpan, rightId, rightSpan as ColSpan)
-            }
+            onDraftSpan={onDraftColSpan}
+            onDraftBoundary={onDraftColBoundary}
+            onCommitSpan={onCommitColSpan}
+            onCommitBoundary={onCommitColBoundary}
             onRevert={onRevertSpans}
             onTryColGrowPush={onTryColGrowPush}
             onDraftColPush={onDraftColPush}
@@ -169,14 +165,10 @@ export const DashboardTileShell = ({
             span={effectiveColSpan}
             neighborId={leftNeighborId}
             neighborSpan={leftNeighborColSpan}
-            onDraftSpan={(span) => onDraftColSpan(span as ColSpan)}
-            onDraftBoundary={(leftId, leftSpan, rightId, rightSpan) =>
-              onDraftColBoundary(leftId, leftSpan as ColSpan, rightId, rightSpan as ColSpan)
-            }
-            onCommitSpan={(span) => onCommitColSpan(span as ColSpan)}
-            onCommitBoundary={(leftId, leftSpan, rightId, rightSpan) =>
-              onCommitColBoundary(leftId, leftSpan as ColSpan, rightId, rightSpan as ColSpan)
-            }
+            onDraftSpan={onDraftColSpan}
+            onDraftBoundary={onDraftColBoundary}
+            onCommitSpan={onCommitColSpan}
+            onCommitBoundary={onCommitColBoundary}
             onRevert={onRevertSpans}
           />
         ) : null}
@@ -188,14 +180,10 @@ export const DashboardTileShell = ({
             span={effectiveRowSpan}
             neighborId={bottomNeighborId}
             neighborSpan={bottomNeighborRowSpan}
-            onDraftSpan={(span) => onDraftRowSpan(span as RowSpan)}
-            onDraftBoundary={(topId, topSpan, bottomId, bottomSpan) =>
-              onDraftRowBoundary(topId, topSpan as RowSpan, bottomId, bottomSpan as RowSpan)
-            }
-            onCommitSpan={(span) => onCommitRowSpan(span as RowSpan)}
-            onCommitBoundary={(topId, topSpan, bottomId, bottomSpan) =>
-              onCommitRowBoundary(topId, topSpan as RowSpan, bottomId, bottomSpan as RowSpan)
-            }
+            onDraftSpan={onDraftRowSpan}
+            onDraftBoundary={onDraftRowBoundary}
+            onCommitSpan={onCommitRowSpan}
+            onCommitBoundary={onCommitRowBoundary}
             onRevert={onRevertSpans}
             canStep={canStepBottomRowSpan}
           />
@@ -208,14 +196,10 @@ export const DashboardTileShell = ({
             span={effectiveRowSpan}
             neighborId={topNeighborId}
             neighborSpan={topNeighborRowSpan}
-            onDraftSpan={(span) => onDraftRowSpan(span as RowSpan)}
-            onDraftBoundary={(topId, topSpan, bottomId, bottomSpan) =>
-              onDraftRowBoundary(topId, topSpan as RowSpan, bottomId, bottomSpan as RowSpan)
-            }
-            onCommitSpan={(span) => onCommitRowSpan(span as RowSpan)}
-            onCommitBoundary={(topId, topSpan, bottomId, bottomSpan) =>
-              onCommitRowBoundary(topId, topSpan as RowSpan, bottomId, bottomSpan as RowSpan)
-            }
+            onDraftSpan={onDraftRowSpan}
+            onDraftBoundary={onDraftRowBoundary}
+            onCommitSpan={onCommitRowSpan}
+            onCommitBoundary={onCommitRowBoundary}
             onRevert={onRevertSpans}
             canStep={canStepTopRowSpan}
           />

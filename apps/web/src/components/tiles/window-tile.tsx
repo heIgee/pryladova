@@ -17,7 +17,7 @@ import { useDebouncedFocusLoading } from "@/hooks/use-settled-focus-key";
 import { cn } from "@/lib/utils";
 
 const MutedChip = ({ children }: { children: ReactNode }) => (
-  <span className="inline-flex h-5 items-center rounded-md bg-muted px-2 text-micro font-medium leading-none text-muted-foreground">
+  <span className="inline-flex h-5 items-center rounded-md bg-muted px-2 text-micro leading-none font-medium text-muted-foreground">
     {children}
   </span>
 );
@@ -114,6 +114,12 @@ export const WindowTile = ({
       isPending: status === "pending",
     },
   );
+  const showSubtitleRow =
+    windowDisplay.showSubtitleSlot || (showNameSkeleton && settledDisplay.showSubtitleSlot);
+  let subtitleText = windowDisplay.windowSubtitle;
+  if (showNameSkeleton && (subtitleText?.trim().length ?? 0) === 0) {
+    subtitleText = "\u00a0";
+  }
 
   const showClassificationChips =
     showCategory ||
@@ -194,18 +200,12 @@ export const WindowTile = ({
               <Skeleton as="span" className={WINDOW_TITLE_SKELETON_CLASS} aria-hidden="true" />
             ) : null}
           </h2>
-          {windowDisplay.showSubtitleSlot ? (
+          {showSubtitleRow ? (
             <div
               className={cn(WINDOW_SUBTITLE_CLASS, "relative text-muted-foreground", subtitleClamp)}
               data-testid="window-tile-subtitle-slot"
             >
-              <span className={cn(showNameSkeleton && "invisible")}>
-                {showNameSkeleton
-                  ? (windowDisplay.windowSubtitle?.trim().length ?? 0) > 0
-                    ? windowDisplay.windowSubtitle
-                    : "\u00a0"
-                  : windowDisplay.windowSubtitle}
-              </span>
+              <span className={cn(showNameSkeleton && "invisible")}>{subtitleText}</span>
               {showNameSkeleton ? (
                 <Skeleton as="span" className={WINDOW_SUBTITLE_SKELETON_CLASS} aria-hidden="true" />
               ) : null}
@@ -227,7 +227,11 @@ export const WindowTile = ({
             onCheckedChange={onClassificationChange}
           />
         </label>
-        {settingsError ? <p className="text-caption text-destructive">{settingsError}</p> : null}
+        {settingsError ? (
+          <p className="text-caption text-destructive" aria-live="polite">
+            {settingsError}
+          </p>
+        ) : null}
       </CardFooter>
     </Card>
   );

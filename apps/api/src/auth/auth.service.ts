@@ -14,19 +14,22 @@ import {
 export class AuthService {
   constructor(private readonly configService: ConfigService) {}
 
-  login(password: string, response: Response): void {
+  login(password: string, response: Pick<Response, "cookie">): void {
     const { panelPasswordHash, sessionSecret } = requirePanelAuth(this.configService.config);
     if (!compareSync(password, panelPasswordHash)) {
       throw new UnauthorizedException("Invalid credentials");
     }
 
     const token = createSessionToken(sessionSecret);
-    const secure = process.env.NODE_ENV === "production";
-    response.cookie(SESSION_COOKIE_NAME, token, sessionCookieOptions(secure));
+    response.cookie(
+      SESSION_COOKIE_NAME,
+      token,
+      sessionCookieOptions(this.configService.config.runtime.isProduction),
+    );
   }
 
-  logout(response: Response): void {
-    const secure = process.env.NODE_ENV === "production";
+  logout(response: Pick<Response, "clearCookie">): void {
+    const secure = this.configService.config.runtime.isProduction;
     response.clearCookie(SESSION_COOKIE_NAME, sessionCookieOptions(secure));
   }
 

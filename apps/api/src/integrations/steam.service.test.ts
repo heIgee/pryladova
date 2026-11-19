@@ -1,29 +1,14 @@
 import { Test } from "@nestjs/testing";
 import { steamStatusResponseSchema } from "@pryladova/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ApiConfig } from "../config.js";
+import { testApiConfig } from "../config.js";
 import { ConfigService } from "../config.service.js";
 import { SteamService } from "./steam.service.js";
 
-const steamConfig: ApiConfig = {
-  geminiApiKey: undefined,
-  geminiModel: "gemini-3.1-flash-lite",
-  ingestSecret: undefined,
-  sentryDsn: undefined,
-  sessionSecret: undefined,
-  panelPasswordHash: undefined,
-  supabaseUrl: undefined,
-  supabaseSecretKey: undefined,
-  githubToken: undefined,
-  githubUsername: undefined,
+const steamConfig = testApiConfig({
   steamApiKey: "steam-key",
   steamId: "76561198000000000",
-  googleClientId: undefined,
-  googleClientSecret: undefined,
-  googleRedirectUri: undefined,
-  googleRefreshToken: undefined,
-  integrationEncryptionKey: undefined,
-};
+});
 
 const createService = async (): Promise<SteamService> => {
   const moduleRef = await Test.createTestingModule({
@@ -63,7 +48,7 @@ describe("SteamService", () => {
   it("returns ready payload with current game and recently played", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async (input: RequestInfo | URL) => {
+      vi.fn(async (input: Parameters<typeof fetch>[0]) => {
         const url = String(input);
         if (url.includes("GetPlayerSummaries")) {
           return {
@@ -151,7 +136,7 @@ describe("SteamService", () => {
     vi.setSystemTime(new Date("2026-01-01T12:05:00.000Z"));
     vi.stubGlobal(
       "fetch",
-      vi.fn(async (input: RequestInfo | URL) => {
+      vi.fn(async (input: Parameters<typeof fetch>[0]) => {
         const url = String(input);
         if (url.includes("GetPlayerSummaries")) {
           return {

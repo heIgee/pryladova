@@ -13,7 +13,7 @@ import type { GoogleTasksTileStatus } from "@/lib/integration-status";
 import { isIntegrationLoading } from "@/lib/integration-status";
 import { cn } from "@/lib/utils";
 
-const formatDue = (dueAt: string | null): string => {
+const formatDue = (dueAt: string | null, nowMs: number): string => {
   if (!dueAt) {
     return "No due date";
   }
@@ -21,14 +21,16 @@ const formatDue = (dueAt: string | null): string => {
   if (Number.isNaN(date.getTime())) {
     return dueAt;
   }
-  return formatIntegrationDate(date);
+  return formatIntegrationDate(date, new Date(nowMs));
 };
 
 export const GoogleTasksTile = ({
   status,
+  nowMs,
   className,
 }: {
   status: GoogleTasksTileStatus;
+  nowMs: number;
   className?: string;
 }) => (
   <Card size="sm" className={cn(bentoTileCardClassName, className)}>
@@ -62,14 +64,18 @@ export const GoogleTasksTile = ({
       ) : null}
       {status.status === "misconfigured" ? (
         <div className="grid gap-1">
-          <p className="text-caption text-destructive">GOOGLE_REFRESH_TOKEN is invalid</p>
+          <p className="text-caption text-destructive" aria-live="polite">
+            GOOGLE_REFRESH_TOKEN is invalid
+          </p>
           <p className="text-micro text-muted-foreground/80">
             Fix or remove the env override, then restart the API
           </p>
         </div>
       ) : null}
       {status.status === "unavailable" ? (
-        <p className="text-caption text-destructive">Tasks status unavailable</p>
+        <p className="text-caption text-destructive" aria-live="polite">
+          Tasks status unavailable
+        </p>
       ) : null}
       {status.status === "ready" ? (
         <>
@@ -85,7 +91,7 @@ export const GoogleTasksTile = ({
                 >
                   <span className="truncate font-medium">{task.title}</span>
                   <span className="shrink-0 text-micro text-muted-foreground tabular-nums">
-                    {formatDue(task.dueAt)}
+                    {formatDue(task.dueAt, nowMs)}
                   </span>
                 </div>
               ))}

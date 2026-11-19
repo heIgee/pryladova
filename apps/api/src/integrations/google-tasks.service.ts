@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { type GoogleTasksStatusResponse, parseGoogleTasksStatusResponse } from "@pryladova/shared";
 import { SettingsService } from "../settings/settings.service.js";
 import { GoogleAccountService } from "./google-account.service.js";
@@ -12,6 +12,7 @@ type CachedReady = Extract<GoogleTasksStatusResponse, { status: "ready" }>;
 
 @Injectable()
 export class GoogleTasksService {
+  private readonly logger = new Logger(GoogleTasksService.name);
   private cached: { ready: CachedReady; expiresAt: number } | null = null;
 
   constructor(
@@ -62,7 +63,7 @@ export class GoogleTasksService {
       }
 
       const message = error instanceof Error ? error.message : String(error);
-      console.error(`[api] google tasks fetch failed: ${message}`);
+      this.logger.error(`google tasks fetch failed: ${message}`);
       return parseGoogleTasksStatusResponse({ status: "unavailable" });
     }
   }
@@ -100,14 +101,18 @@ export class GoogleTasksService {
     const parsed = googleTasksSchema.parse(json);
     const summary = summarizeTasks(parsed.items ?? [], now);
 
-    return parseGoogleTasksStatusResponse({
+    const readyResponse = parseGoogleTasksStatusResponse({
       status: "ready",
       accountEmail,
       openCount: summary.openCount,
       dueTodayCount: summary.dueTodayCount,
       tasks: summary.tasks,
       fetchedAt: nowIso,
-    }) as CachedReady;
+    });
+    if (readyResponse.status !== "ready") {
+      throw new Error("Google Tasks status response was not ready");
+    }
+    return readyResponse;
   }
 
   private getDbRefreshTokenPlaintext(): string | null {
@@ -120,7 +125,7 @@ export class GoogleTasksService {
       return this.googleTokenService.decryptRefreshToken(encrypted);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
-      console.error(`[api] google refresh token decrypt failed: ${message}`);
+      this.logger.error(`google refresh token decrypt failed: ${message}`);
       return null;
     }
   }

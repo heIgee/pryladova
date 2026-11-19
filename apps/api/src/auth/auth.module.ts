@@ -7,5 +7,6 @@ import { PanelAuthGuard } from "./panel-auth.guard.js";
 @Module({
   controllers: [AuthController],
   providers: [AuthService, { provide: APP_GUARD, useClass: PanelAuthGuard }],
+  exports: [AuthService],
 })
 export class AuthModule {}

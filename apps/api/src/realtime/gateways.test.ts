@@ -2,59 +2,47 @@ import { EventEmitter } from "node:events";
 import type { IncomingMessage } from "node:http";
 import { Logger } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 import WebSocket from "ws";
-import { createSessionToken, SESSION_COOKIE_NAME } from "../auth/session.js";
-import type { ApiConfig } from "../config.js";
+import { AuthService } from "../auth/auth.service.js";
+import { createSessionToken, readSessionCookie, SESSION_COOKIE_NAME } from "../auth/session.js";
+import { testApiConfig } from "../config.js";
 import { ConfigService } from "../config.service.js";
 import { AgentBindingService } from "../ingest/agent-binding.service.js";
 import { SegmentService } from "../persistence/segment.service.js";
 import { TelemetryService } from "../telemetry/telemetry.service.js";
 import { createSegmentServiceMock } from "../test/persistence-mocks.js";
 import { AgentGateway } from "./agent.gateway.js";
+import { AgentIngressService } from "./agent-ingress.service.js";
 import { PanelGateway } from "./panel.gateway.js";
 import { RealtimeService } from "./realtime.service.js";
 
 const SESSION_SECRET = "panel-session-secret-0123456789abcdef";
 
-const config: ApiConfig = {
-  geminiApiKey: undefined,
-  geminiModel: "gemini-3.1-flash-lite",
+const config = testApiConfig({
   ingestSecret: "ingest-secret",
-  sentryDsn: undefined,
   sessionSecret: SESSION_SECRET,
   panelPasswordHash: "$2b$10$hash",
-  supabaseUrl: undefined,
-  supabaseSecretKey: undefined,
-  githubToken: undefined,
-  githubUsername: undefined,
-  steamApiKey: undefined,
-  steamId: undefined,
-  googleClientId: undefined,
-  googleClientSecret: undefined,
-  googleRedirectUri: undefined,
-  googleRefreshToken: undefined,
-  integrationEncryptionKey: undefined,
-};
+});
 
 type FakeSocket = EventEmitter & {
-  close: ReturnType<typeof vi.fn>;
-  send: ReturnType<typeof vi.fn>;
+  close: Mock<(code?: number, reason?: string) => void>;
+  send: Mock<(data: string) => void>;
   readyState: number;
 };
 
 const createSocket = (): FakeSocket =>
   Object.assign(new EventEmitter(), {
-    close: vi.fn(),
-    send: vi.fn(),
+    close: vi.fn<(code?: number, reason?: string) => void>(),
+    send: vi.fn<(data: string) => void>(),
     readyState: WebSocket.OPEN,
   });
 
-// Gateways only touch on/close/send/readyState; ws.WebSocket has no test double.
-const asWebSocket = (socket: FakeSocket): WebSocket => socket as unknown as WebSocket;
-
-const requestWith = (headers: IncomingMessage["headers"]): IncomingMessage =>
-  ({ headers }) as IncomingMessage;
+const requestWith = (
+  headers: IncomingMessage["headers"],
+): { headers: IncomingMessage["headers"] } => ({
+  headers,
+});
 
 const host = {
   idleMs: 0,
@@ -77,6 +65,7 @@ describe("AgentGateway", () => {
     const moduleRef = await Test.createTestingModule({
       providers: [
         AgentGateway,
+        AgentIngressService,
         AgentBindingService,
         { provide: ConfigService, useValue: { config } },
         { provide: TelemetryService, useValue: telemetry },
@@ -92,7 +81,7 @@ describe("AgentGateway", () => {
 
   const connect = (authorization = "Bearer ingest-secret"): FakeSocket => {
     const socket = createSocket();
-    gateway.handleConnection(asWebSocket(socket), requestWith({ authorization }));
+    gateway.handleConnection(socket, requestWith({ authorization }));
     return socket;
   };
 
@@ -169,7 +158,13 @@ describe("PanelGateway", () => {
       providers: [
         PanelGateway,
         RealtimeService,
-        { provide: ConfigService, useValue: { config } },
+        {
+          provide: AuthService,
+          useValue: {
+            isAuthenticated: (cookieHeader?: string) =>
+              readSessionCookie(cookieHeader, SESSION_SECRET),
+          },
+        },
         { provide: TelemetryService, useValue: { getState: () => null } },
       ],
     }).compile();
@@ -179,13 +174,13 @@ describe("PanelGateway", () => {
 
   it("refuses connections without a valid session cookie", () => {
     const socket = createSocket();
-    gateway.handleConnection(asWebSocket(socket), requestWith({}));
+    gateway.handleConnection(socket, requestWith({}));
     expect(socket.close).toHaveBeenCalledWith(4401, "Panel authentication required");
     expect(socket.send).not.toHaveBeenCalled();
 
     const forged = createSocket();
     gateway.handleConnection(
-      asWebSocket(forged),
+      forged,
       requestWith({ cookie: `${SESSION_COOKIE_NAME}=forged.token` }),
     );
     expect(forged.close).toHaveBeenCalledWith(4401, "Panel authentication required");
@@ -194,7 +189,7 @@ describe("PanelGateway", () => {
   it("sends the current state on connect and receives broadcasts until disconnect", () => {
     const socket = createSocket();
     const cookie = `${SESSION_COOKIE_NAME}=${createSessionToken(SESSION_SECRET)}`;
-    gateway.handleConnection(asWebSocket(socket), requestWith({ cookie }));
+    gateway.handleConnection(socket, requestWith({ cookie }));
 
     expect(socket.close).not.toHaveBeenCalled();
     expect(JSON.parse(String(socket.send.mock.calls[0]?.[0]))).toEqual({ type: "empty" });
@@ -202,7 +197,7 @@ describe("PanelGateway", () => {
     realtime.broadcastPanelHost(host);
     expect(JSON.parse(String(socket.send.mock.calls[1]?.[0]))).toMatchObject({ type: "host" });
 
-    gateway.handleDisconnect(asWebSocket(socket));
+    gateway.handleDisconnect(socket);
     realtime.broadcastPanelState(null);
     expect(socket.send).toHaveBeenCalledTimes(2);
   });

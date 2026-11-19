@@ -1,6 +1,14 @@
 import { z } from "zod";
 
 export {
+  formatPersistenceError,
+  isPermissionDeniedError,
+  isSchemaMissingError,
+  PERMISSION_DENIED_MESSAGE,
+  persistenceFailureMessage,
+  SCHEMA_MISSING_MESSAGE,
+} from "./persistence-error.js";
+export {
   pickRandomSpinnerVerb,
   pickSpinnerVerb,
   SPINNER_VERBS,

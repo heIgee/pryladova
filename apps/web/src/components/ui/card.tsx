@@ -33,11 +33,20 @@ function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
   );
 }
 
-function CardContent({ className, ...props }: React.ComponentProps<"div">) {
+function CardContent({
+  className,
+  inset = "default",
+  ...props
+}: React.ComponentProps<"div"> & { inset?: "default" | "login" }) {
   return (
     <div
       data-slot="card-content"
-      className={cn("px-(--card-spacing) py-(--card-spacing)", className)}
+      data-inset={inset}
+      className={cn(
+        "px-(--card-spacing)",
+        inset === "login" ? "pt-6 pb-(--card-spacing)" : "py-(--card-spacing)",
+        className,
+      )}
       {...props}
     />
   );

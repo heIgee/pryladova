@@ -1,8 +1,11 @@
 import { Injectable } from "@nestjs/common";
+import { ConfigService } from "../config.service.js";
 
 @Injectable()
 export class AgentBindingService {
   private boundAgentId: string | null = null;
+
+  constructor(private readonly configService: ConfigService) {}
 
   assertAgent(agentId: string): "ok" | "rejected" {
     if (this.boundAgentId === null) {
@@ -28,7 +31,7 @@ export class AgentBindingService {
   }
 
   resetForE2e(): void {
-    if (process.env.NODE_ENV !== "test") {
+    if (!this.configService.config.runtime.isTest) {
       return;
     }
     this.boundAgentId = null;

@@ -6,7 +6,7 @@ import {
 } from "@nestjs/common";
 import type { Request } from "express";
 import { ConfigService } from "../config.service.js";
-import { isIngestAuthorized } from "./ingest-auth.js";
+import { isIngestAuthorized } from "../ingest/ingest-auth.js";
 
 @Injectable()
 export class IngestAuthGuard implements CanActivate {

@@ -1,0 +1,43 @@
+---
+description: NestJS layers, boundary validation, transports, and provider lifecycle
+globs: **/*.controller.ts,**/*.service.ts,**/*.module.ts,**/*.gateway.ts,**/*.resolver.ts,**/*.guard.ts,**/*.interceptor.ts,**/*.pipe.ts,**/*.filter.ts,**/*.middleware.ts,**/*.decorator.ts,**/*.dto.ts
+alwaysApply: false
+---
+
+# NestJS
+
+## Layers
+
+- Three layers: transport (controllers, gateways, resolvers, consumers) → services → infrastructure (database client, external APIs, queues).
+- Transport is thin: validate input, call a service, shape the response. No queries and no multi-step workflows in a controller or gateway.
+- Business logic lives in services. Framework-free logic goes in plain modules, unit-tested without Nest.
+- No repository ports, adapters, or mappers until a second non-test implementation exists. No CQRS, command bus, or aggregates by default.
+- Data access methods are single-purpose (`findByEmail`, `listForUser`). No catch-all `find(where)`.
+- One folder per feature. Use another module's exported providers. Never import another module's private files. A helper in the same feature folder is part of that module. Never use `forwardRef`. Break a cycle by extracting the shared piece into its own provider, and that provider imports neither side.
+
+## Validation
+
+- A TypeScript type on `@Body()`, `@Query()`, `@Param()`, or a WebSocket payload validates nothing at runtime. An object or string the process does not already trust passes a runtime validator: HTTP bodies, WebSocket messages, queue payloads, third-party API responses, env. A flag compared against a literal does not need its own schema.
+- Reject unknown properties. Never pass an unvalidated object to a service.
+- Never return raw rows or entities. A response the client branches on is an allowlist checked by the shared schema. A body that is only `{ ok: true }` needs no schema.
+- If class-validator: global `ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true })`. Every DTO property has a validator or `@IsOptional()`. Nested objects and `Date` need `@Type(() => X)`; nested objects also need `@ValidateNested()`.
+- If Zod: type the parameter as `unknown` and `parse` it, or use a schema pipe. Derive types with `z.infer`; never hand-write a parallel type. Parse that object with the same shared schema the client uses.
+
+## Errors
+
+- `HttpException` and its subclasses only in code that HTTP alone reaches: controllers, guards, pipes, filters, and services only controllers call.
+- A service also used by a gateway, scheduler, or consumer throws plain errors or returns a result. Each transport maps them; an `HttpException` becomes a generic internal error outside HTTP.
+
+## HTTP
+
+- Never `@Res()` / `@Response()` without `{ passthrough: true }`. Prefer `@HttpCode()`, `@Header()`, `@Redirect()`.
+- Auth is deny-by-default: one global guard via `APP_GUARD`, with an explicit opt-out decorator (e.g. `@Public()`) on open routes.
+- Rate-limit login, token, and expensive routes.
+- `@UploadedFile()` always has size and type limits (`ParseFilePipe` or Multer `limits`).
+
+## Providers and lifecycle
+
+- Providers stay singleton. No `Scope.REQUEST` and no injected `REQUEST` to reach user data; the scope spreads to every dependent. Pass the value from the handler, e.g. via a custom param decorator.
+- Anything holding an interval, timer, socket, stream, or connection releases it in `onModuleDestroy`. `main.ts` calls `app.enableShutdownHooks()`.
+- Validate env once at startup and fail fast on missing or malformed values. Only the module that builds that config reads `process.env`.
+- Log with `new Logger(ClassName.name)`. Never log tokens, passwords, cookies, or full request bodies.

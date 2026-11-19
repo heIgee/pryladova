@@ -325,15 +325,23 @@ describe("isAgentLive", () => {
 });
 
 describe("resolvePanelSubtitle", () => {
-  it("reports api-unavailable when the panel stream is disconnected", () => {
-    expect(resolvePanelSubtitle({ status: "loading" }, false)).toBe("api-unavailable");
-    expect(resolvePanelSubtitle({ status: "ready", telemetry: readyTelemetry }, false)).toBe(
+  it("reports connecting until a frame arrives, and api-unavailable after a failed connect", () => {
+    expect(resolvePanelSubtitle({ status: "loading" }, false)).toBe("connecting");
+    expect(resolvePanelSubtitle({ status: "loading" }, false, Date.now(), true)).toBe(
       "api-unavailable",
     );
   });
 
-  it("reports agent-unavailable when the stream is connected but the agent is missing", () => {
+  it("reports api-unavailable when fresh telemetry loses the stream", () => {
+    const now = Date.parse("2026-01-01T12:00:02.000Z") + 5_000;
+    expect(resolvePanelSubtitle({ status: "ready", telemetry: readyTelemetry }, false, now)).toBe(
+      "api-unavailable",
+    );
+  });
+
+  it("reports agent-unavailable when the agent is missing, including across a socket drop", () => {
     expect(resolvePanelSubtitle({ status: "empty" }, true)).toBe("agent-unavailable");
+    expect(resolvePanelSubtitle({ status: "empty" }, false)).toBe("agent-unavailable");
   });
 
   it("reports live when the stream is connected and telemetry is fresh", () => {

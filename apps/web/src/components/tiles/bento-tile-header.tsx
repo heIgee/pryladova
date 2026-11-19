@@ -1,23 +1,19 @@
 import type { ReactNode } from "react";
 import {
+  bentoTileHeaderClassName,
+  bentoTileHeaderRowClassName,
+} from "@/components/tiles/bento-tile-header-layout";
+import {
   useDashboardTileDragHandle,
   useDashboardTileShellContext,
-} from "@/components/layout/dashboard-tile-shell-context";
-import {
-  bentoTileHeaderClassName,
-  bentoTileHeaderRowClassName,
-} from "@/components/tiles/bento-tile-header-layout";
+} from "@/components/tiles/dashboard-tile-shell-context";
 import { CardHeader } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-
-export {
-  bentoTileHeaderClassName,
-  bentoTileHeaderRowClassName,
-} from "@/components/tiles/bento-tile-header-layout";
 
 export type BentoTileHeaderProps = {
   icon: ReactNode;
   title: string;
+  /** `undefined` omits the slot. `null` keeps it and hides the text until the value is ready. */
   detail?: string | null;
   action?: ReactNode;
   /** Buttons placed on either side of the title. The drag handle becomes a div so they are not nested in a button. */
@@ -65,14 +61,28 @@ export const BentoTileHeader = ({
       {title}
     </span>
   );
-  const detailNode = detail ? (
-    <>
-      <span className="shrink-0 text-micro text-muted-foreground" aria-hidden="true">
-        ·
-      </span>
-      <span className="min-w-0 truncate text-micro text-muted-foreground">{detail}</span>
-    </>
-  ) : null;
+  const detailNode =
+    detail === undefined ? null : (
+      <>
+        <span
+          className={cn(
+            "shrink-0 text-micro text-muted-foreground",
+            detail === null && "invisible",
+          )}
+          aria-hidden="true"
+        >
+          ·
+        </span>
+        <span
+          className={cn(
+            "min-w-0 truncate text-micro text-muted-foreground",
+            detail === null && "invisible",
+          )}
+        >
+          {detail ?? "\u00a0"}
+        </span>
+      </>
+    );
   const handleLabel = (
     <>
       {iconNode}
@@ -80,6 +90,39 @@ export const BentoTileHeader = ({
       {detailNode}
     </>
   );
+  let dragHandle: ReactNode = <div className={handleClassName}>{handleLabel}</div>;
+  if (dragAttributes && aroundTitle) {
+    dragHandle = (
+      // Div, not button: the day chevrons are buttons and cannot nest inside the drag control.
+      // biome-ignore lint/a11y/useSemanticElements: day chevrons cannot nest in a button
+      <div
+        ref={setDragActivatorRef ?? undefined}
+        className={cn(handleClassName, "text-left text-inherit")}
+        {...dragAttributes}
+        {...(dragListeners ?? {})}
+        role="button"
+        tabIndex={0}
+        aria-label={`Drag ${title}`}
+        data-testid="dashboard-tile-drag-handle"
+      >
+        {handleLabel}
+      </div>
+    );
+  } else if (dragAttributes) {
+    dragHandle = (
+      <button
+        type="button"
+        ref={setDragActivatorRef ?? undefined}
+        className={cn(handleClassName, "border-0 bg-transparent p-0 text-left text-inherit")}
+        {...dragAttributes}
+        {...(dragListeners ?? {})}
+        aria-label={`Drag ${title}`}
+        data-testid="dashboard-tile-drag-handle"
+      >
+        {handleLabel}
+      </button>
+    );
+  }
 
   return (
     <CardHeader
@@ -96,36 +139,7 @@ export const BentoTileHeader = ({
       data-testid={testId}
     >
       <div className={bentoTileHeaderRowClassName}>
-        {dragAttributes && aroundTitle ? (
-          // Div, not button: the day chevrons are buttons and cannot nest inside the drag control.
-          // biome-ignore lint/a11y/useSemanticElements: day chevrons cannot nest in a button
-          <div
-            ref={setDragActivatorRef ?? undefined}
-            className={cn(handleClassName, "text-left text-inherit")}
-            {...dragAttributes}
-            {...(dragListeners ?? {})}
-            role="button"
-            tabIndex={0}
-            aria-label={`Drag ${title}`}
-            data-testid="dashboard-tile-drag-handle"
-          >
-            {handleLabel}
-          </div>
-        ) : dragAttributes ? (
-          <button
-            type="button"
-            ref={setDragActivatorRef ?? undefined}
-            className={cn(handleClassName, "border-0 bg-transparent p-0 text-left text-inherit")}
-            {...dragAttributes}
-            {...(dragListeners ?? {})}
-            aria-label={`Drag ${title}`}
-            data-testid="dashboard-tile-drag-handle"
-          >
-            {handleLabel}
-          </button>
-        ) : (
-          <div className={handleClassName}>{handleLabel}</div>
-        )}
+        {dragHandle}
         <span className="ml-auto flex h-5 shrink-0 items-center gap-1.5">{action}</span>
       </div>
     </CardHeader>

@@ -20,6 +20,11 @@ out/
 .env
 .env.*
 !.env.example
+.envrc
+*.env
+*.key
+*.p12
+*.pfx
 
 # Logs
 logs/
@@ -34,6 +39,8 @@ coverage/
 .nyc_output/
 test-results/
 playwright-report/
+blob-report/
+playwright/.cache/
 
 # Caches
 .cache/
@@ -44,6 +51,13 @@ playwright-report/
 
 # Vite
 vite.config.ts.timestamp-*
+.vite/
+
+# Next.js
+next-env.d.ts
+
+# Native addons
+*.node
 
 # NestJS
 *.pid

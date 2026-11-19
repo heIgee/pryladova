@@ -1,4 +1,4 @@
-import { type KeyboardEvent, type PointerEvent, useCallback, useRef } from "react";
+import { type KeyboardEvent, type PointerEvent, useRef } from "react";
 import type { DashboardTileId, RowBand, RowSpan } from "@/lib/dashboard-layout";
 import { cn } from "@/lib/utils";
 
@@ -24,17 +24,14 @@ export const DashboardRowBandResizeHandle = ({
   const gestureActiveRef = useRef(false);
   const draftOverridesRef = useRef<Partial<Record<DashboardTileId, RowSpan>> | null>(null);
 
-  const applyStep = useCallback(
-    (direction: 1 | -1) => {
-      const overrides = stepBand(direction);
-      if (!overrides) {
-        return;
-      }
-      draftOverridesRef.current = overrides;
-      onDraftBand(overrides);
-    },
-    [onDraftBand, stepBand],
-  );
+  const applyStep = (direction: 1 | -1) => {
+    const overrides = stepBand(direction);
+    if (!overrides) {
+      return;
+    }
+    draftOverridesRef.current = overrides;
+    onDraftBand(overrides);
+  };
 
   const handlePointerDown = (event: PointerEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -121,8 +118,8 @@ export const DashboardRowBandResizeHandle = ({
       aria-valuenow={band.endRow - band.startRow + 1}
       aria-label="Resize row height"
       className={cn(
-        "absolute left-0 right-0 z-20 flex items-center justify-center opacity-0 transition-opacity",
-        "focus-visible:opacity-100 hover:opacity-100 active:opacity-100",
+        "absolute right-0 left-0 z-20 flex items-center justify-center opacity-0 transition-opacity",
+        "hover:opacity-100 focus-visible:opacity-100 active:opacity-100",
         "cursor-row-resize touch-none",
       )}
       style={{

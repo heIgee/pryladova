@@ -101,29 +101,30 @@ describe("resolveDebouncedFocusDisplay", () => {
   });
 });
 
+let latestFocus: { showSkeleton: boolean; display: FocusDisplaySnapshot } | null = null;
+
+const FocusProbe = (props: {
+  focusKey: string;
+  settled: FocusDisplaySnapshot;
+  isPending: boolean;
+  enabled?: boolean;
+}) => {
+  latestFocus = useDebouncedFocusLoading(props.focusKey, props.settled, deadlockSkeletonDisplay, {
+    enabled: props.enabled ?? true,
+    isPending: props.isPending,
+  });
+  return null;
+};
+
 describe("useDebouncedFocusLoading", () => {
   let container: HTMLDivElement;
   let root: Root;
-  let latest: { showSkeleton: boolean; display: FocusDisplaySnapshot } | null = null;
 
-  const Probe = (props: {
-    focusKey: string;
-    settled: FocusDisplaySnapshot;
-    isPending: boolean;
-    enabled?: boolean;
-  }) => {
-    latest = useDebouncedFocusLoading(props.focusKey, props.settled, deadlockSkeletonDisplay, {
-      enabled: props.enabled ?? true,
-      isPending: props.isPending,
-    });
-    return null;
-  };
-
-  const render = (props: Parameters<typeof Probe>[0]) => {
+  const render = (props: Parameters<typeof FocusProbe>[0]) => {
     act(() => {
-      root.render(createElement(Probe, props));
+      root.render(createElement(FocusProbe, props));
     });
-    return latest;
+    return latestFocus;
   };
 
   beforeEach(() => {
@@ -138,7 +139,7 @@ describe("useDebouncedFocusLoading", () => {
       root.unmount();
     });
     container.remove();
-    latest = null;
+    latestFocus = null;
     vi.useRealTimers();
   });
 
@@ -166,7 +167,7 @@ describe("useDebouncedFocusLoading", () => {
     act(() => {
       vi.advanceTimersByTime(CLASSIFICATION_LOADING_DELAY_MS);
     });
-    expect(latest).toEqual({ showSkeleton: true, display: deadlockSkeletonDisplay });
+    expect(latestFocus).toEqual({ showSkeleton: true, display: deadlockSkeletonDisplay });
 
     expect(render({ focusKey: "b", settled: next, isPending: false })).toEqual({
       showSkeleton: false,

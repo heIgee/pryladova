@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { sentryVitePlugin } from "@sentry/vite-plugin";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
-import { createLogger, defineConfig, type Logger } from "vite";
+import { createLogger, defineConfig, type Logger, type UserConfig } from "vite";
 
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
 
@@ -46,24 +46,24 @@ const resolveSentryApiUrl = (): string | undefined => {
 
 const sentryApiUrl = resolveSentryApiUrl();
 
+const BENIGN_PROXY_CODES = new Set(["ECONNABORTED", "ECONNRESET", "ECONNREFUSED"]);
+
 const isBenignDevProxyError = (error: unknown): boolean => {
-  if (!(error instanceof Error)) {
+  if (!(error instanceof Error) || !("code" in error)) {
     return false;
   }
-
-  const code = (error as NodeJS.ErrnoException).code;
-  return code === "ECONNABORTED" || code === "ECONNRESET" || code === "ECONNREFUSED";
+  const code = error.code;
+  return typeof code === "string" && BENIGN_PROXY_CODES.has(code);
 };
 
 const createDevLogger = (): Logger => {
   const logger = createLogger();
   const logError = logger.error.bind(logger);
   logger.error = (msg, options) => {
-    const err = options?.error ?? (msg instanceof Error ? msg : null);
-    if (err && isBenignDevProxyError(err)) {
+    if (options?.error && isBenignDevProxyError(options.error)) {
       return;
     }
-    if (typeof msg === "string" && msg.includes("ws proxy")) {
+    if (msg.includes("ws proxy")) {
       return;
     }
     logError(msg, options);
@@ -71,36 +71,30 @@ const createDevLogger = (): Logger => {
   return logger;
 };
 
+type DevProxy = Exclude<NonNullable<NonNullable<UserConfig["server"]>["proxy"]>[string], string>;
+
 const apiPort = process.env.E2E_API_PORT?.trim() || "3000";
 
-const apiProxy = {
+const apiProxy: DevProxy = {
   target: `http://127.0.0.1:${apiPort}`,
   changeOrigin: true,
   ws: true,
-  configure: (proxy: { on: (event: string, listener: (...args: never[]) => void) => void }) => {
-    proxy.on("error", (error: unknown, _req: unknown, res: unknown) => {
+  configure: (proxy) => {
+    proxy.on("error", (error, _req, res) => {
       if (!isBenignDevProxyError(error)) {
         return;
       }
-      const response = res as {
-        headersSent?: boolean;
-        writeHead?: (status: number, headers: Record<string, string>) => void;
-        end?: (body: string) => void;
-      };
-      if (response.headersSent || !response.writeHead || !response.end) {
+      if (!("writeHead" in res) || !("end" in res) || res.headersSent) {
         return;
       }
-      response.writeHead(502, { "Content-Type": "application/json" });
-      response.end(JSON.stringify({ message: "API temporarily unavailable" }));
+      res.writeHead(502, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ message: "API temporarily unavailable" }));
     });
-    proxy.on(
-      "proxyReqWs",
-      (_proxyReq, _req, socket: { on: (event: string, listener: () => void) => void }) => {
-        socket.on("error", () => {
-          // Panel WS reconnect / HMR close — expected in dev.
-        });
-      },
-    );
+    proxy.on("proxyReqWs", (_proxyReq, _req, socket) => {
+      socket.on("error", () => {
+        // Panel WS reconnect / HMR close — expected in dev.
+      });
+    });
   },
 };
 
@@ -110,7 +104,11 @@ export default defineConfig({
     "import.meta.env.VITE_APP_RELEASE": JSON.stringify(appRelease),
   },
   plugins: [
-    react(),
+    react({
+      babel: {
+        plugins: ["babel-plugin-react-compiler"],
+      },
+    }),
     tailwindcss(),
     ...(sentryUploadEnabled
       ? [

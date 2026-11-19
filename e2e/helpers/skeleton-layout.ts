@@ -139,6 +139,7 @@ export const expectHistorySkeletonGeometry = async (tile: Locator): Promise<void
   for (let index = 0; index < 4; index += 1) {
     const row = rows.nth(index);
     const blocks = row.locator(".animate-pulse");
+    // biome-ignore lint/performance/noAwaitInLoops: row geometry is asserted in order
     await expect(blocks).toHaveCount(3);
     await expectExactHeight(blocks.nth(0), skeletonBlockHeightPx.caption);
     await expectExactHeight(blocks.nth(1), skeletonBlockHeightPx.duration);

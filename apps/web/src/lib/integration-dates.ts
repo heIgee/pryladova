@@ -15,6 +15,9 @@ export const isWithinWeek = (date: Date, now = new Date()): boolean =>
 
 export const parseCalendarDateKey = (dateKey: string): Date => {
   const [year, month, day] = dateKey.split("-").map(Number);
+  if (year === undefined || month === undefined || day === undefined) {
+    return new Date(Number.NaN);
+  }
   return new Date(year, month - 1, day);
 };
 

@@ -8,12 +8,12 @@ import {
   Res,
   ServiceUnavailableException,
 } from "@nestjs/common";
+import { Throttle } from "@nestjs/throttler";
 import {
   GOOGLE_CALLBACK_ROUTE,
   GOOGLE_CONNECT_ROUTE,
   GOOGLE_DISCONNECT_ROUTE,
 } from "@pryladova/shared";
-import type { Request, Response } from "express";
 import { Public } from "../auth/public.decorator.js";
 import { ConfigService } from "../config.service.js";
 import { SettingsService } from "../settings/settings.service.js";
@@ -28,16 +28,30 @@ import {
   oauthStateCookieOptions,
   verifyOAuthStateToken,
 } from "./google-oauth.logic.js";
+import { GoogleOauthCallbackService } from "./google-oauth-callback.service.js";
 import { GoogleTokenService } from "./google-token.service.js";
 
 const parseReconnect = (value: string | undefined): boolean => value === "1" || value === "true";
 
-const readOAuthStateCookie = (request: Request): string | undefined => {
+type OAuthStateCookieOptions = ReturnType<typeof oauthStateCookieOptions>;
+
+export type OAuthHttpResponse = {
+  cookie(name: string, value: string, options: OAuthStateCookieOptions): void;
+  clearCookie(name: string, options: OAuthStateCookieOptions): void;
+  redirect(url: string): void;
+  status(code: number): { send(body: string): void };
+};
+
+export type OAuthHttpRequest = {
+  cookies?: Partial<Record<string, string>>;
+};
+
+const readOAuthStateCookie = (request: OAuthHttpRequest): string | undefined => {
   const raw = request.cookies?.[GOOGLE_OAUTH_STATE_COOKIE];
   return typeof raw === "string" ? raw : undefined;
 };
 
-const clearOAuthStateCookie = (response: Response, secure: boolean): void => {
+const clearOAuthStateCookie = (response: OAuthHttpResponse, secure: boolean): void => {
   response.clearCookie(GOOGLE_OAUTH_STATE_COOKIE, oauthStateCookieOptions(secure));
 };
 
@@ -47,15 +61,17 @@ export class GoogleOauthController {
     private readonly configService: ConfigService,
     private readonly settingsService: SettingsService,
     private readonly googleTokenService: GoogleTokenService,
+    private readonly googleOauthCallbackService: GoogleOauthCallbackService,
     private readonly googleAccountService: GoogleAccountService,
   ) {}
 
   @Post(GOOGLE_CONNECT_ROUTE)
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
   connect(
     @Query("reconnect") reconnectRaw: string | undefined,
-    @Res({ passthrough: true }) response: Response,
+    @Res({ passthrough: true }) response: OAuthHttpResponse,
   ): void {
-    const { sessionSecret, googleClientId, googleRedirectUri, integrationEncryptionKey } =
+    const { sessionSecret, googleClientId, googleRedirectUri, integrationEncryptionKey, runtime } =
       this.configService.config;
 
     if (!sessionSecret) {
@@ -78,9 +94,12 @@ export class GoogleOauthController {
 
     const { codeVerifier, codeChallenge } = generatePkcePair();
     const state = createOAuthStateToken(sessionSecret);
-    const secure = process.env.NODE_ENV === "production";
     const cookieValue = encodeOAuthStateCookie(sessionSecret, { state, codeVerifier });
-    response.cookie(GOOGLE_OAUTH_STATE_COOKIE, cookieValue, oauthStateCookieOptions(secure));
+    response.cookie(
+      GOOGLE_OAUTH_STATE_COOKIE,
+      cookieValue,
+      oauthStateCookieOptions(runtime.isProduction),
+    );
 
     const promptConsent =
       parseReconnect(reconnectRaw) ||
@@ -99,18 +118,18 @@ export class GoogleOauthController {
 
   @Public()
   @Get(GOOGLE_CALLBACK_ROUTE)
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
   async callback(
     @Query("code") code: string | undefined,
     @Query("state") state: string | undefined,
     @Query("error") googleError: string | undefined,
-    @Req() request: Request,
-    @Res({ passthrough: true }) response: Response,
+    @Req() request: OAuthHttpRequest,
+    @Res({ passthrough: true }) response: OAuthHttpResponse,
   ): Promise<void> {
-    const { sessionSecret } = this.configService.config;
-    const secure = process.env.NODE_ENV === "production";
+    const { sessionSecret, runtime } = this.configService.config;
     const cookieValue = readOAuthStateCookie(request);
     const oauthCookie = decodeOAuthStateCookie(cookieValue, sessionSecret ?? "");
-    clearOAuthStateCookie(response, secure);
+    clearOAuthStateCookie(response, runtime.isProduction);
 
     if (!sessionSecret || !oauthCookie || !state || !verifyOAuthStateToken(state, sessionSecret)) {
       response.status(400).send("Invalid OAuth state");
@@ -132,40 +151,16 @@ export class GoogleOauthController {
       return;
     }
 
-    try {
-      const exchanged = await this.googleTokenService.exchangeAuthorizationCode(
-        code,
-        oauthCookie.codeVerifier,
-      );
-
-      if (exchanged.refreshToken) {
-        const encrypted = this.googleTokenService.encryptRefreshToken(exchanged.refreshToken);
-        const persisted = await this.settingsService.saveGoogleRefreshTokenEncrypted(encrypted);
-        if (!persisted) {
-          response.redirect("/?google_oauth=persist_failed");
-          return;
-        }
-      } else if (!this.settingsService.hasGoogleRefreshTokenEncrypted()) {
-        response.redirect("/?google_oauth=missing_refresh");
-        return;
-      }
-
-      await this.googleAccountService.fetchAndPersistAccountEmail(
-        exchanged.accessToken,
-        exchanged.idToken,
-      );
-
-      response.redirect("/?google_oauth=connected");
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.error(`[api] google oauth callback failed: ${message}`);
-      response.redirect("/?google_oauth=exchange_failed");
-    }
+    const redirectPath = await this.googleOauthCallbackService.finishAuthorization(
+      code,
+      oauthCookie.codeVerifier,
+    );
+    response.redirect(redirectPath);
   }
 
   @Post(GOOGLE_DISCONNECT_ROUTE)
   @HttpCode(204)
-  async disconnect(@Res({ passthrough: true }) response: Response): Promise<void> {
+  async disconnect(@Res({ passthrough: true }) response: OAuthHttpResponse): Promise<void> {
     const cleared = await this.settingsService.clearGoogleRefreshTokenEncrypted();
     if (!cleared) {
       throw new ServiceUnavailableException("Could not clear Google refresh token");

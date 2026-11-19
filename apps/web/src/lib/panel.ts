@@ -131,19 +131,24 @@ export const resolveShowAgentHint = (panel: PanelState, nowMs = Date.now()): boo
   return isAgentStale(panel, nowMs);
 };
 
-export type PanelSubtitle = "live" | "api-unavailable" | "agent-unavailable";
+export type PanelSubtitle = "live" | "connecting" | "api-unavailable" | "agent-unavailable";
 
 export const resolvePanelSubtitle = (
   panel: PanelState,
   streamConnected: boolean,
   nowMs = Date.now(),
+  connectFailed = false,
 ): PanelSubtitle => {
-  if (!streamConnected) {
-    return "api-unavailable";
+  if (panel.status === "empty" || panel.status === "error" || isAgentStale(panel, nowMs)) {
+    return "agent-unavailable";
   }
 
-  if (resolveShowAgentHint(panel, nowMs)) {
-    return "agent-unavailable";
+  if (panel.status === "loading") {
+    return connectFailed ? "api-unavailable" : "connecting";
+  }
+
+  if (!streamConnected || !isAgentLive(panel, nowMs)) {
+    return "api-unavailable";
   }
 
   return "live";

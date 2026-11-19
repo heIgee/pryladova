@@ -1,13 +1,14 @@
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { Injectable, Logger } from "@nestjs/common";
 import {
+  formatPersistenceError,
   isRedactedTelemetry,
+  isSchemaMissingError,
   type WindowClassification,
   windowClassificationSchema,
 } from "@pryladova/shared";
 import { generateObject } from "ai";
 import { ConfigService } from "../config.service.js";
-import { formatPersistenceError, isSchemaMissingError } from "../persistence/persistence-error.js";
 import { SupabaseService } from "../persistence/supabase.service.js";
 import { SettingsService } from "../settings/settings.service.js";
 import {
@@ -18,7 +19,7 @@ import {
   resetE2eClassificationGate,
   waitForE2eClassificationRelease,
 } from "./e2e-classification.gate.js";
-import { e2eClassificationStub, readE2eClassificationEnabled } from "./e2e-classification.stub.js";
+import { e2eClassificationStub } from "./e2e-classification.stub.js";
 
 const CACHE_MAX_ENTRIES = 256;
 
@@ -43,7 +44,7 @@ export class ClassificationService {
   }
 
   resetMemoryCacheForE2e(): void {
-    if (process.env.NODE_ENV !== "test") {
+    if (!this.configService.config.runtime.isTest) {
       return;
     }
     this.cache.clear();
@@ -63,17 +64,18 @@ export class ClassificationService {
     const cacheKey = `${appName}|${cacheTitle}`;
     const memoryCached = this.readMemoryCache(cacheKey);
     if (memoryCached) {
-      console.log(
-        `[api] classification cache hit memory category=${memoryCached.category} workRelated=${memoryCached.workRelated}`,
+      this.logger.log(
+        `classification cache hit memory category=${memoryCached.category} workRelated=${memoryCached.workRelated}`,
       );
       return memoryCached;
     }
 
     // The dev database is shared. A cached row would skip the gate and show a real name.
-    if (readE2eClassificationEnabled()) {
+    if (this.configService.config.runtime.e2eClassificationEnabled) {
       try {
         await waitForE2eClassificationRelease();
       } catch {
+        // E2e harness abort: release latch was reset while classify was waiting.
         return null;
       }
       const stub = e2eClassificationStub(appName, windowTitle);
@@ -84,8 +86,8 @@ export class ClassificationService {
     const dbCached = await this.readDbCache(appName, cacheTitle);
     if (dbCached) {
       this.writeMemoryCache(cacheKey, dbCached);
-      console.log(
-        `[api] classification cache hit db category=${dbCached.category} workRelated=${dbCached.workRelated}`,
+      this.logger.log(
+        `classification cache hit db category=${dbCached.category} workRelated=${dbCached.workRelated}`,
       );
       return dbCached;
     }
@@ -93,7 +95,7 @@ export class ClassificationService {
     const { config } = this.configService;
     if (!config.geminiApiKey) {
       if (!this.warnedMissingKey) {
-        console.warn("[api] GEMINI_API_KEY not set — classification disabled");
+        this.logger.warn("GEMINI_API_KEY not set — classification disabled");
         this.warnedMissingKey = true;
       }
       return null;
@@ -120,14 +122,14 @@ For workRelated: use "yes" only when clearly work/dev; "no" when clearly persona
       const elapsedMs = Math.round(performance.now() - started);
       this.writeMemoryCache(cacheKey, object);
       void this.writeDbCache(appName, cacheTitle, object);
-      console.log(
-        `[api] classification gemini ${elapsedMs}ms model=${config.geminiModel} category=${object.category} workRelated=${object.workRelated}`,
+      this.logger.log(
+        `classification gemini ${elapsedMs}ms model=${config.geminiModel} category=${object.category} workRelated=${object.workRelated}`,
       );
       return object;
     } catch (error: unknown) {
       const elapsedMs = Math.round(performance.now() - started);
       const message = error instanceof Error ? error.message : String(error);
-      console.error(`[api] classification failed ${elapsedMs}ms: ${message}`);
+      this.logger.error(`classification failed ${elapsedMs}ms: ${message}`);
       return null;
     }
   }

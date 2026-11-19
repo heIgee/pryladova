@@ -6,15 +6,20 @@ import { applyPanelWsMessage, type PanelState } from "./panel.js";
 const RECONNECT_BASE_MS = 500;
 const RECONNECT_MAX_MS = 8_000;
 const STOP_GRACE_MS = 500;
+/** Panel gateway closes with this when the session cookie is missing or invalid. */
+const PANEL_AUTH_CLOSE_CODE = 4401;
 
 export type PanelPollSnapshot = {
   panel: PanelState;
   streamConnected: boolean;
+  /** Socket closed before any frame. Stays set until a frame arrives. */
+  connectFailed: boolean;
 };
 
 type PanelStreamStore = {
   panel: PanelState;
   streamConnected: boolean;
+  connectFailed: boolean;
   snapshot: PanelPollSnapshot;
   listeners: Set<() => void>;
   socket: WebSocket | null;
@@ -24,12 +29,15 @@ type PanelStreamStore = {
   connectGeneration: number;
 };
 
+const sessionLostListeners = new Set<() => void>();
+
 const createStore = (): PanelStreamStore => {
   const panel: PanelState = { status: "loading" };
   return {
     panel,
     streamConnected: false,
-    snapshot: { panel, streamConnected: false },
+    connectFailed: false,
+    snapshot: { panel, streamConnected: false, connectFailed: false },
     listeners: new Set(),
     socket: null,
     reconnectTimer: null,
@@ -42,9 +50,17 @@ const createStore = (): PanelStreamStore => {
 let moduleStore: PanelStreamStore | undefined;
 let stopTimer: number | null = null;
 
+const isPanelStreamStore = (value: unknown): value is PanelStreamStore => {
+  if (typeof value !== "object" || value === null || !("listeners" in value)) {
+    return false;
+  }
+  return value.listeners instanceof Set;
+};
+
 const getStore = (): PanelStreamStore => {
-  if (import.meta.hot?.data?.panelStreamStore) {
-    return import.meta.hot.data.panelStreamStore as PanelStreamStore;
+  const hotStore = import.meta.hot?.data?.panelStreamStore;
+  if (isPanelStreamStore(hotStore)) {
+    return hotStore;
   }
 
   if (moduleStore === undefined) {
@@ -63,7 +79,11 @@ const buildPanelWsUrl = (): string => {
 };
 
 const refreshSnapshot = (store: PanelStreamStore): void => {
-  store.snapshot = { panel: store.panel, streamConnected: store.streamConnected };
+  store.snapshot = {
+    panel: store.panel,
+    streamConnected: store.streamConnected,
+    connectFailed: store.connectFailed,
+  };
 };
 
 const notify = (store: PanelStreamStore): void => {
@@ -77,6 +97,12 @@ const clearReconnect = (store: PanelStreamStore): void => {
   if (store.reconnectTimer !== null) {
     window.clearTimeout(store.reconnectTimer);
     store.reconnectTimer = null;
+  }
+};
+
+const notifySessionLost = (): void => {
+  for (const listener of sessionLostListeners) {
+    listener();
   }
 };
 
@@ -135,8 +161,6 @@ const connect = (store: PanelStreamStore): void => {
     }
     clearReconnect(store);
     store.reconnectDelayMs = RECONNECT_BASE_MS;
-    store.streamConnected = true;
-    notify(store);
   };
 
   socket.onmessage = (event: MessageEvent<string>) => {
@@ -146,6 +170,8 @@ const connect = (store: PanelStreamStore): void => {
 
     try {
       const message = parsePanelWsMessage(JSON.parse(event.data));
+      store.connectFailed = false;
+      store.streamConnected = true;
       store.panel = applyPanelWsMessage(store.panel, message);
       notify(store);
     } catch {
@@ -153,12 +179,27 @@ const connect = (store: PanelStreamStore): void => {
     }
   };
 
-  socket.onclose = () => {
+  socket.onclose = (event?: CloseEvent) => {
     if (generation !== store.connectGeneration || !store.shouldRun) {
       return;
     }
 
+    if (event?.code === PANEL_AUTH_CLOSE_CODE) {
+      store.shouldRun = false;
+      store.connectGeneration += 1;
+      store.streamConnected = false;
+      clearReconnect(store);
+      abandonSocket(store.socket);
+      store.socket = null;
+      refreshSnapshot(store);
+      notifySessionLost();
+      return;
+    }
+
     store.streamConnected = false;
+    if (store.panel.status === "loading") {
+      store.connectFailed = true;
+    }
     notify(store);
     scheduleReconnect(store);
   };
@@ -190,7 +231,6 @@ const start = (store: PanelStreamStore): void => {
     return;
   }
 
-  store.panel = { status: "loading" };
   refreshSnapshot(store);
   store.shouldRun = true;
   connect(store);
@@ -201,11 +241,17 @@ const stop = (store: PanelStreamStore): void => {
   store.connectGeneration += 1;
   store.reconnectDelayMs = RECONNECT_BASE_MS;
   store.streamConnected = false;
-  store.panel = { status: "loading" };
   refreshSnapshot(store);
   clearReconnect(store);
   abandonSocket(store.socket);
   store.socket = null;
+};
+
+export const subscribePanelSessionLost = (listener: () => void): (() => void) => {
+  sessionLostListeners.add(listener);
+  return () => {
+    sessionLostListeners.delete(listener);
+  };
 };
 
 export const subscribePanelPoll = (listener: () => void): (() => void) => {

@@ -36,24 +36,31 @@ describe("getStaleClassification", () => {
   });
 });
 
+let latestClassification: ReturnType<typeof useClassificationDisplay> | null = null;
+
+const ClassificationProbe = ({
+  telemetry,
+  enabled,
+}: {
+  telemetry: TelemetryState;
+  enabled: boolean;
+}) => {
+  latestClassification = useClassificationDisplay(telemetry, enabled);
+  return null;
+};
+
 describe("useClassificationDisplay", () => {
   let container: HTMLDivElement;
   let root: Root;
-  let latest: ReturnType<typeof useClassificationDisplay> | null = null;
-
-  const Probe = ({ telemetry, enabled }: { telemetry: TelemetryState; enabled: boolean }) => {
-    latest = useClassificationDisplay(telemetry, enabled);
-    return null;
-  };
 
   const render = (telemetry: TelemetryState, enabled = true) => {
     act(() => {
-      root.render(createElement(Probe, { telemetry, enabled }));
+      root.render(createElement(ClassificationProbe, { telemetry, enabled }));
     });
-    if (!latest) {
+    if (!latestClassification) {
       throw new Error("hook did not render");
     }
-    return latest;
+    return latestClassification;
   };
 
   beforeEach(() => {
@@ -68,7 +75,7 @@ describe("useClassificationDisplay", () => {
       root.unmount();
     });
     container.remove();
-    latest = null;
+    latestClassification = null;
     vi.useRealTimers();
   });
 
@@ -108,7 +115,7 @@ describe("useClassificationDisplay", () => {
     act(() => {
       vi.advanceTimersByTime(CLASSIFICATION_LOADING_DELAY_MS);
     });
-    expect(latest).toMatchObject({
+    expect(latestClassification).toMatchObject({
       badgeClassification: null,
       showCategory: false,
       showSpinner: true,
@@ -134,6 +141,6 @@ describe("useClassificationDisplay", () => {
     act(() => {
       vi.advanceTimersByTime(CLASSIFICATION_LOADING_DELAY_MS * 2);
     });
-    expect(latest?.showSpinner).toBe(false);
+    expect(latestClassification?.showSpinner).toBe(false);
   });
 });

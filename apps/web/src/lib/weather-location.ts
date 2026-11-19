@@ -9,6 +9,9 @@ export type WeatherLocation = {
   source?: WeatherLocationSource;
 };
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
+
 export const readStoredWeatherLocation = (): WeatherLocation | null => {
   const raw = localStorage.getItem(WEATHER_LOCATION_KEY);
   if (!raw) {
@@ -17,10 +20,10 @@ export const readStoredWeatherLocation = (): WeatherLocation | null => {
 
   try {
     const parsed: unknown = JSON.parse(raw);
-    if (parsed === null || typeof parsed !== "object") {
+    if (!isRecord(parsed)) {
       return null;
     }
-    const record = parsed as Record<string, unknown>;
+    const record = parsed;
     const lat = record.lat;
     const lon = record.lon;
     const label = record.label;
@@ -48,10 +51,7 @@ export const persistWeatherLocation = (location: WeatherLocation): void => {
 };
 
 const isGeolocationPositionError = (error: unknown): error is GeolocationPositionError =>
-  typeof error === "object" &&
-  error !== null &&
-  "code" in error &&
-  typeof (error as GeolocationPositionError).code === "number";
+  typeof error === "object" && error !== null && "code" in error && typeof error.code === "number";
 
 export const formatGeolocationError = (error: unknown): string => {
   if (isGeolocationPositionError(error)) {

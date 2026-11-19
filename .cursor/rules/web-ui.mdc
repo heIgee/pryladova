@@ -1,15 +1,57 @@
 ---
-description: Accessibility and markup rules for the web app
-globs: apps/web/**/*.tsx
+description: Markup, accessibility, Tailwind classes, and UI states for React + Tailwind v4 + shadcn/ui
+globs: **/*.tsx,**/*.jsx
 alwaysApply: false
 ---
 
 # Web UI
 
-- Semantic HTML first. ARIA/keyboard only if native insufficient.
-- No default `tabindex`/`role`/`aria-*` on natively-working elements.
-- No wrapper `div`/`span` around a single child — use the semantic/interactive element directly, or flex/grid on the parent.
+Class sorting belongs to the formatter.
 
-## Layout stability
+## Classes
 
-No layout shift on state change. Optional adornments (badges, chips, actions): reserve fixed space always — hide with `invisible`/`opacity-0`, not `{cond && …}`. Async loading: skeleton matches final layout; no one-line stub replacing a list.
+- Colors use semantic tokens: `bg-background`, `text-muted-foreground`, `border-border`. Never raw palette classes (`bg-zinc-800`, `text-gray-400`) or colors the theme does not declare. `transparent`, `current`, and `inherit` are fine.
+- SVG `fill`, `stroke`, and `color` use `currentColor` or `var(--color-…)`. Never hex, named colors, or literal `oklch()`.
+- No arbitrary colors (`bg-[#333]`) or one-off font sizes (`text-[13px]`). Use the scale. `min()`, `calc()`, and the sizes in `components/ui` are the component. Variants like `data-[state=open]:` and `[&_svg]:`, and token refs like `bg-(--token)`, are not arbitrary values.
+- `className` on a shared component may add layout (margin, width, grid placement). It never overrides padding, height, text size, radius, or color, including inside `cn()`. Use `variant` or `size`.
+- Prefer shorthands: `size-4` over `w-4 h-4`, `py-4` over `pt-4 pb-4`, `border-border/50` over a separate opacity utility.
+- Primitives take `React.ComponentProps<typeof X>`. No `forwardRef`.
+- Primitives and their parts carry `data-slot` (`data-slot="switch"`).
+
+## Markup and accessibility
+
+- Semantic HTML first. `<button>` for actions. In-app routes use `<Link>`. A plain `<a>` leaves the app, or is used when there is no client router. Never `<div onClick>`.
+- No `role`, `tabindex`, or `aria-*` on elements that already work natively. A composite widget keeps the role its pattern requires (`role="combobox"` on an input, `role="option"`).
+- No wrapper `div`/`span` around a single child.
+- Icon-only controls need `aria-label`. Decorative icons get `aria-hidden="true"`. Images need `alt` (`alt=""` if decorative).
+- Every input has a label. Don't convey status by color alone.
+- Async messages (toasts, validation) use `aria-live="polite"`.
+- Custom controls are keyboard-operable. Drag and gestures have a click and keyboard alternative.
+- Modals trap focus, return it on close, and use `overscroll-behavior: contain`.
+
+## Focus and motion
+
+- Focus rings go on `focus-visible:`, never `focus:`. `outline-none` only when a `focus-visible:` ring replaces it.
+- Never `transition-all`. Name it: `transition-colors`, `transition-opacity`, `transition-transform`.
+- Animate only `transform` and `opacity`.
+- Decorative motion stops under `motion-reduce:` (`motion-reduce:animate-none`).
+
+## Forms
+
+- Inputs have the right `type`, a meaningful `name`, and `autocomplete`.
+- Never block paste or keystrokes. Allow the input and show validation.
+- Errors render inline next to the field. Focus the first error on submit.
+- Disable submit only while the request is in flight. The spinner keeps the original label visible.
+- An input with `value` needs `onChange`. Otherwise use `defaultValue`.
+- Mobile input text is at least 16px. Never disable zoom (`user-scalable=no`, `maximum-scale=1`).
+
+## Layout stability and content
+
+- No layout shift when state resolves. Chrome that shares a box with its loaded state (a badge, an action, a subtitle) keeps its space and hides with `invisible` or `opacity-0`. A popover, menu, or error that should be absent is `{cond && …}`.
+- Loading, empty, and error for one slot share one box. Swap content inside it.
+- Skeletons match the final layout.
+- Every list and text slot handles empty, one, and very long values. Flex children that truncate need `min-w-0` with `truncate` or `line-clamp-*`.
+- `<img>` has `width` and `height` unless its container fixes the size.
+- Format dates and numbers with `Intl.*`. Numbers users compare use `tabular-nums`.
+- Virtualize lists over ~50 items.
+- Destructive actions need a confirmation or an undo.

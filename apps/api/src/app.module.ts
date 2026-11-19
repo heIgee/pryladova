@@ -10,13 +10,15 @@ import { IntegrationsModule } from "./integrations/integrations.module.js";
 import { PersistenceModule } from "./persistence/persistence.module.js";
 import { RealtimeModule } from "./realtime/realtime.module.js";
 import { ApiSentryExceptionFilter } from "./sentry-exception.filter.js";
+import { SettingsHttpModule } from "./settings/settings-http.module.js";
 import { TelemetryModule } from "./telemetry/telemetry.module.js";
 import { E2eModule } from "./test/e2e.module.js";
 
-const testModules = process.env.NODE_ENV === "test" ? [E2eModule] : [];
+const config = loadConfig();
+const testModules = config.runtime.isTest ? [E2eModule] : [];
 
-const sentryEnabled = process.env.NODE_ENV !== "test" && Boolean(loadConfig().sentryDsn);
-const throttlingEnabled = process.env.NODE_ENV !== "test";
+const sentryEnabled = !config.runtime.isTest && Boolean(config.sentryDsn);
+const throttlingEnabled = !config.runtime.isTest;
 
 const sentryProviders = sentryEnabled
   ? [{ provide: APP_FILTER, useClass: ApiSentryExceptionFilter }]
@@ -41,6 +43,7 @@ const throttlerProviders = throttlingEnabled
     PersistenceModule,
     TelemetryModule,
     RealtimeModule,
+    SettingsHttpModule,
     IntegrationsModule,
     ...testModules,
   ],

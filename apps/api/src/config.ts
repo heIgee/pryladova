@@ -9,6 +9,15 @@ if (existsSync(envPath)) {
 
 const DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-lite";
 
+export type ApiRuntime = {
+  nodeEnv: string;
+  isProduction: boolean;
+  isTest: boolean;
+  port: number;
+  e2eClassificationEnabled: boolean;
+  sentryRelease: string | undefined;
+};
+
 export type ApiConfig = {
   geminiApiKey: string | undefined;
   geminiModel: string;
@@ -27,7 +36,39 @@ export type ApiConfig = {
   googleRedirectUri: string | undefined;
   googleRefreshToken: string | undefined;
   integrationEncryptionKey: string | undefined;
+  runtime: ApiRuntime;
 };
+
+const defaultTestRuntime = (): ApiRuntime => ({
+  nodeEnv: "test",
+  isProduction: false,
+  isTest: true,
+  port: 3000,
+  e2eClassificationEnabled: false,
+  sentryRelease: undefined,
+});
+
+export const testApiConfig = (overrides: Partial<ApiConfig> = {}): ApiConfig => ({
+  geminiApiKey: undefined,
+  geminiModel: DEFAULT_GEMINI_MODEL,
+  ingestSecret: undefined,
+  sentryDsn: undefined,
+  sessionSecret: undefined,
+  panelPasswordHash: undefined,
+  supabaseUrl: undefined,
+  supabaseSecretKey: undefined,
+  githubToken: undefined,
+  githubUsername: undefined,
+  steamApiKey: undefined,
+  steamId: undefined,
+  googleClientId: undefined,
+  googleClientSecret: undefined,
+  googleRedirectUri: undefined,
+  googleRefreshToken: undefined,
+  integrationEncryptionKey: undefined,
+  ...overrides,
+  runtime: { ...defaultTestRuntime(), ...overrides.runtime },
+});
 
 export const requirePanelAuth = (
   config: ApiConfig,
@@ -47,6 +88,7 @@ const decodePanelPasswordHashB64 = (encoded: string): string | undefined => {
     const decoded = Buffer.from(encoded, "base64").toString("utf8").trim();
     return decoded || undefined;
   } catch {
+    // Invalid base64 in PANEL_PASSWORD_HASH_B64 is ignored; plain-text hash may still be set.
     return undefined;
   }
 };
@@ -72,6 +114,24 @@ export const normalizeSupabaseUrl = (url: string | undefined): string | undefine
   const trimmed = url.replace(/\/+$/, "");
   const withoutRestPath = trimmed.replace(/\/rest\/v1$/i, "");
   return withoutRestPath || undefined;
+};
+
+const readRuntime = (): ApiRuntime => {
+  const nodeEnv = process.env.NODE_ENV?.trim() || "development";
+  const portRaw = process.env.PORT?.trim();
+  const port = portRaw ? Number(portRaw) : 3000;
+  if (!Number.isFinite(port) || port <= 0) {
+    throw new Error("PORT must be a positive number");
+  }
+
+  return {
+    nodeEnv,
+    isProduction: nodeEnv === "production",
+    isTest: nodeEnv === "test",
+    port,
+    e2eClassificationEnabled: nodeEnv === "test" && process.env.E2E_CLASSIFICATION_ENABLED === "1",
+    sentryRelease: process.env.SENTRY_RELEASE?.trim() || undefined,
+  };
 };
 
 export const loadConfig = (): ApiConfig => {
@@ -111,6 +171,7 @@ export const loadConfig = (): ApiConfig => {
     googleRedirectUri,
     googleRefreshToken,
     integrationEncryptionKey,
+    runtime: readRuntime(),
   };
 };
 
@@ -124,10 +185,7 @@ export const assertPanelAuthConfig = (config: ApiConfig): void => {
 };
 
 export const assertProductionIngestSecret = (config: ApiConfig): void => {
-  if (process.env.NODE_ENV === "production" && !config.ingestSecret) {
+  if (config.runtime.isProduction && !config.ingestSecret) {
     throw new Error("INGEST_SECRET is required when NODE_ENV=production");
-  }
-  if (!config.ingestSecret) {
-    console.warn("[api] INGEST_SECRET unset — agent ingest is rejected");
   }
 };

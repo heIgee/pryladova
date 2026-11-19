@@ -1,8 +1,13 @@
 import { expect, test } from "@playwright/test";
 import { panelPassword } from "./constants.js";
+import { resetE2eApiState } from "./helpers/skeleton-layout.js";
 
 const errorBoundaryText = "Something went wrong loading the panel.";
 test.describe("panel production bundle", () => {
+  test.beforeEach(async ({ page }) => {
+    await resetE2eApiState(page);
+  });
+
   test("loads the panel shell without an error-boundary crash", async ({ page }) => {
     const consoleErrors: string[] = [];
     page.on("console", (message) => {

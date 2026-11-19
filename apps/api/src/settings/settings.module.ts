@@ -1,12 +1,10 @@
-import { forwardRef, Module } from "@nestjs/common";
+import { Module } from "@nestjs/common";
+import { ConfigModule } from "../config.module.js";
 import { PersistenceModule } from "../persistence/persistence.module.js";
-import { TelemetryModule } from "../telemetry/telemetry.module.js";
-import { SettingsController } from "./settings.controller.js";
 import { SettingsService } from "./settings.service.js";
 
 @Module({
-  imports: [PersistenceModule, forwardRef(() => TelemetryModule)],
-  controllers: [SettingsController],
+  imports: [ConfigModule, PersistenceModule],
   providers: [SettingsService],
   exports: [SettingsService],
 })

@@ -1,29 +1,14 @@
 import { Test } from "@nestjs/testing";
 import { githubStatusResponseSchema } from "@pryladova/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ApiConfig } from "../config.js";
+import { testApiConfig } from "../config.js";
 import { ConfigService } from "../config.service.js";
 import { GithubService } from "./github.service.js";
 
-const githubConfig: ApiConfig = {
-  geminiApiKey: undefined,
-  geminiModel: "gemini-3.1-flash-lite",
-  ingestSecret: undefined,
-  sentryDsn: undefined,
-  sessionSecret: undefined,
-  panelPasswordHash: undefined,
-  supabaseUrl: undefined,
-  supabaseSecretKey: undefined,
+const githubConfig = testApiConfig({
   githubToken: "ghp_test",
   githubUsername: "octocat",
-  steamApiKey: undefined,
-  steamId: undefined,
-  googleClientId: undefined,
-  googleClientSecret: undefined,
-  googleRedirectUri: undefined,
-  googleRefreshToken: undefined,
-  integrationEncryptionKey: undefined,
-};
+});
 
 const createService = async (): Promise<GithubService> => {
   const moduleRef = await Test.createTestingModule({
@@ -59,7 +44,7 @@ describe("GithubService", () => {
   });
 
   it("returns ready payload from GitHub API", async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const fetchMock = vi.fn(async (input: Parameters<typeof fetch>[0]) => {
       const url = String(input);
       if (url.includes("/search/commits")) {
         return {
@@ -165,7 +150,7 @@ describe("GithubService", () => {
   });
 
   it("maps skipped workflow conclusions", async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const fetchMock = vi.fn(async (input: Parameters<typeof fetch>[0]) => {
       const url = String(input);
       if (url.includes("/search/commits")) {
         return { ok: true, json: async () => ({ total_count: 0 }) };
@@ -218,7 +203,7 @@ describe("GithubService", () => {
   });
 
   it("maps empty workflow runs to none and actions HTTP errors to denied", async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const fetchMock = vi.fn(async (input: Parameters<typeof fetch>[0]) => {
       const url = String(input);
       if (url.includes("/search/commits")) {
         return { ok: true, json: async () => ({ total_count: 0 }) };

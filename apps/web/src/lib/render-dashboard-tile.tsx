@@ -30,6 +30,7 @@ export type DashboardTileRenderContext = {
   panel: PanelState;
   agentLive: boolean;
   streamConnected: boolean;
+  connectFailed: boolean;
   showAgentHint: boolean;
   readyTelemetry: TelemetryState | null;
   host: HostPayload | null;
@@ -52,15 +53,16 @@ export type DashboardTileRenderContext = {
   steamStatus: SteamTileStatus;
   googleCalendarStatus: GoogleCalendarTileStatus;
   googleTasksStatus: GoogleTasksTileStatus;
+  nowMs: number;
 };
 
 const AgentPresencePlaceholder = ({
   panel,
-  streamConnected,
+  connectFailed,
   stale = false,
 }: {
   panel: PanelState;
-  streamConnected: boolean;
+  connectFailed: boolean;
   stale?: boolean;
 }) => (
   <Card size="sm" className={bentoTileCardClassName} data-testid="window-tile-placeholder">
@@ -70,18 +72,25 @@ const AgentPresencePlaceholder = ({
       title="Window"
     />
     <CardContent className={bentoTileBodyClassName}>
-      {!streamConnected ? (
-        <p className="text-caption text-destructive">Cannot reach the API</p>
-      ) : null}
-      {streamConnected && panel.status === "loading" ? (
-        <p className="text-caption text-muted-foreground">Connecting…</p>
-      ) : null}
-      {streamConnected && (stale || panel.status === "empty") ? (
+      {stale || panel.status === "empty" ? (
         <p className="text-caption text-muted-foreground">No active window</p>
       ) : null}
-      {streamConnected && panel.status === "error" ? (
-        <p className="text-caption text-destructive">
+      {panel.status === "error" ? (
+        <p className="text-caption text-destructive" aria-live="polite">
           Agent telemetry unavailable: {panel.message}
+        </p>
+      ) : null}
+      {panel.status === "loading" && connectFailed ? (
+        <p className="text-caption text-destructive" aria-live="polite">
+          Cannot reach the API
+        </p>
+      ) : null}
+      {panel.status === "loading" && !connectFailed ? (
+        <p className="text-caption text-muted-foreground">Connecting…</p>
+      ) : null}
+      {panel.status === "ready" && !stale ? (
+        <p className="text-caption text-destructive" aria-live="polite">
+          Cannot reach the API
         </p>
       ) : null}
     </CardContent>
@@ -111,7 +120,7 @@ export const renderDashboardTile = (
       return (
         <AgentPresencePlaceholder
           panel={ctx.panel}
-          streamConnected={ctx.streamConnected}
+          connectFailed={ctx.connectFailed}
           stale={ctx.panel.status === "ready" && ctx.showAgentHint}
         />
       );
@@ -139,9 +148,9 @@ export const renderDashboardTile = (
     case "steam":
       return <SteamStatusTile status={ctx.steamStatus} />;
     case "calendar":
-      return <GoogleCalendarTile status={ctx.googleCalendarStatus} />;
+      return <GoogleCalendarTile status={ctx.googleCalendarStatus} nowMs={ctx.nowMs} />;
     case "tasks":
-      return <GoogleTasksTile status={ctx.googleTasksStatus} />;
+      return <GoogleTasksTile status={ctx.googleTasksStatus} nowMs={ctx.nowMs} />;
     default:
       return null;
   }

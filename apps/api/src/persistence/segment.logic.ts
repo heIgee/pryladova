@@ -192,13 +192,14 @@ export const parseCloseAndOpenResult = (value: unknown): CloseAndOpenResult | nu
     return null;
   }
 
-  const record = value as Record<string, unknown>;
-  if (record.action === "noop") {
+  const action = "action" in value ? value.action : undefined;
+  if (action === "noop") {
     return { action: "noop" };
   }
 
-  if (record.action === "opened" && typeof record.segment_id === "string") {
-    return { action: "opened", segment_id: record.segment_id };
+  const segmentId = "segment_id" in value ? value.segment_id : undefined;
+  if (action === "opened" && typeof segmentId === "string") {
+    return { action: "opened", segment_id: segmentId };
   }
 
   return null;
@@ -391,6 +392,7 @@ export const createSerializedRunner = (): SerializedRunner => {
 
   return <T>(key: string, fn: () => Promise<T>): Promise<T> => {
     const previous = chains.get(key) ?? Promise.resolve();
+    // Ignore prior per-agent failures so the next mutation still runs in order.
     const next = previous.catch(() => {}).then(fn);
     chains.set(key, next);
     return next.finally(() => {

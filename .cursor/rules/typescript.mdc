@@ -1,21 +1,107 @@
 ---
-description: TypeScript and naming conventions
-globs: **/*.ts,**/*.tsx
+description: TypeScript type-system, module, async, and error-handling standards
+globs: **/*.ts,**/*.tsx,**/*.mts,**/*.cts
 alwaysApply: false
 ---
 
 # TypeScript
 
-- Explicit types at module boundaries (exports, API handlers, shared utils).
-- `const` arrow functions. `handleX` naming for event handlers.
-- Early returns over nesting.
-- No empty `catch`. No floating promises — `await` or explicit `void`.
-- Follow the package's existing formatter/linter (Biome). No style opinions from this rule.
-- **`as any` forbidden.** No exceptions.
-- Avoid `as` assertions — prefer inference, narrowing, type guards, `satisfies`, generics, schema parse (Zod). Touching existing `as` → remove if feasible.
-- Unavoidable `as` only at untyped external boundary: single line, narrow immediately, comment why.
+Formatting, import order, and mechanical style belong to the formatter and linter.
 
-## Naming
+## Never bypass the type checker
 
-- Filenames: kebab-case (`user-profile.ts`).
-- Exports: PascalCase (components/classes), camelCase (functions/variables).
+- Never use `any`, `as any`, `@ts-ignore`, `@ts-nocheck`, or blanket lint-disable comments to make a check pass. Fix the type or the code.
+- `@ts-expect-error` is only for type tests that assert an error.
+- Never loosen `tsconfig` (`strict`, `noImplicitAny`, …) or linter config to silence an error.
+- A single-rule, single-line suppression is allowed only with a comment saying why the rule is wrong for that line.
+- If the proper fix is out of scope, stop and report it.
+
+## One source of truth for types
+
+- Derive types from their source: `z.infer<typeof schema>`, generated DB/API types, `ReturnType<typeof fn>`, `(typeof VALUES)[number]`. Don't hand-write a parallel shape.
+- Shared contracts live in one module and are imported. Never redeclare them per app or per file.
+- Use `type` by default. Use `interface` only when a class implements it or declaration merging is required.
+- Do not use `enum` or `namespace`. Use string literal unions or `as const` objects.
+- Use `as const` for literal tables and `satisfies` to check them against a type without widening.
+- For union-to-value mappings, use `Record<Union, T>` lookup tables so the compiler flags missing keys.
+
+## Trust boundaries
+
+- Treat everything entering the process as `unknown`: request bodies, params and query, `fetch` responses, `JSON.parse`, storage, WebSocket messages, env vars, untyped DB/SDK results, caught errors.
+- Validate at the boundary with a schema or type guard, then pass the narrow type inward.
+- Do not add runtime checks for states the type system already rules out.
+- Narrow `unknown` with `typeof`, `instanceof`, `in`, a discriminant, or a schema before access.
+- Do not use `{}` or `Object` for "some object". Use `Record<string, unknown>` or a real type.
+
+## Assertions
+
+- `as T` tells the compiler something you have not checked. Never write:
+  - `JSON.parse(raw) as T`, `(await res.json()) as T`
+  - `data as T` on DB or SDK results
+  - `(err as SomeError).code` in a `catch`
+  - `as unknown as T`
+- Prefer, in order: inference, annotation (`const x: T = { … }`), `satisfies`, narrowing or a type guard, schema parse.
+- Never use non-null `!`. Narrow, or throw. `noUncheckedIndexedAccess` makes an index `T | undefined`; handle that with a guard.
+- An unavoidable `as` at an untyped third-party boundary: one line, at the boundary, with a comment saying why it is safe.
+- `as const` is not an assertion and is fine.
+
+## Modeling
+
+- Model mutually exclusive states as discriminated unions keyed on a literal (`status`, `kind`), not sibling flags (`isLoading`, `error?`, `data?`) that allow impossible combinations.
+- Return a result union (`{ ok: true; value: T } | { ok: false; error: E }`) when failure is an expected outcome the caller must handle. Throw when it is exceptional.
+- Mark a field optional only when absence is a real case, not to avoid filling it in.
+- Use `Map`/`Set` when keys are added, removed, or looked up dynamically. Use plain objects for fixed-shape records.
+
+## Exhaustiveness
+
+- A `switch` over a union handles every member and ends with a `never` check:
+
+  ```ts
+  default: {
+    const unhandled: never = value;
+    throw new Error(`Unhandled case: ${String(unhandled)}`);
+  }
+  ```
+
+## Generics
+
+- A type parameter must relate inputs to outputs. If it appears only once, remove it. No return-type-only generics (`parse<T>(raw: string): T`): take a schema or validator, or return `unknown`.
+- Reach for mapped or conditional types only when they remove real duplication, and give them a name.
+
+## Functions
+
+- Write explicit parameter and return types at module boundaries (exports, API handlers, shared utilities) and where inference is non-obvious. Let inference handle locals and private helpers.
+- Keep functions small and single-purpose. Use guard clauses and early returns over nesting. No nested ternaries.
+- Replace boolean flag parameters and long positional lists with one typed options object: `send(msg, { retry: true })`, not `send(msg, true, false)`.
+- Do not spread into an accumulator inside a loop or `reduce`. Use `Object.fromEntries`, a `Map`, or mutate a local.
+
+## Modules
+
+- Named exports only. Use `export default` only where a tool or framework requires it (config files, framework route modules).
+- Export only what other modules use. Never `export let`; expose mutable state through functions.
+- Use `import type` / `export type` for type-only symbols. Exception: classes needed at runtime for decorator metadata or DI (e.g. NestJS constructor injection) need a value import.
+- No file that only re-exports, and no `export *`, inside an app. Import from the source module. A package's public entry (`index.ts` or `index.tsx`) may re-export, including `export *`.
+- No import cycles. Extract the shared piece into a leaf module both sides import.
+- Relative imports in an emitting `nodenext` project (Nest, a built library) use a `.js` specifier, including when the source file is `.ts` or `.tsx`. Relative imports in a `noEmit` project with `allowImportingTsExtensions` (Vite app, Vite config, Node CLI) use `.ts` or `.tsx`.
+
+## Async
+
+- Every promise is awaited, returned, or explicitly discarded: `void task().catch(handleError)`. No floating promises.
+- Never pass an `async` function to `new Promise()`. Do not wrap APIs that already return promises.
+- Run independent work concurrently with `Promise.all` / `Promise.allSettled`, not sequential `await` in a loop, unless order or rate limits require it.
+
+## Errors
+
+- Throw only `Error` or subclasses. Never strings or plain objects.
+- When wrapping, keep the original: `new Error("Loading settings failed", { cause: err })`.
+- Type caught values as `unknown` and narrow with `instanceof` or a guard before reading properties.
+- Every `catch` does one of: rethrow with added context, return a fallback the caller expects, or report through the project's logger. Never `catch {}`. Never log-and-rethrow without adding context.
+- A `catch` that returns `null`, `undefined`, or `false` must comment which error it is ignoring.
+- Wrap only the call that can throw the error you handle.
+- Define an `Error` subclass (with `name` set) only when callers need to branch on the failure type.
+
+## Hygiene
+
+- No `console.log` in application or library code. Use the project's logger. CLIs and scripts may write to stdout/stderr.
+- No `TODO`/`FIXME`, stubs, placeholder returns, or commented-out code in new work. Do not reword existing TODOs to satisfy a linter.
+- Comments explain why when non-obvious, never what the code already says.

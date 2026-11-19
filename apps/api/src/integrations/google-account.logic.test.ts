@@ -18,7 +18,7 @@ describe("fetchGoogleAccountEmail", () => {
   it("returns email from userinfo", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async (input: RequestInfo | URL) => {
+      vi.fn(async (input: Parameters<typeof fetch>[0]) => {
         expect(String(input)).toBe(GOOGLE_USERINFO_URL);
         return {
           ok: true,

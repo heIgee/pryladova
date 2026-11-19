@@ -24,7 +24,7 @@ test.describe("panel", () => {
     await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
   });
 
-  test("shows clean dashboard before agent connects", async ({ page }) => {
+  test("shows clean dashboard and single stale hint before agent connects", async ({ page }) => {
     await page.goto("/");
     await login(page);
 
@@ -32,6 +32,7 @@ test.describe("panel", () => {
     await expect(
       page.getByText("Not receiving updates. Check that the agent is running."),
     ).toBeVisible();
+    await expect(page.getByText("Check that the agent is running.")).toHaveCount(1);
     await expect(page.getByTestId("window-tile-placeholder")).toContainText("No active window");
     await expect(page.getByTestId("machine-tile-empty")).toContainText(
       "Metrics appear when the agent connects.",
@@ -44,18 +45,6 @@ test.describe("panel", () => {
 
     await expect(page.getByText("agentId is required")).toHaveCount(0);
     await expect(page.getByText(/^(Evaporating|Waiting for host)/)).toHaveCount(0);
-  });
-
-  test("shows single stale hint after agent disconnect window", async ({ page }) => {
-    await page.goto("/");
-    await login(page);
-
-    await expect(
-      page.getByText("Not receiving updates. Check that the agent is running."),
-    ).toBeVisible();
-    await expect(page.getByText("Check that the agent is running.")).toHaveCount(1);
-    await expect(page.getByTestId("history-tile")).toBeVisible();
-    await expect(page.getByText("agentId is required")).toHaveCount(0);
   });
 
   test("shows ingested window after agent update", async ({ page }) => {
@@ -147,6 +136,7 @@ test.describe("panel", () => {
     await expect(next).toBeDisabled();
 
     for (let step = 0; step < 6; step += 1) {
+      // biome-ignore lint/performance/noAwaitInLoops: each click checks the label it just changed
       const before = (await label.textContent()) ?? "";
       await previous.click();
       await expect(label).not.toHaveText(before);

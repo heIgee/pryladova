@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import {
   parseSteamStatusResponse,
   type SteamPersonaState,
@@ -76,6 +76,7 @@ const steamIconUrl = (appId: number, iconPath: string | undefined): string | nul
 
 @Injectable()
 export class SteamService {
+  private readonly logger = new Logger(SteamService.name);
   private cached: { ready: CachedReady; expiresAt: number } | null = null;
   private sessionState: SteamSessionState = createSteamSessionState();
 
@@ -101,7 +102,7 @@ export class SteamService {
         return this.cached.ready;
       }
       const message = error instanceof Error ? error.message : String(error);
-      console.error(`[api] steam status fetch failed: ${message}`);
+      this.logger.error(`steam status fetch failed: ${message}`);
       return parseSteamStatusResponse({ status: "unavailable" });
     }
   }
@@ -157,7 +158,7 @@ export class SteamService {
       iconUrl: steamIconUrl(game.appid, game.img_icon_url),
     }));
 
-    return parseSteamStatusResponse({
+    const readyResponse = parseSteamStatusResponse({
       status: "ready",
       username: player.personaname,
       personaState,
@@ -166,6 +167,10 @@ export class SteamService {
       currentGame,
       recentlyPlayed,
       fetchedAt: new Date().toISOString(),
-    }) as CachedReady;
+    });
+    if (readyResponse.status !== "ready") {
+      throw new Error("Steam status response was not ready");
+    }
+    return readyResponse;
   }
 }

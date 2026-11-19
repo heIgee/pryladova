@@ -1,8 +1,5 @@
 import type { WindowClassification } from "@pryladova/shared";
 
-export const readE2eClassificationEnabled = (): boolean =>
-  process.env.NODE_ENV === "test" && process.env.E2E_CLASSIFICATION_ENABLED === "1";
-
 export const e2eClassificationStub = (
   appName: string,
   _windowTitle: string,

@@ -1,7 +1,7 @@
 import {
   type ArgumentsHost,
   Catch,
-  ExceptionFilter,
+  type ExceptionFilter,
   HttpException,
   HttpStatus,
 } from "@nestjs/common";
@@ -18,11 +18,11 @@ const shouldCapture = (exception: unknown): boolean => {
 
 @Catch()
 export class ApiSentryExceptionFilter extends BaseExceptionFilter implements ExceptionFilter {
-  constructor(protected readonly httpAdapterHost: HttpAdapterHost) {
+  constructor(protected override readonly httpAdapterHost: HttpAdapterHost) {
     super(httpAdapterHost.httpAdapter);
   }
 
-  catch(exception: unknown, host: ArgumentsHost): void {
+  override catch(exception: unknown, host: ArgumentsHost): void {
     if (shouldCapture(exception)) {
       Sentry.captureException(exception);
     }

@@ -46,6 +46,7 @@ const Dashboard = () => {
     showAgentHint,
     agentLive,
     streamConnected,
+    connectFailed,
     theme,
     weather,
     weatherLocation,
@@ -57,6 +58,7 @@ const Dashboard = () => {
     handleThemeChange,
     handleWeatherLocationChange,
     handleWeatherRefresh,
+    nowMs,
   } = useDashboard();
   const {
     layout,
@@ -108,6 +110,7 @@ const Dashboard = () => {
     panel,
     agentLive,
     streamConnected,
+    connectFailed,
     showAgentHint,
     readyTelemetry: liveTelemetry,
     host,
@@ -132,6 +135,7 @@ const Dashboard = () => {
     steamStatus,
     googleCalendarStatus,
     googleTasksStatus,
+    nowMs,
   };
 
   const visibleTileIds = filterVisibleTileOrder(layout.order, (id) => isDashboardTileVisible(id));
@@ -147,8 +151,15 @@ const Dashboard = () => {
   const resolveLayoutRowSpan = (tileId: DashboardTileId) =>
     resolveEffectiveRowSpan(tileId, resolveSavedRowSpan(layout, tileId));
 
-  const layoutAnchors =
-    Object.keys(previewAnchors).length > 0 ? previewAnchors : layout.pinned ? layout.anchor : {};
+  const layoutAnchors = (() => {
+    if (Object.keys(previewAnchors).length > 0) {
+      return previewAnchors;
+    }
+    if (layout.pinned) {
+      return layout.anchor;
+    }
+    return {};
+  })();
 
   const tilePlacements = buildTilePlacements(
     visibleTileIds,

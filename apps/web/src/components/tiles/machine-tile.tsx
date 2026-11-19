@@ -18,6 +18,16 @@ import {
 } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
+const hostPresenceVariant = (host: HostPayload | null): "default" | "secondary" | "outline" => {
+  if (host && host.idleMs < IDLE_ACTIVE_THRESHOLD_MS) {
+    return "default";
+  }
+  if (host) {
+    return "secondary";
+  }
+  return "outline";
+};
+
 const StatBar = ({
   icon,
   label,
@@ -59,15 +69,7 @@ export const MachineTile = ({
       icon={<Server className={bentoTileLucideIconClassName} aria-hidden="true" />}
       title="Machine"
       action={
-        <Badge
-          variant={
-            host && host.idleMs < IDLE_ACTIVE_THRESHOLD_MS
-              ? "default"
-              : host
-                ? "secondary"
-                : "outline"
-          }
-        >
+        <Badge variant={hostPresenceVariant(host)}>
           {host ? formatPresence(host.idleMs) : "Offline"}
         </Badge>
       }

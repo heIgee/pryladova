@@ -1,12 +1,4 @@
-import {
-  BadRequestException,
-  Body,
-  Controller,
-  forwardRef,
-  Get,
-  Inject,
-  Put,
-} from "@nestjs/common";
+import { BadRequestException, Body, Controller, Get, Put } from "@nestjs/common";
 import {
   parseSettings,
   parseSettingsPutResponse,
@@ -23,7 +15,6 @@ import { SettingsService } from "./settings.service.js";
 export class SettingsController {
   constructor(
     private readonly settingsService: SettingsService,
-    @Inject(forwardRef(() => TelemetryService))
     private readonly telemetryService: TelemetryService,
   ) {}
 

@@ -5,14 +5,16 @@ type SupabaseErrorLike = {
   hint?: string;
 };
 
+const isSupabaseErrorLike = (error: object): error is SupabaseErrorLike =>
+  "message" in error || "code" in error || "details" in error || "hint" in error;
+
 export const formatPersistenceError = (error: unknown): string => {
   if (error instanceof Error) {
     return error.message;
   }
 
-  if (error && typeof error === "object") {
-    const record = error as SupabaseErrorLike;
-    const parts = [record.message, record.code, record.details, record.hint].filter(
+  if (error && typeof error === "object" && isSupabaseErrorLike(error)) {
+    const parts = [error.message, error.code, error.details, error.hint].filter(
       (part): part is string => typeof part === "string" && part.length > 0,
     );
     if (parts.length > 0) {

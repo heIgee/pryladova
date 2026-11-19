@@ -1,0 +1,163 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.6.8/schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "includes": [
+      "**",
+      "!**/node_modules",
+      "!!**/dist",
+      "!!**/.next",
+      "!!**/.turbo",
+      "!!**/coverage",
+      "!!**/build",
+      "!!**/playwright-report",
+      "!!**/test-results",
+      "!!**/blob-report"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "nursery": {
+        "noFloatingPromises": "error",
+        "noMisusedPromises": "error",
+        "useExhaustiveSwitchCases": "error",
+        // Unsafe by default. Marked safe so `biome check --write` and fix-on-save sort classes.
+        "useTailwindSortedClasses": {
+          "level": "error",
+          "fix": "safe"
+        }
+      },
+      "suspicious": {
+        // Off: CLIs write stdout. Application code uses the project logger.
+        "noConsole": "off",
+        "noExplicitAny": "error",
+        "noImportCycles": "error"
+      },
+      "style": {
+        "noDefaultExport": "error",
+        "noEnum": "error",
+        "noNamespace": "error",
+        "noNestedTernary": "error",
+        // Forbidden. Narrow or throw. Recommended only warns.
+        "noNonNullAssertion": "error",
+        "noParameterProperties": "error",
+        "noUselessElse": "error",
+        // Off: `interface` stays legal for `implements` and declaration merging. Biome has no exception for those.
+        "useConsistentTypeDefinitions": "off",
+        "useErrorCause": "error",
+        "useThrowOnlyError": "error"
+      },
+      "performance": {
+        "noAccumulatingSpread": "error",
+        "noAwaitInLoops": "error",
+        "noBarrelFile": "error",
+        "noReExportAll": "error"
+      }
+    }
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double",
+      "semicolons": "always"
+    }
+  },
+  "css": {
+    "parser": {
+      "tailwindDirectives": true
+    }
+  },
+  "tailwind": {
+    "stylesheet": "apps/web/src/index.css"
+  },
+  "overrides": [
+    {
+      // emitDecoratorMetadata drops a constructor param to Object when the class is `import type`.
+      // Parameter properties are how Nest injects.
+      "includes": ["apps/api/**"],
+      "javascript": {
+        "parser": {
+          "unsafeParameterDecoratorsEnabled": true
+        }
+      },
+      "linter": {
+        "rules": {
+          "style": {
+            "noParameterProperties": "off",
+            "useImportType": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "**/*.config.ts",
+        "**/*.config.mts",
+        "**/*.config.cts",
+        "**/*.config.js",
+        "**/*.config.mjs",
+        "**/*.config.cjs",
+        "**/*.stories.ts",
+        "**/*.stories.tsx",
+        "**/vitest.shared.ts",
+        "**/mdx-components.{ts,tsx,js,jsx}",
+        "{app,src/app}/**/{page,layout,template,loading,error,global-error,not-found,forbidden,unauthorized,default,sitemap,robots,manifest,opengraph-image,twitter-image,icon,apple-icon}.{ts,tsx,js,jsx}"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noDefaultExport": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "**/packages/*/src/index.ts",
+        "**/packages/*/src/index.tsx",
+        "**/packages/*/index.ts",
+        "**/packages/*/index.tsx"
+      ],
+      "linter": {
+        "rules": {
+          "performance": {
+            "noBarrelFile": "off",
+            "noReExportAll": "off"
+          }
+        }
+      }
+    },
+    {
+      // Satori only renders <img>. next/image is unavailable in these files.
+      "includes": [
+        "{app,src/app}/**/opengraph-image.{tsx,jsx}",
+        "{app,src/app}/**/twitter-image.{tsx,jsx}"
+      ],
+      "linter": {
+        "rules": {
+          "performance": {
+            "noImgElement": "off"
+          }
+        }
+      }
+    }
+  ]
+}

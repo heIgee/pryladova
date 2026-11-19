@@ -1,14 +1,6 @@
 import type { HistoryEntry, HistorySpan, HistorySpanCloseReason } from "@pryladova/shared";
 import { ChevronLeft, ChevronRight, Clock3, RefreshCw } from "lucide-react";
-import {
-  type MouseEvent,
-  type PointerEvent,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import { headerIconButtonClassName } from "@/components/layout/shell";
+import { type MouseEvent, type PointerEvent, useLayoutEffect, useRef, useState } from "react";
 import { BentoTileHeader } from "@/components/tiles/bento-tile-header";
 import {
   bentoTileBodyClassName,
@@ -21,6 +13,7 @@ import { Skeleton, skeletonSize } from "@/components/ui/skeleton";
 import { useBentoTileSize } from "@/hooks/use-bento-tile-size";
 import type { HistoryState } from "@/hooks/use-history";
 import { integrationListCap } from "@/lib/bento-tile-variants";
+import { headerIconButtonSmClassName } from "@/lib/header-chrome";
 import {
   fitHistoryRows,
   formatDurationSec,
@@ -65,7 +58,7 @@ const HistoryBarRow = ({
         <span className="truncate font-medium text-foreground">{appName}</span>
         <NowChipSlot active={active} />
       </div>
-      <span className="inline-flex shrink-0 items-center gap-1.5 tabular-nums text-muted-foreground">
+      <span className="inline-flex shrink-0 items-center gap-1.5 text-muted-foreground tabular-nums">
         <span
           className={cn("min-w-6 text-right text-micro", switchCount > 0 ? null : "invisible")}
           aria-hidden={switchCount <= 0}
@@ -267,7 +260,7 @@ const HistoryDayStrip = ({
   const dayEnd = new Date(dayRange.to);
   const dayStartMs = dayStart.getTime();
   const daySpanMs = Math.max(dayEnd.getTime() - dayStartMs, 1);
-  const slices = useMemo(() => buildHistoryStripSlices(spans), [spans]);
+  const slices = buildHistoryStripSlices(spans);
   const recordedStartMs = slices[0]?.startMs ?? dayStartMs;
   const recordedEndMs = slices.at(-1)?.endMs ?? dayStartMs + daySpanMs;
   const canFit = slices.length > 0 && recordedEndMs - recordedStartMs < daySpanMs * 0.9;
@@ -298,8 +291,12 @@ const HistoryDayStrip = ({
     if (hoverTime === null) {
       return;
     }
-    setActive(findHistoryStripSlice(slices, hoverTime));
-  }, [slices]);
+    const nextSlices = buildHistoryStripSlices(spans);
+    setActive((current) => {
+      const next = findHistoryStripSlice(nextSlices, hoverTime);
+      return current === next ? current : next;
+    });
+  }, [spans]);
 
   const onMouseMove = (event: MouseEvent<HTMLDivElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -320,7 +317,12 @@ const HistoryDayStrip = ({
   const center =
     active === null ? 0 : ((active.startMs + active.endMs) / 2 - viewStartMs) / viewSpanMs;
   const centerPercent = center * 100;
-  const popupShift = centerPercent < 12 ? "0%" : centerPercent > 88 ? "-100%" : "-50%";
+  let popupShift = "-50%";
+  if (centerPercent < 12) {
+    popupShift = "0%";
+  } else if (centerPercent > 88) {
+    popupShift = "-100%";
+  }
   const durationSec = active ? Math.max(1, Math.round((active.endMs - active.startMs) / 1000)) : 0;
   const viewStartLabel = formatLocalClock(new Date(viewStartMs));
   const viewMidLabel = formatLocalClock(new Date(viewStartMs + viewSpanMs / 2));
@@ -353,13 +355,13 @@ const HistoryDayStrip = ({
             data-testid="history-day-strip-popup"
           >
             <p className="truncate text-caption font-medium text-foreground">{active.appName}</p>
-            <p className="whitespace-nowrap text-micro text-muted-foreground">
+            <p className="text-micro whitespace-nowrap text-muted-foreground">
               {formatLocalClock(new Date(active.startMs))}–
               {formatLocalClock(new Date(active.endMs))} · {formatDurationSec(durationSec)}
             </p>
             {active.closeReason ? (
               <p
-                className="whitespace-nowrap text-micro text-muted-foreground"
+                className="text-micro whitespace-nowrap text-muted-foreground"
                 data-testid="history-day-strip-close-reason"
               >
                 Ended: {CLOSE_REASON_LABELS[active.closeReason]}
@@ -489,6 +491,14 @@ export const HistoryTile = ({
   const visibleLimit = needsOtherBucket ? Math.max(1, rowBudget - 1) : rowBudget;
 
   const summary = isReady ? summarizeHistoryEntries(history.entries) : null;
+  let headerDetail: string | null | undefined;
+  if (showSkeleton) {
+    headerDetail = null;
+  } else if (summary) {
+    headerDetail = `${formatDurationSec(summary.totalDurationSec)} tracked · ${summary.appCount} apps`;
+  } else {
+    headerDetail = undefined;
+  }
   const canPartition = isReady && history.entries.length > visibleLimit;
   const partition = isReady
     ? partitionHistoryEntries(history.entries, {
@@ -546,11 +556,12 @@ export const HistoryTile = ({
   const daySpanMs = Date.parse(dayRange.to) - Date.parse(dayRange.from);
   const canFitStrip =
     recordedSpan !== null && recordedSpan.endMs - recordedSpan.startMs < daySpanMs * 0.9;
-  const stripScaleLabel = !canFitStrip
-    ? null
-    : stripFitted
+  let stripScaleLabel: string | null = null;
+  if (canFitStrip && recordedSpan) {
+    stripScaleLabel = stripFitted
       ? "All day"
       : `${formatLocalClock(new Date(recordedSpan.startMs))}–${formatLocalClock(new Date(recordedSpan.endMs))}`;
+  }
 
   const headerAction = (
     <>
@@ -585,7 +596,7 @@ export const HistoryTile = ({
         <button
           type="button"
           disabled={!canRefresh || refreshing}
-          className={cn(headerIconButtonClassName, "size-7 shrink-0")}
+          className={headerIconButtonSmClassName}
           aria-label="Refresh activity"
           title="Refresh activity"
           onClick={onRefresh}
@@ -627,11 +638,7 @@ export const HistoryTile = ({
               }
             : undefined
         }
-        detail={
-          summary
-            ? `${formatDurationSec(summary.totalDurationSec)} tracked · ${summary.appCount} apps`
-            : null
-        }
+        detail={headerDetail}
         action={headerAction}
       />
       {showSkeleton ? (
@@ -660,7 +667,9 @@ export const HistoryTile = ({
           </p>
         ) : null}
         {history.status === "error" ? (
-          <p className="text-caption text-destructive">{history.message}</p>
+          <p className="text-caption text-destructive" aria-live="polite">
+            {history.message}
+          </p>
         ) : null}
         {partition ? (
           <HistoryBars

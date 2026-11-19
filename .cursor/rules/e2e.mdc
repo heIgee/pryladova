@@ -8,7 +8,7 @@ alwaysApply: false
 
 ## No fixed waits
 
-Async assertions only — `expect(…).toBeVisible()`, `toHaveAttribute()`. No `page.waitForTimeout`, no `sleep`, no `setTimeout` / `E2E_*_DELAY_MS` in the API stub. A loading state that resolves before assertions can run is a harness bug; fix the harness.
+Async assertions only — `expect(…).toBeVisible()`, `toHaveAttribute()`. No `page.waitForTimeout`, no `sleep`, and no fixed `E2E_*_DELAY_MS` in the API stub. A timeout that only bounds how long a socket may take to connect is not a fixed wait. A loading state that resolves before assertions can run is a harness bug.
 
 Hold loading states with gates instead:
 
@@ -19,13 +19,13 @@ A gate must latch, so the test may release before or after `classify()` blocks.
 
 ## Shared API isolation
 
-One API process per Playwright run (`workers: 1`), so in-memory state persists across tests. Every spec calls `resetE2eApiState(page)` in `beforeEach` (clears cache + gate + telemetry); specs must pass in any order, not just the order they happen to run in. Test cache-hit behavior within a test after a cold classify — never by relying on a prior test's leftovers.
+One API process per Playwright run (`workers: 1`), so in-memory state persists across tests. Every spec calls `resetE2eApiState(page)` in `beforeEach` (clears cache + gate + telemetry) and must pass in any order. Test cache-hit behavior within a test after a cold classify.
 
 ## Test shape
 
 - Merge scenarios sharing one setup and UI phase: one ingest, many DOM assertions.
-- Split when setup diverges or assertions contradict. Sequential acts in one lifecycle (cold skeleton, then cache-hit without skeleton) are fine; contradictory parallel asserts are not.
-- Prefer geometry and attribute assertions over PNG snapshots — cross-platform.
+- Split when setup diverges or assertions contradict. Sequential acts in one lifecycle (cold skeleton, then cache-hit without skeleton) are fine.
+- Prefer geometry and attribute assertions over PNG snapshots.
 
 ## Env
 
@@ -33,4 +33,4 @@ API runs with `NODE_ENV=test` and `E2E_CLASSIFICATION_ENABLED=1`, classification
 
 ## Speed
 
-Don't duplicate login/goto/reset when one session covers the assertions. Don't rebuild what CI already built unless the Playwright `webServer` needs it.
+Inside one test, don't repeat login, goto, or reset for assertions that share that setup. A spec still logs in itself so `pnpm test:e2e` can run it alone. Playwright's `webServer` is what starts the app for that command.
