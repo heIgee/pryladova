@@ -59,6 +59,8 @@ pnpm dev:agent:remote  # VPS API (API_URL)
 
 The agent's native modules are not top-level imports of files that cross-platform tests load. Use a dynamic import, or split the pure logic out.
 
+Unsent polls are stored in `%LOCALAPPDATA%\pryladova\retry-queue.sqlite` and replayed in sequence order after reconnect.
+
 Copy `apps/agent/.env.example` to `apps/agent/.env` (not committed; see `.gitignore`). Variable names, defaults, and remote-profile notes are in that file.
 
 **Host metrics** (local Win32 / SMTC, every poll): idle time, CPU%, RAM%, uptime, now playing. SMTC album art is sent when the active player exposes a thumbnail (no extra config).

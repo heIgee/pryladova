@@ -86,12 +86,16 @@ const WeatherLocationPopover = ({
   const searchGeneration = useRef(0);
   const inputId = useId();
   const listboxId = useId();
+  const optionIdPrefix = useId();
+  const [activeOptionIndex, setActiveOptionIndex] = useState(-1);
+  const listboxRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const trimmed = query.trim();
     if (trimmed.length < 2) {
       setResults([]);
       setSearchError(null);
+      setActiveOptionIndex(-1);
       return;
     }
 
@@ -103,6 +107,7 @@ const WeatherLocationPopover = ({
             return;
           }
           setResults(next);
+          setActiveOptionIndex(-1);
           setSearchError(next.length === 0 ? "No matches" : null);
         })
         .catch((error: unknown) => {
@@ -112,6 +117,7 @@ const WeatherLocationPopover = ({
           const message = error instanceof Error ? error.message : "Search failed";
           setSearchError(message);
           setResults([]);
+          setActiveOptionIndex(-1);
         });
     }, 300);
 
@@ -119,6 +125,16 @@ const WeatherLocationPopover = ({
       window.clearTimeout(timer);
     };
   }, [query]);
+
+  useEffect(() => {
+    if (activeOptionIndex < 0 || !listboxRef.current) {
+      return;
+    }
+    const option = listboxRef.current.querySelector<HTMLElement>(
+      `#${CSS.escape(`${optionIdPrefix}-option-${activeOptionIndex}`)}`,
+    );
+    option?.scrollIntoView({ block: "nearest" });
+  }, [activeOptionIndex, optionIdPrefix]);
 
   const handlePick = (result: GeocodeResult): void => {
     onLocationChange({ lat: result.lat, lon: result.lon, label: result.label, source: "search" });
@@ -213,8 +229,45 @@ const WeatherLocationPopover = ({
         aria-controls={listboxId}
         aria-expanded={results.length > 0}
         className="mb-2 w-full rounded-lg bg-muted px-2 py-1.5 text-caption text-foreground ring-1 ring-border/60 outline-none focus-visible:ring-2 focus-visible:ring-foreground/20"
+        aria-activedescendant={
+          activeOptionIndex >= 0 && results.length > 0
+            ? `${optionIdPrefix}-option-${activeOptionIndex}`
+            : undefined
+        }
         onChange={(event) => {
           setQuery(event.target.value);
+        }}
+        onKeyDown={(event) => {
+          if (results.length === 0) {
+            return;
+          }
+          if (event.key === "ArrowDown") {
+            event.preventDefault();
+            setActiveOptionIndex((index) => (index + 1) % results.length);
+            return;
+          }
+          if (event.key === "ArrowUp") {
+            event.preventDefault();
+            setActiveOptionIndex((index) => (index <= 0 ? results.length - 1 : index - 1));
+            return;
+          }
+          if (event.key === "Home") {
+            event.preventDefault();
+            setActiveOptionIndex(0);
+            return;
+          }
+          if (event.key === "End") {
+            event.preventDefault();
+            setActiveOptionIndex(results.length - 1);
+            return;
+          }
+          if (event.key === "Enter" && activeOptionIndex >= 0) {
+            event.preventDefault();
+            const picked = results[activeOptionIndex];
+            if (picked) {
+              handlePick(picked);
+            }
+          }
         }}
       />
 
@@ -224,13 +277,20 @@ const WeatherLocationPopover = ({
         </p>
       ) : null}
 
-      <div id={listboxId} role="listbox" className="max-h-40 overflow-y-auto overscroll-contain">
-        {results.map((result) => (
+      <div
+        ref={listboxRef}
+        id={listboxId}
+        role="listbox"
+        className="max-h-40 overflow-y-auto overscroll-contain"
+      >
+        {results.map((result, index) => (
           <button
             key={`${result.lat},${result.lon},${result.label}`}
+            id={`${optionIdPrefix}-option-${index}`}
             type="button"
             role="option"
-            className={popoverRowClassName}
+            aria-selected={index === activeOptionIndex}
+            className={cn(popoverRowClassName, index === activeOptionIndex && "bg-muted")}
             onClick={() => {
               handlePick(result);
             }}

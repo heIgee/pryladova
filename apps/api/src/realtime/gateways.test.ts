@@ -55,12 +55,13 @@ const host = {
 
 describe("AgentGateway", () => {
   let gateway: AgentGateway;
+  let ingress: AgentIngressService;
   let telemetry: { ingestAgentUpdate: ReturnType<typeof vi.fn> };
   let segments: ReturnType<typeof createSegmentServiceMock>;
 
   beforeEach(async () => {
     vi.spyOn(Logger.prototype, "warn").mockImplementation(() => {});
-    telemetry = { ingestAgentUpdate: vi.fn() };
+    telemetry = { ingestAgentUpdate: vi.fn().mockResolvedValue(undefined) };
     segments = createSegmentServiceMock();
     const moduleRef = await Test.createTestingModule({
       providers: [
@@ -73,6 +74,7 @@ describe("AgentGateway", () => {
       ],
     }).compile();
     gateway = moduleRef.get(AgentGateway);
+    ingress = moduleRef.get(AgentIngressService);
   });
 
   afterEach(() => {
@@ -103,19 +105,102 @@ describe("AgentGateway", () => {
       capturedAt: "2026-08-08T10:00:00.000Z",
     };
 
-    sendJson(socket, { type: "update", agentId: "desk", host, telemetry: window });
+    sendJson(socket, { type: "update", agentId: "desk", host, telemetry: window, sequence: 1 });
 
-    expect(telemetry.ingestAgentUpdate).toHaveBeenCalledWith("desk", host, window);
+    expect(telemetry.ingestAgentUpdate).toHaveBeenCalledWith("desk", host, window, 1);
     expect(socket.close).not.toHaveBeenCalled();
   });
 
-  it("closes the segment on shutdown and on disconnect", () => {
+  it("forwards focus changes in sequence order and ignores a duplicate sequence", () => {
     const socket = connect();
-    sendJson(socket, { type: "shutdown", agentId: "desk", capturedAt: host.capturedAt });
-    expect(segments.closeForShutdown).toHaveBeenCalledWith("desk", host.capturedAt);
+    const chrome = { appName: "Chrome", windowTitle: "inbox", capturedAt: host.capturedAt };
+    const code = {
+      appName: "Code",
+      windowTitle: "main.ts",
+      capturedAt: "2026-08-08T10:00:02.000Z",
+    };
+
+    sendJson(socket, { type: "update", agentId: "desk", host, telemetry: chrome, sequence: 1 });
+    sendJson(socket, { type: "update", agentId: "desk", host, telemetry: chrome, sequence: 1 });
+    sendJson(socket, {
+      type: "update",
+      agentId: "desk",
+      host: { ...host, capturedAt: code.capturedAt },
+      telemetry: code,
+      sequence: 2,
+    });
+
+    expect(telemetry.ingestAgentUpdate).toHaveBeenCalledTimes(2);
+    expect(telemetry.ingestAgentUpdate).toHaveBeenNthCalledWith(1, "desk", host, chrome, 1);
+    expect(telemetry.ingestAgentUpdate).toHaveBeenNthCalledWith(
+      2,
+      "desk",
+      { ...host, capturedAt: code.capturedAt },
+      code,
+      2,
+    );
+  });
+
+  it("closes the segment on shutdown, session lock, and disconnect", () => {
+    const socket = connect();
+    sendJson(socket, {
+      type: "shutdown",
+      agentId: "desk",
+      capturedAt: host.capturedAt,
+      sequence: 1,
+    });
+    expect(segments.closeForShutdown).toHaveBeenCalledWith("desk", host.capturedAt, 1);
+
+    sendJson(socket, {
+      type: "session_lock",
+      agentId: "desk",
+      capturedAt: host.capturedAt,
+      sequence: 2,
+    });
+    expect(segments.closeForSessionLock).toHaveBeenCalledWith("desk", host.capturedAt, 2);
 
     socket.emit("close");
     expect(segments.closeForAgentDisconnect).toHaveBeenCalledWith("desk");
+  });
+
+  it("forwards a failed sequence again after a later sequence was accepted", async () => {
+    vi.mocked(segments.closeForSessionLock).mockRejectedValueOnce(new Error("db down"));
+    const lock = {
+      type: "session_lock" as const,
+      agentId: "desk",
+      capturedAt: host.capturedAt,
+      sequence: 1,
+    };
+
+    expect(ingress.acceptMessage(lock)).toBe("ok");
+    expect(
+      ingress.acceptMessage({
+        type: "shutdown",
+        agentId: "desk",
+        capturedAt: host.capturedAt,
+        sequence: 2,
+      }),
+    ).toBe("ok");
+    await Promise.resolve();
+
+    vi.mocked(segments.closeForSessionLock).mockResolvedValue(undefined);
+    expect(ingress.acceptMessage(lock)).toBe("ok");
+    expect(segments.closeForSessionLock).toHaveBeenCalledTimes(2);
+  });
+
+  it("ignores a duplicate session lock", () => {
+    const socket = connect();
+    const lock = {
+      type: "session_lock",
+      agentId: "desk",
+      capturedAt: host.capturedAt,
+      sequence: 4,
+    };
+    sendJson(socket, lock);
+    sendJson(socket, lock);
+    expect(segments.closeForSessionLock).toHaveBeenCalledTimes(1);
+    expect(segments.closeForSessionLock).toHaveBeenCalledWith("desk", host.capturedAt, 4);
+    expect(socket.close).not.toHaveBeenCalled();
   });
 
   it("rejects malformed messages", () => {
@@ -131,10 +216,10 @@ describe("AgentGateway", () => {
 
   it("rejects a second agent without touching its segments on close", () => {
     const first = connect();
-    sendJson(first, { type: "update", agentId: "desk", host });
+    sendJson(first, { type: "update", agentId: "desk", host, sequence: 1 });
 
     const intruder = connect();
-    sendJson(intruder, { type: "update", agentId: "laptop", host });
+    sendJson(intruder, { type: "update", agentId: "laptop", host, sequence: 1 });
     expect(intruder.close).toHaveBeenCalledWith(4403, "Hub already bound to another agent");
 
     intruder.emit("close");

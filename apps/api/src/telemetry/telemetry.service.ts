@@ -95,10 +95,14 @@ export class TelemetryService implements OnModuleDestroy {
     });
   }
 
-  ingestAgentUpdate(agentId: string, host: HostPayload, telemetry?: TelemetryPayload): void {
+  ingestAgentUpdate(
+    agentId: string,
+    host: HostPayload,
+    telemetry?: TelemetryPayload,
+    sequence?: number,
+  ): Promise<void> {
     if (!telemetry) {
-      this.applyHost(agentId, host);
-      return;
+      return this.applyHost(agentId, host, sequence);
     }
 
     const generation = ++this.ingestGeneration;
@@ -123,7 +127,14 @@ export class TelemetryService implements OnModuleDestroy {
 
     this.publishState();
 
-    void this.persistFocusIngest(agentId, host, telemetry, generation, classificationStatus);
+    return this.persistFocusIngest(
+      agentId,
+      host,
+      telemetry,
+      generation,
+      classificationStatus,
+      sequence,
+    );
   }
 
   private async persistFocusIngest(
@@ -132,8 +143,9 @@ export class TelemetryService implements OnModuleDestroy {
     telemetry: TelemetryPayload,
     generation: number,
     classificationStatus: ClassificationStatus,
+    sequence?: number,
   ): Promise<void> {
-    const segmentId = await this.segmentService.onFocusChange(agentId, telemetry);
+    const segmentId = await this.segmentService.onFocusChange(agentId, telemetry, sequence);
     await this.segmentService.onHostTick(agentId, host.capturedAt, {
       skipStaleClose: true,
       idleMs: host.idleMs,
@@ -180,23 +192,29 @@ export class TelemetryService implements OnModuleDestroy {
     void this.runClassification(payload, generation, undefined);
   }
 
-  private applyHost(agentId: string | null, payload: HostPayload): void {
+  private applyHost(
+    agentId: string | null,
+    payload: HostPayload,
+    sequence?: number,
+  ): Promise<void> {
     const previousHost = this.state?.host ?? this.pendingHost;
     const previousThumbnail = previousHost?.media?.thumbnailDataUrl ?? null;
     const merged = this.mergeHostPayload(previousHost, payload);
     const mergedThumbnail = merged.media?.thumbnailDataUrl ?? null;
     const thumbnailChanged = mergedThumbnail != null && mergedThumbnail !== previousThumbnail;
-
-    if (agentId) {
-      void this.segmentService.onHostTick(agentId, payload.capturedAt, {
-        idleMs: payload.idleMs,
-        ...(this.state ? { appName: this.state.appName, windowTitle: this.state.windowTitle } : {}),
-      });
-    }
+    const persisted = agentId
+      ? this.segmentService.onHostTick(agentId, payload.capturedAt, {
+          idleMs: payload.idleMs,
+          ...(this.state
+            ? { appName: this.state.appName, windowTitle: this.state.windowTitle }
+            : {}),
+          ...(sequence !== undefined ? { sequence } : {}),
+        })
+      : Promise.resolve();
 
     if (!this.state) {
       this.pendingHost = merged;
-      return;
+      return persisted;
     }
 
     this.state = parseTelemetryState({
@@ -206,14 +224,15 @@ export class TelemetryService implements OnModuleDestroy {
 
     if (thumbnailChanged) {
       this.publishState();
-      return;
+      return persisted;
     }
 
     this.publishHost();
+    return persisted;
   }
 
   setHost(payload: HostPayload): void {
-    this.applyHost(this.agentBindingService.getBoundAgentId(), payload);
+    void this.applyHost(this.agentBindingService.getBoundAgentId(), payload).catch(() => undefined);
   }
 
   getState(): TelemetryState | null {

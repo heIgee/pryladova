@@ -1,4 +1,9 @@
-import { AGENT_WS_ROUTE, type HostPayload, type TelemetryPayload } from "@pryladova/shared";
+import {
+  AGENT_WS_ROUTE,
+  type AgentWsInbound,
+  type HostPayload,
+  type TelemetryPayload,
+} from "@pryladova/shared";
 import WebSocket from "ws";
 import { agentLog } from "./logger.js";
 
@@ -14,9 +19,11 @@ const toWsUrl = (httpOrigin: string, path: string): string => {
   return url.toString();
 };
 
-export type AgentWsClient = {
-  sendUpdate: (host: HostPayload, telemetry?: TelemetryPayload) => void;
-  sendShutdown: (capturedAt: string) => Promise<void>;
+type AgentWsClient = {
+  isOpen: () => boolean;
+  sendUpdate: (host: HostPayload, sequence: number, telemetry?: TelemetryPayload) => Promise<void>;
+  sendShutdown: (capturedAt: string, sequence: number) => Promise<void>;
+  sendSessionLock: (capturedAt: string, sequence: number) => Promise<void>;
   close: () => void;
 };
 
@@ -65,25 +72,36 @@ export const connectAgentWs = (
     socket.once("open", () => {
       opened = true;
       clearTimeout(timeout);
+      const sendMessage = (message: AgentWsInbound): Promise<void> =>
+        new Promise((resolveSend, rejectSend) => {
+          if (socket.readyState !== WebSocket.OPEN) {
+            rejectSend(new Error("Agent WebSocket is not open"));
+            return;
+          }
+          socket.send(JSON.stringify(message), (error) => {
+            if (error) {
+              rejectSend(error);
+              return;
+            }
+            resolveSend();
+          });
+        });
+
       resolve({
         client: {
-          sendUpdate: (host, telemetry) => {
-            socket.send(JSON.stringify({ type: "update", agentId, host, telemetry }));
-          },
-          sendShutdown: (capturedAt) =>
-            new Promise<void>((resolve, reject) => {
-              if (socket.readyState !== WebSocket.OPEN) {
-                resolve();
-                return;
-              }
-              socket.send(JSON.stringify({ type: "shutdown", agentId, capturedAt }), (error) => {
-                if (error) {
-                  reject(error);
-                  return;
-                }
-                resolve();
-              });
+          isOpen: () => socket.readyState === WebSocket.OPEN,
+          sendUpdate: (host, sequence, telemetry) =>
+            sendMessage({
+              type: "update",
+              agentId,
+              host,
+              sequence,
+              ...(telemetry ? { telemetry } : {}),
             }),
+          sendShutdown: (capturedAt, sequence) =>
+            sendMessage({ type: "shutdown", agentId, capturedAt, sequence }),
+          sendSessionLock: (capturedAt, sequence) =>
+            sendMessage({ type: "session_lock", agentId, capturedAt, sequence }),
           close: () => {
             socket.close();
           },

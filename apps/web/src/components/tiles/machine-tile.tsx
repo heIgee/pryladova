@@ -58,12 +58,18 @@ const StatBar = ({
 
 export const MachineTile = ({
   host,
+  dimmed = false,
   className,
 }: {
   host: HostPayload | null;
+  dimmed?: boolean;
   className?: string;
 }) => (
-  <Card size="sm" className={cn(bentoTileCardClassName, className)}>
+  <Card
+    size="sm"
+    className={cn(bentoTileCardClassName, dimmed && "opacity-50 transition-opacity", className)}
+    data-host-metrics-stale={dimmed ? "" : undefined}
+  >
     <BentoTileHeader
       testId="machine-tile-header"
       icon={<Server className={bentoTileLucideIconClassName} aria-hidden="true" />}

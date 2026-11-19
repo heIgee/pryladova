@@ -350,17 +350,28 @@ export const panelWsMessageSchema = z.discriminatedUnion("type", [
   }),
 ]);
 
+/** Per-agent order and idempotency key. capturedAt stays the interval boundary. */
+const agentSequenceSchema = z.number().int().positive().max(Number.MAX_SAFE_INTEGER);
+
 export const agentWsInboundSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("update"),
     agentId: agentIdSchema,
     host: hostPayloadSchema,
     telemetry: telemetryPayloadSchema.optional(),
+    sequence: agentSequenceSchema,
   }),
   z.object({
     type: z.literal("shutdown"),
     agentId: agentIdSchema,
     capturedAt: z.iso.datetime(),
+    sequence: agentSequenceSchema,
+  }),
+  z.object({
+    type: z.literal("session_lock"),
+    agentId: agentIdSchema,
+    capturedAt: z.iso.datetime(),
+    sequence: agentSequenceSchema,
   }),
 ]);
 

@@ -185,7 +185,9 @@ export const computeIntervalSegmentDurationSec = (
   return Math.floor((effectiveEndMs - effectiveStartMs) / 1000);
 };
 
-export type CloseAndOpenResult = { action: "noop" } | { action: "opened"; segment_id: string };
+export type CloseAndOpenResult =
+  | { action: "noop"; reason?: "sequence" | "late" }
+  | { action: "opened"; segment_id: string };
 
 export const parseCloseAndOpenResult = (value: unknown): CloseAndOpenResult | null => {
   if (!value || typeof value !== "object") {
@@ -194,6 +196,10 @@ export const parseCloseAndOpenResult = (value: unknown): CloseAndOpenResult | nu
 
   const action = "action" in value ? value.action : undefined;
   if (action === "noop") {
+    const reason = "reason" in value ? value.reason : undefined;
+    if (reason === "sequence" || reason === "late") {
+      return { action: "noop", reason };
+    }
     return { action: "noop" };
   }
 

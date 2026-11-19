@@ -70,10 +70,22 @@ const buildBlockedApps = (extraApps: string[]): Set<string> => {
 };
 
 const collectAppTokens = (snapshot: RawWindowSnapshot): string[] => {
-  const tokens = [normalizeAppToken(snapshot.owner.name)];
+  const tokens: string[] = [];
+
+  const displayName = snapshot.owner.name.trim();
+  if (displayName) {
+    tokens.push(normalizeAppToken(displayName));
+  }
+
   if (snapshot.owner.path) {
     tokens.push(normalizeAppToken(basename(snapshot.owner.path)));
   }
+
+  const title = snapshot.title.trim();
+  if (title) {
+    tokens.push(normalizeAppToken(title));
+  }
+
   return tokens.filter((token) => token.length > 0);
 };
 

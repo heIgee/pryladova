@@ -2,6 +2,12 @@ import { AGENT_WS_ROUTE, type HostPayload, type TelemetryPayload } from "@prylad
 import WebSocket from "ws";
 
 const WS_CONNECT_TIMEOUT_MS = 10_000;
+let nextSequence = 0;
+
+const takeSequence = (): number => {
+  nextSequence += 1;
+  return nextSequence;
+};
 
 const toWsUrl = (httpOrigin: string, path: string): string => {
   const url = new URL(httpOrigin);
@@ -37,7 +43,13 @@ export const sendAgentUpdate = (
 
     socket.once("open", () => {
       socket.send(
-        JSON.stringify({ type: "update", agentId: "e2e-agent", host, telemetry }),
+        JSON.stringify({
+          type: "update",
+          agentId: "e2e-agent",
+          host,
+          telemetry,
+          sequence: takeSequence(),
+        }),
         (error) => {
           if (error) {
             fail(error);

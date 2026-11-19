@@ -32,7 +32,7 @@ import {
   tryColGrowWithPush,
 } from "@/lib/dashboard-layout";
 import { resolveHistoryLiveCapMs } from "@/lib/history-live";
-import { getAgentLastSeenMs } from "@/lib/panel";
+import { getAgentLastSeenMs, isHostMetricsStale } from "@/lib/panel";
 import { isDashboardTileVisible, renderDashboardTile } from "@/lib/render-dashboard-tile";
 
 const Dashboard = () => {
@@ -87,6 +87,8 @@ const Dashboard = () => {
   const readyPanel = panel.status === "ready" ? panel : null;
   const liveTelemetry = agentLive && readyPanel ? readyPanel.telemetry : null;
   const host = readyPanel?.telemetry.host ?? null;
+  const hostMetricsStale =
+    readyPanel !== null ? isHostMetricsStale(readyPanel.telemetry, nowMs) : false;
   const agentLastSeenMs = readyPanel ? getAgentLastSeenMs(readyPanel) : null;
   const historyLiveCapMs = resolveHistoryLiveCapMs(
     host,
@@ -114,6 +116,7 @@ const Dashboard = () => {
     showAgentHint,
     readyTelemetry: liveTelemetry,
     host,
+    hostMetricsStale,
     classificationEnabled,
     settingsError,
     settingsSyncing,

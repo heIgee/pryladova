@@ -5,6 +5,7 @@ import {
   getAgentLastSeenMs,
   isAgentLive,
   isAgentStale,
+  isHostMetricsStale,
   type PanelState,
   resolvePanelSubtitle,
   resolveShowAgentHint,
@@ -295,6 +296,45 @@ describe("getAgentLastSeenMs", () => {
   it("returns latest timestamp from telemetry and host", () => {
     const panel: PanelState = { status: "ready", telemetry: readyTelemetry };
     expect(getAgentLastSeenMs(panel)).toBe(Date.parse("2026-01-01T12:00:02.000Z"));
+  });
+});
+
+describe("isHostMetricsStale", () => {
+  it("is false when host and window timestamps match", () => {
+    const telemetry = {
+      ...readyTelemetry,
+      capturedAt: "2026-01-01T12:00:10.000Z",
+      receivedAt: "2026-01-01T12:00:10.000Z",
+      host: { ...readyTelemetry.host, capturedAt: "2026-01-01T12:00:10.000Z" },
+    };
+    const now = Date.parse("2026-01-01T12:00:12.000Z");
+    expect(isHostMetricsStale(telemetry, now)).toBe(false);
+  });
+
+  it("is true when window telemetry is fresh and host capturedAt lags", () => {
+    const telemetry = {
+      ...readyTelemetry,
+      capturedAt: "2026-01-01T12:00:20.000Z",
+      receivedAt: "2026-01-01T12:00:20.000Z",
+      host: { ...readyTelemetry.host, capturedAt: "2026-01-01T12:00:02.000Z" },
+    };
+    const now = Date.parse("2026-01-01T12:00:22.000Z");
+    expect(isHostMetricsStale(telemetry, now)).toBe(true);
+  });
+
+  it("is false when window telemetry has also gone quiet", () => {
+    const telemetry = {
+      ...readyTelemetry,
+      capturedAt: "2026-01-01T12:00:20.000Z",
+      receivedAt: "2026-01-01T12:00:20.000Z",
+      host: { ...readyTelemetry.host, capturedAt: "2026-01-01T12:00:02.000Z" },
+    };
+    const now = Date.parse("2026-01-01T12:00:35.000Z");
+    expect(isHostMetricsStale(telemetry, now)).toBe(false);
+  });
+
+  it("is false without host payload", () => {
+    expect(isHostMetricsStale({ ...readyTelemetry, host: null }, Date.now())).toBe(false);
   });
 });
 

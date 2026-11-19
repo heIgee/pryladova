@@ -34,6 +34,7 @@ export type DashboardTileRenderContext = {
   showAgentHint: boolean;
   readyTelemetry: TelemetryState | null;
   host: HostPayload | null;
+  hostMetricsStale: boolean;
   classificationEnabled: boolean;
   settingsError: string | null;
   settingsSyncing: boolean;
@@ -125,9 +126,9 @@ export const renderDashboardTile = (
         />
       );
     case "machine":
-      return <MachineTile host={ctx.host} />;
+      return <MachineTile host={ctx.host} dimmed={ctx.hostMetricsStale} />;
     case "media":
-      return <MediaTile host={ctx.host} />;
+      return <MediaTile host={ctx.host} dimmed={ctx.hostMetricsStale} />;
     case "history":
       return (
         <HistoryTile

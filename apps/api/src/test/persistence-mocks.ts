@@ -39,6 +39,7 @@ export const createSegmentServiceMock = (): Pick<
   | "updateClassification"
   | "updateOpenSegmentClassification"
   | "closeForShutdown"
+  | "closeForSessionLock"
   | "closeForAgentDisconnect"
   | "flushHeartbeats"
   | "sweepStaleHeartbeats"
@@ -48,6 +49,7 @@ export const createSegmentServiceMock = (): Pick<
   updateClassification: vi.fn().mockResolvedValue(undefined),
   updateOpenSegmentClassification: vi.fn().mockResolvedValue(undefined),
   closeForShutdown: vi.fn().mockResolvedValue(undefined),
+  closeForSessionLock: vi.fn().mockResolvedValue(undefined),
   closeForAgentDisconnect: vi.fn().mockResolvedValue(undefined),
   flushHeartbeats: vi.fn().mockResolvedValue(undefined),
   sweepStaleHeartbeats: vi.fn().mockResolvedValue(undefined),

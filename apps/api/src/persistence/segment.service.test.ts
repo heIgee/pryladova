@@ -35,8 +35,34 @@ const heartbeatRow = (dbLastSeenAt: string | null | undefined) => {
   return { last_seen_at: dbLastSeenAt, last_active_at: dbLastSeenAt };
 };
 
+const createSegmentRpcMock = (options?: {
+  onClose?: () => void;
+  closeReturns?: boolean;
+  closeAndOpenResult?: { action: string; segment_id: string };
+}) =>
+  vi.fn(async (name: string) => {
+    if (name === "close_open_segment") {
+      options?.onClose?.();
+      return { data: options?.closeReturns ?? true, error: null };
+    }
+    if (name === "open_window_segment") {
+      return { data: true, error: null };
+    }
+    if (name === "sweep_stale_segments") {
+      return { error: null };
+    }
+    if (name === "close_and_open_segment") {
+      return {
+        data: options?.closeAndOpenResult ?? { action: "opened", segment_id: "seg-1" },
+        error: null,
+      };
+    }
+    throw new Error(`unexpected rpc: ${name}`);
+  });
+
 const createHeartbeatClient = (options?: {
   dbLastSeenAt?: string | null;
+  rpc?: ReturnType<typeof vi.fn>;
   windowSegmentsUpdate?: ReturnType<typeof vi.fn>;
   openSegmentStartedAt?: string | null;
 }) => {
@@ -59,7 +85,10 @@ const createHeartbeatClient = (options?: {
       }),
     });
 
+  const rpc = options?.rpc ?? createSegmentRpcMock();
+
   const client = {
+    rpc,
     from: vi.fn((table: string) => {
       if (table === "agent_heartbeats") {
         return {
@@ -84,6 +113,7 @@ const createHeartbeatClient = (options?: {
     heartbeatsSelect,
     heartbeatsUpsert,
     windowSegmentsUpdate,
+    rpc,
   };
 };
 
@@ -117,27 +147,15 @@ describe("SegmentService", () => {
   });
 
   it("skips stale close on host tick when focus change owns segment boundaries", async () => {
-    const lte = vi.fn().mockResolvedValue({ error: null });
-    const windowSegmentsUpdate = vi.fn().mockReturnValue({
-      eq: vi.fn().mockReturnValue({
-        is: vi.fn().mockReturnValue({ lte }),
-      }),
-    });
-    const { service, heartbeatsUpsert } = createHeartbeatClient({ windowSegmentsUpdate });
+    const { service, heartbeatsUpsert, rpc } = createHeartbeatClient();
 
     await service.onHostTick("desk-pc", STALE_INCOMING, { skipStaleClose: true });
 
-    expect(windowSegmentsUpdate).not.toHaveBeenCalled();
+    expect(rpc).not.toHaveBeenCalledWith("close_open_segment", expect.anything());
     expect(heartbeatsUpsert).not.toHaveBeenCalled();
   });
 
   it("closes a stale open segment before focus-change RPC after a long agent gap", async () => {
-    const lte = vi.fn().mockResolvedValue({ error: null });
-    const windowSegmentsUpdate = vi.fn().mockReturnValue({
-      eq: vi.fn().mockReturnValue({
-        is: vi.fn().mockReturnValue({ lte }),
-      }),
-    });
     const heartbeatsSelect = vi.fn().mockReturnValue({
       eq: vi.fn().mockReturnValue({
         maybeSingle: vi.fn().mockResolvedValue({
@@ -146,10 +164,7 @@ describe("SegmentService", () => {
         }),
       }),
     });
-    const rpc = vi.fn().mockResolvedValue({
-      data: { action: "opened", segment_id: "seg-1" },
-      error: null,
-    });
+    const rpc = createSegmentRpcMock();
 
     const client = {
       rpc,
@@ -158,7 +173,7 @@ describe("SegmentService", () => {
           return { select: heartbeatsSelect };
         }
         if (table === "window_segments") {
-          return { update: windowSegmentsUpdate, select: openSegmentSelect() };
+          return { select: openSegmentSelect() };
         }
         throw new Error(`unexpected table: ${table}`);
       }),
@@ -169,20 +184,15 @@ describe("SegmentService", () => {
     const service = new SegmentService(supabaseService);
     await service.onFocusChange("desk-pc", telemetry(STALE_INCOMING, "Cursor"));
 
-    expect(windowSegmentsUpdate).toHaveBeenCalledWith({
-      ended_at: STALE_PREVIOUS,
-      close_reason: "stale",
+    expect(rpc).toHaveBeenCalledWith("close_open_segment", {
+      p_agent_id: "desk-pc",
+      p_ended_at: STALE_PREVIOUS,
+      p_close_reason: "stale",
     });
-    expect(rpc).toHaveBeenCalled();
+    expect(rpc).toHaveBeenCalledWith("close_and_open_segment", expect.anything());
   });
 
   it("closes open segments at last active time when the agent disconnects", async () => {
-    const lte = vi.fn().mockResolvedValue({ error: null });
-    const windowSegmentsUpdate = vi.fn().mockReturnValue({
-      eq: vi.fn().mockReturnValue({
-        is: vi.fn().mockReturnValue({ lte }),
-      }),
-    });
     const heartbeatsSelect = vi.fn().mockReturnValue({
       eq: vi.fn().mockReturnValue({
         maybeSingle: vi.fn().mockResolvedValue({
@@ -194,14 +204,16 @@ describe("SegmentService", () => {
         }),
       }),
     });
+    const rpc = createSegmentRpcMock();
 
     const client = {
+      rpc,
       from: vi.fn((table: string) => {
         if (table === "agent_heartbeats") {
           return { select: heartbeatsSelect };
         }
         if (table === "window_segments") {
-          return { update: windowSegmentsUpdate, select: openSegmentSelect() };
+          return { select: openSegmentSelect() };
         }
         throw new Error(`unexpected table: ${table}`);
       }),
@@ -212,9 +224,10 @@ describe("SegmentService", () => {
     const service = new SegmentService(supabaseService);
     await service.closeForAgentDisconnect("desk-pc");
 
-    expect(windowSegmentsUpdate).toHaveBeenCalledWith({
-      ended_at: "2026-08-08T22:05:00.000Z",
-      close_reason: "stale",
+    expect(rpc).toHaveBeenCalledWith("close_open_segment", {
+      p_agent_id: "desk-pc",
+      p_ended_at: "2026-08-08T22:05:00.000Z",
+      p_close_reason: "stale",
     });
   });
 
@@ -242,58 +255,48 @@ describe("SegmentService", () => {
   });
 
   it("closes stale open segments on host-only ticks after a long gap", async () => {
-    const lte = vi.fn().mockResolvedValue({ error: null });
-    const is = vi.fn().mockReturnValue({ lte });
-    const eq = vi.fn().mockReturnValue({ is });
-    const windowSegmentsUpdate = vi.fn().mockReturnValue({ eq });
-    const { service, heartbeatsUpsert } = createHeartbeatClient({ windowSegmentsUpdate });
+    const { service, heartbeatsUpsert, rpc } = createHeartbeatClient();
 
     await service.onHostTick("desk-pc", STALE_INCOMING);
 
-    expect(windowSegmentsUpdate).toHaveBeenCalledWith({
-      ended_at: STALE_PREVIOUS,
-      close_reason: "stale",
+    expect(rpc).toHaveBeenCalledWith("close_open_segment", {
+      p_agent_id: "desk-pc",
+      p_ended_at: STALE_PREVIOUS,
+      p_close_reason: "stale",
     });
-    expect(lte).toHaveBeenCalledWith("started_at", STALE_PREVIOUS);
     expect(heartbeatsUpsert).not.toHaveBeenCalled();
   });
 
   it("closes a post-idle agent gap at last input, not last seen", async () => {
-    const lte = vi.fn().mockResolvedValue({ error: null });
-    const windowSegmentsUpdate = vi.fn().mockReturnValue({
-      eq: vi.fn().mockReturnValue({
-        is: vi.fn().mockReturnValue({ lte }),
-      }),
-    });
-    const { service } = createHeartbeatClient({
+    const { service, rpc } = createHeartbeatClient({
       dbLastSeenAt: "2026-08-08T22:00:00.000Z",
-      windowSegmentsUpdate,
     });
 
     await service.onHostTick("desk-pc", "2026-08-08T22:00:00.000Z", { idleMs: 0 });
     await service.onHostTick("desk-pc", "2026-08-08T22:04:00.000Z", { idleMs: 6 * 60 * 1000 });
-    windowSegmentsUpdate.mockClear();
+    rpc.mockClear();
     await service.onHostTick("desk-pc", "2026-08-08T22:10:00.000Z", { idleMs: 12 * 60 * 1000 });
 
-    expect(windowSegmentsUpdate).toHaveBeenCalledWith({
-      ended_at: "2026-08-08T21:58:00.000Z",
-      close_reason: "stale",
+    expect(rpc).toHaveBeenCalledWith("close_open_segment", {
+      p_agent_id: "desk-pc",
+      p_ended_at: "2026-08-08T21:58:00.000Z",
+      p_close_reason: "stale",
     });
   });
 
   it("does not close a segment that started after the stale boundary", async () => {
-    const { service, windowSegmentsUpdate } = createHeartbeatClient({
+    const { service, rpc } = createHeartbeatClient({
       openSegmentStartedAt: STALE_INCOMING,
     });
 
     await service.onHostTick("desk-pc", STALE_PREVIOUS);
     await service.onHostTick("desk-pc", STALE_INCOMING);
 
-    expect(windowSegmentsUpdate).not.toHaveBeenCalled();
+    expect(rpc).not.toHaveBeenCalledWith("close_open_segment", expect.anything());
   });
 
   it("does not open a new segment when the stale pre-close fails", async () => {
-    const rpc = vi.fn();
+    const rpc = createSegmentRpcMock({ closeReturns: false });
     const heartbeatsSelect = vi.fn().mockReturnValue({
       eq: vi.fn().mockReturnValue({
         maybeSingle: vi.fn().mockResolvedValue({
@@ -309,16 +312,7 @@ describe("SegmentService", () => {
           return { select: heartbeatsSelect };
         }
         if (table === "window_segments") {
-          return {
-            select: openSegmentSelect(STALE_PREVIOUS),
-            update: vi.fn().mockReturnValue({
-              eq: vi.fn().mockReturnValue({
-                is: vi.fn().mockReturnValue({
-                  lte: vi.fn().mockResolvedValue({ error: { message: "down" } }),
-                }),
-              }),
-            }),
-          };
+          return { select: openSegmentSelect(STALE_PREVIOUS) };
         }
         throw new Error(`unexpected table: ${table}`);
       }),
@@ -328,7 +322,8 @@ describe("SegmentService", () => {
     await expect(
       service.onFocusChange("desk-pc", telemetry(STALE_INCOMING, "Code")),
     ).resolves.toBeUndefined();
-    expect(rpc).not.toHaveBeenCalled();
+    expect(rpc).toHaveBeenCalledWith("close_open_segment", expect.anything());
+    expect(rpc).not.toHaveBeenCalledWith("close_and_open_segment", expect.anything());
   });
 
   it("debounces heartbeat upserts and persists after 30 seconds", async () => {
@@ -361,13 +356,7 @@ describe("SegmentService", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-01T12:00:00.000Z"));
 
-    const lte = vi.fn().mockResolvedValue({ error: null });
-    const windowSegmentsUpdate = vi.fn().mockReturnValue({
-      eq: vi.fn().mockReturnValue({
-        is: vi.fn().mockReturnValue({ lte }),
-      }),
-    });
-    const { service, heartbeatsUpsert } = createHeartbeatClient({ windowSegmentsUpdate });
+    const { service, heartbeatsUpsert, rpc } = createHeartbeatClient();
 
     await service.onHostTick("desk-pc", "2026-01-01T12:00:02.000Z");
     expect(heartbeatsUpsert).not.toHaveBeenCalled();
@@ -379,9 +368,25 @@ describe("SegmentService", () => {
       last_seen_at: "2026-01-01T12:00:04.000Z",
       last_active_at: "2026-01-01T12:00:04.000Z",
     });
-    expect(windowSegmentsUpdate).toHaveBeenCalledWith({
-      ended_at: "2026-01-01T12:00:04.000Z",
-      close_reason: "shutdown",
+    expect(rpc).toHaveBeenCalledWith("close_open_segment", {
+      p_agent_id: "desk-pc",
+      p_ended_at: "2026-01-01T12:00:04.000Z",
+      p_close_reason: "shutdown",
+    });
+  });
+
+  it("closes the open segment with lock reason on session lock", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T12:00:00.000Z"));
+
+    const { service, rpc } = createHeartbeatClient();
+
+    await service.closeForSessionLock("desk-pc", "2026-01-01T12:00:04.000Z");
+
+    expect(rpc).toHaveBeenCalledWith("close_open_segment", {
+      p_agent_id: "desk-pc",
+      p_ended_at: "2026-01-01T12:00:04.000Z",
+      p_close_reason: "lock",
     });
   });
 
@@ -413,39 +418,15 @@ describe("SegmentService", () => {
   });
 
   it("closes open segments for stale heartbeats from the sweep job", async () => {
-    const lte = vi.fn().mockResolvedValue({ error: null });
-    const is = vi.fn().mockReturnValue({ lte });
-    const eq = vi.fn().mockReturnValue({ is });
-    const windowSegmentsUpdate = vi.fn().mockReturnValue({ eq });
-    const lt = vi.fn().mockResolvedValue({
-      data: [{ agent_id: "desk-pc", last_seen_at: STALE_PREVIOUS }],
-      error: null,
-    });
-    const heartbeatsSelect = vi.fn().mockReturnValue({ lt });
+    const rpc = createSegmentRpcMock();
+    const client = { rpc, from: vi.fn() };
+    const service = new SegmentService(supabaseServiceFromClient(client));
 
-    const client = {
-      from: vi.fn((table: string) => {
-        if (table === "agent_heartbeats") {
-          return { select: heartbeatsSelect };
-        }
-        if (table === "window_segments") {
-          return { update: windowSegmentsUpdate, select: openSegmentSelect() };
-        }
-        throw new Error(`unexpected table: ${table}`);
-      }),
-    };
-
-    const supabaseService = supabaseServiceFromClient(client);
-
-    const service = new SegmentService(supabaseService);
     await service.sweepStaleHeartbeats();
 
-    expect(lt).toHaveBeenCalled();
-    expect(windowSegmentsUpdate).toHaveBeenCalledWith({
-      ended_at: STALE_PREVIOUS,
-      close_reason: "stale",
+    expect(rpc).toHaveBeenCalledWith("sweep_stale_segments", {
+      p_cutoff: expect.any(String),
     });
-    expect(lte).toHaveBeenCalledWith("started_at", STALE_PREVIOUS);
   });
 
   it("updates classification on a closed segment row", async () => {
@@ -512,20 +493,19 @@ describe("SegmentService", () => {
     });
     const mutationOrder: string[] = [];
 
-    const rpc = vi.fn(async () => {
-      mutationOrder.push("focus-start");
-      await focusStarted;
-      mutationOrder.push("focus-end");
-      return { data: { action: "opened", segment_id: "seg-1" }, error: null };
+    const rpc = vi.fn(async (name: string) => {
+      if (name === "close_and_open_segment") {
+        mutationOrder.push("focus-start");
+        await focusStarted;
+        mutationOrder.push("focus-end");
+        return { data: { action: "opened", segment_id: "seg-1" }, error: null };
+      }
+      if (name === "close_open_segment") {
+        mutationOrder.push("stale-close");
+        return { data: true, error: null };
+      }
+      throw new Error(`unexpected rpc: ${name}`);
     });
-
-    const lte = vi.fn(async () => {
-      mutationOrder.push("stale-close");
-      return { error: null };
-    });
-    const is = vi.fn().mockReturnValue({ lte });
-    const eq = vi.fn().mockReturnValue({ is });
-    const windowSegmentsUpdate = vi.fn().mockReturnValue({ eq });
 
     const heartbeatsSelect = vi.fn().mockReturnValue({
       eq: vi.fn().mockReturnValue({
@@ -544,7 +524,7 @@ describe("SegmentService", () => {
           return { select: heartbeatsSelect, upsert: heartbeatsUpsert };
         }
         if (table === "window_segments") {
-          return { update: windowSegmentsUpdate, select: openSegmentSelect() };
+          return { select: openSegmentSelect() };
         }
         throw new Error(`unexpected table: ${table}`);
       }),
@@ -573,20 +553,19 @@ describe("SegmentService", () => {
     });
     const mutationOrder: string[] = [];
 
-    const rpc = vi.fn(async () => {
-      mutationOrder.push("focus-start");
-      await focusStarted;
-      mutationOrder.push("focus-end");
-      return { data: { action: "opened", segment_id: "seg-1" }, error: null };
+    const rpc = vi.fn(async (name: string) => {
+      if (name === "close_and_open_segment") {
+        mutationOrder.push("focus-start");
+        await focusStarted;
+        mutationOrder.push("focus-end");
+        return { data: { action: "opened", segment_id: "seg-1" }, error: null };
+      }
+      if (name === "close_open_segment") {
+        mutationOrder.push("shutdown-close");
+        return { data: true, error: null };
+      }
+      throw new Error(`unexpected rpc: ${name}`);
     });
-
-    const lte = vi.fn(async () => {
-      mutationOrder.push("shutdown-close");
-      return { error: null };
-    });
-    const is = vi.fn().mockReturnValue({ lte });
-    const eq = vi.fn().mockReturnValue({ is });
-    const windowSegmentsUpdate = vi.fn().mockReturnValue({ eq });
 
     const heartbeatsSelect = vi.fn().mockReturnValue({
       eq: vi.fn().mockReturnValue({
@@ -602,7 +581,7 @@ describe("SegmentService", () => {
       rpc,
       from: vi.fn((table: string) => {
         if (table === "window_segments") {
-          return { update: windowSegmentsUpdate, select: openSegmentSelect() };
+          return { select: openSegmentSelect() };
         }
         if (table === "agent_heartbeats") {
           return { select: heartbeatsSelect, upsert: heartbeatsUpsert };
@@ -634,12 +613,6 @@ describe("SegmentService", () => {
 
   it("ends a pre-downtime segment at its start instead of the next focus change", async () => {
     const segmentStart = "2026-08-27T15:41:57.906Z";
-    const lte = vi.fn().mockResolvedValue({ error: null });
-    const windowSegmentsUpdate = vi.fn().mockReturnValue({
-      eq: vi.fn().mockReturnValue({
-        is: vi.fn().mockReturnValue({ lte }),
-      }),
-    });
     const heartbeatsSelect = vi.fn().mockReturnValue({
       eq: vi.fn().mockReturnValue({
         maybeSingle: vi.fn().mockResolvedValue({
@@ -651,10 +624,7 @@ describe("SegmentService", () => {
         }),
       }),
     });
-    const rpc = vi.fn().mockResolvedValue({
-      data: { action: "opened", segment_id: "seg-next" },
-      error: null,
-    });
+    const rpc = createSegmentRpcMock();
     const client = {
       rpc,
       from: vi.fn((table: string) => {
@@ -662,7 +632,7 @@ describe("SegmentService", () => {
           return { select: heartbeatsSelect };
         }
         if (table === "window_segments") {
-          return { update: windowSegmentsUpdate, select: openSegmentSelect(segmentStart) };
+          return { select: openSegmentSelect(segmentStart) };
         }
         throw new Error(`unexpected table: ${table}`);
       }),
@@ -671,11 +641,11 @@ describe("SegmentService", () => {
 
     await service.onFocusChange("desk-pc", telemetry("2026-10-18T09:59:47.746Z", "Cursor"));
 
-    expect(windowSegmentsUpdate).toHaveBeenCalledWith({
-      ended_at: segmentStart,
-      close_reason: "stale",
+    expect(rpc).toHaveBeenCalledWith("close_open_segment", {
+      p_agent_id: "desk-pc",
+      p_ended_at: segmentStart,
+      p_close_reason: "stale",
     });
-    expect(lte).toHaveBeenCalledWith("started_at", segmentStart);
     expect(rpc).toHaveBeenCalledWith("close_and_open_segment", {
       p_agent_id: "desk-pc",
       p_captured_at: "2026-10-18T09:59:47.746Z",
@@ -685,7 +655,6 @@ describe("SegmentService", () => {
   });
 
   it("keeps a long open segment when the heartbeat is still fresh", async () => {
-    const windowSegmentsUpdate = vi.fn();
     const heartbeatsSelect = vi.fn().mockReturnValue({
       eq: vi.fn().mockReturnValue({
         maybeSingle: vi.fn().mockResolvedValue({
@@ -697,10 +666,7 @@ describe("SegmentService", () => {
         }),
       }),
     });
-    const rpc = vi.fn().mockResolvedValue({
-      data: { action: "opened", segment_id: "seg-next" },
-      error: null,
-    });
+    const rpc = createSegmentRpcMock();
     const client = {
       rpc,
       from: vi.fn((table: string) => {
@@ -708,10 +674,7 @@ describe("SegmentService", () => {
           return { select: heartbeatsSelect };
         }
         if (table === "window_segments") {
-          return {
-            update: windowSegmentsUpdate,
-            select: openSegmentSelect("2026-10-17T09:00:00.000Z"),
-          };
+          return { select: openSegmentSelect("2026-10-17T09:00:00.000Z") };
         }
         throw new Error(`unexpected table: ${table}`);
       }),
@@ -720,19 +683,13 @@ describe("SegmentService", () => {
 
     await service.onFocusChange("desk-pc", telemetry("2026-10-18T09:59:47.746Z", "Cursor"));
 
-    expect(windowSegmentsUpdate).not.toHaveBeenCalled();
-    expect(rpc).toHaveBeenCalled();
+    expect(rpc).not.toHaveBeenCalledWith("close_open_segment", expect.anything());
+    expect(rpc).toHaveBeenCalledWith("close_and_open_segment", expect.anything());
   });
 
   it("ends an overnight open segment at last active time, not at its start", async () => {
     const segmentStart = "2026-10-17T18:00:00.000Z";
     const lastActiveAt = "2026-10-17T20:00:00.000Z";
-    const lte = vi.fn().mockResolvedValue({ error: null });
-    const windowSegmentsUpdate = vi.fn().mockReturnValue({
-      eq: vi.fn().mockReturnValue({
-        is: vi.fn().mockReturnValue({ lte }),
-      }),
-    });
     const heartbeatsSelect = vi.fn().mockReturnValue({
       eq: vi.fn().mockReturnValue({
         maybeSingle: vi.fn().mockResolvedValue({
@@ -741,10 +698,7 @@ describe("SegmentService", () => {
         }),
       }),
     });
-    const rpc = vi.fn().mockResolvedValue({
-      data: { action: "opened", segment_id: "seg-next" },
-      error: null,
-    });
+    const rpc = createSegmentRpcMock();
     const client = {
       rpc,
       from: vi.fn((table: string) => {
@@ -752,7 +706,7 @@ describe("SegmentService", () => {
           return { select: heartbeatsSelect };
         }
         if (table === "window_segments") {
-          return { update: windowSegmentsUpdate, select: openSegmentSelect(segmentStart) };
+          return { select: openSegmentSelect(segmentStart) };
         }
         throw new Error(`unexpected table: ${table}`);
       }),
@@ -761,29 +715,25 @@ describe("SegmentService", () => {
 
     await service.onFocusChange("desk-pc", telemetry("2026-10-18T16:00:00.000Z", "Cursor"));
 
-    expect(windowSegmentsUpdate).toHaveBeenCalledWith({
-      ended_at: lastActiveAt,
-      close_reason: "stale",
+    expect(rpc).toHaveBeenCalledWith("close_open_segment", {
+      p_agent_id: "desk-pc",
+      p_ended_at: lastActiveAt,
+      p_close_reason: "stale",
     });
-    expect(lte).toHaveBeenCalledWith("started_at", lastActiveAt);
   });
 
   it("closes at the previous last_active when input resumes after idle", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-01T12:00:00.000Z"));
     const order: string[] = [];
-    const lte = vi.fn().mockImplementation(async () => {
-      order.push("close");
-      return { error: null };
-    });
-    const windowSegmentsUpdate = vi.fn().mockReturnValue({
-      eq: vi.fn().mockReturnValue({
-        is: vi.fn().mockReturnValue({ lte }),
-      }),
+    const rpc = createSegmentRpcMock({
+      onClose: () => {
+        order.push("close");
+      },
     });
     const { service, heartbeatsUpsert } = createHeartbeatClient({
       dbLastSeenAt: "2026-01-01T12:00:00.000Z",
-      windowSegmentsUpdate,
+      rpc,
     });
     heartbeatsUpsert.mockImplementation(async () => {
       order.push("upsert");
@@ -795,14 +745,15 @@ describe("SegmentService", () => {
     await service.onHostTick("desk-pc", "2026-01-01T12:00:04.000Z", {
       idleMs: 6 * 60 * 60 * 1000,
     });
-    expect(windowSegmentsUpdate).not.toHaveBeenCalled();
+    expect(rpc).not.toHaveBeenCalledWith("close_open_segment", expect.anything());
 
     vi.advanceTimersByTime(HEARTBEAT_PERSIST_MS);
     await service.onHostTick("desk-pc", "2026-01-01T12:00:06.000Z", { idleMs: 0 });
 
-    expect(windowSegmentsUpdate).toHaveBeenCalledWith({
-      ended_at: "2026-01-01T06:00:04.000Z",
-      close_reason: "stale",
+    expect(rpc).toHaveBeenCalledWith("close_open_segment", {
+      p_agent_id: "desk-pc",
+      p_ended_at: "2026-01-01T06:00:04.000Z",
+      p_close_reason: "stale",
     });
     expect(order[0]).toBe("close");
     expect(heartbeatsUpsert).toHaveBeenCalledWith({
@@ -815,14 +766,9 @@ describe("SegmentService", () => {
   it("reopens the current app in the same lock after an idle gap", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-01T12:00:00.000Z"));
-    const insert = vi.fn().mockResolvedValue({ error: null });
-    const lte = vi.fn().mockResolvedValue({ error: null });
-    const windowSegmentsUpdate = vi.fn().mockReturnValue({
-      eq: vi.fn().mockReturnValue({
-        is: vi.fn().mockReturnValue({ lte }),
-      }),
-    });
+    const rpc = createSegmentRpcMock();
     const client = {
+      rpc,
       from: vi.fn((table: string) => {
         if (table === "agent_heartbeats") {
           return {
@@ -841,11 +787,7 @@ describe("SegmentService", () => {
           };
         }
         if (table === "window_segments") {
-          return {
-            update: windowSegmentsUpdate,
-            insert,
-            select: openSegmentSelect(),
-          };
+          return { select: openSegmentSelect() };
         }
         throw new Error(`unexpected table: ${table}`);
       }),
@@ -863,29 +805,25 @@ describe("SegmentService", () => {
       windowTitle: "app.tsx",
     });
 
-    expect(windowSegmentsUpdate).toHaveBeenCalledWith({
-      ended_at: "2026-01-01T06:00:04.000Z",
-      close_reason: "stale",
+    expect(rpc).toHaveBeenCalledWith("close_open_segment", {
+      p_agent_id: "desk-pc",
+      p_ended_at: "2026-01-01T06:00:04.000Z",
+      p_close_reason: "stale",
     });
-    expect(insert).toHaveBeenCalledWith({
-      agent_id: "desk-pc",
-      app_name: "Cursor",
-      window_title: "app.tsx",
-      started_at: "2026-01-01T12:00:06.000Z",
+    expect(rpc).toHaveBeenCalledWith("open_window_segment", {
+      p_agent_id: "desk-pc",
+      p_started_at: "2026-01-01T12:00:06.000Z",
+      p_app_name: "Cursor",
+      p_window_title: "app.tsx",
     });
   });
 
   it("skips reopen when the stale close leaves a segment open", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-01T12:00:00.000Z"));
-    const insert = vi.fn().mockResolvedValue({ error: null });
-    const lte = vi.fn().mockResolvedValue({ error: null });
-    const windowSegmentsUpdate = vi.fn().mockReturnValue({
-      eq: vi.fn().mockReturnValue({
-        is: vi.fn().mockReturnValue({ lte }),
-      }),
-    });
+    const rpc = createSegmentRpcMock({ closeReturns: false });
     const client = {
+      rpc,
       from: vi.fn((table: string) => {
         if (table === "agent_heartbeats") {
           return {
@@ -904,11 +842,7 @@ describe("SegmentService", () => {
           };
         }
         if (table === "window_segments") {
-          return {
-            update: windowSegmentsUpdate,
-            insert,
-            select: openSegmentSelect("2026-01-01T12:00:00.000Z"),
-          };
+          return { select: openSegmentSelect("2026-01-01T12:00:00.000Z") };
         }
         throw new Error(`unexpected table: ${table}`);
       }),
@@ -926,7 +860,213 @@ describe("SegmentService", () => {
       windowTitle: "app.tsx",
     });
 
-    expect(windowSegmentsUpdate).toHaveBeenCalled();
-    expect(insert).not.toHaveBeenCalled();
+    expect(rpc).toHaveBeenCalledWith("close_open_segment", expect.anything());
+    expect(rpc).not.toHaveBeenCalledWith("open_window_segment", expect.anything());
+  });
+});
+
+const createSequencedService = (maxSequence: number | null) => {
+  const rpcCalls: { name: string; args: Record<string, unknown> }[] = [];
+  const rpc = vi.fn(async (name: string, args: Record<string, unknown> = {}) => {
+    rpcCalls.push({ name, args });
+    if (name === "close_and_open_segment") {
+      return {
+        data: { action: "opened", segment_id: `seg-${String(args.p_sequence)}` },
+        error: null,
+      };
+    }
+    if (name === "close_open_segment" || name === "open_window_segment") {
+      return { data: true, error: null };
+    }
+    if (name === "claim_agent_sequence") {
+      return { data: true, error: null };
+    }
+    throw new Error(`unexpected rpc: ${name}`);
+  });
+
+  const client = {
+    rpc,
+    from: vi.fn((table: string) => {
+      if (table === "agent_heartbeats") {
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+            }),
+          }),
+          upsert: vi.fn().mockResolvedValue({ error: null }),
+        };
+      }
+      if (table === "window_segments") {
+        return { select: openSegmentSelect() };
+      }
+      if (table === "agent_event_sequences") {
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              order: vi.fn().mockReturnValue({
+                limit: vi.fn().mockReturnValue({
+                  maybeSingle: vi.fn().mockResolvedValue({
+                    data: maxSequence === null ? null : { sequence: maxSequence },
+                    error: null,
+                  }),
+                }),
+              }),
+            }),
+          }),
+        };
+      }
+      throw new Error(`unexpected table: ${table}`);
+    }),
+  };
+
+  return {
+    service: new SegmentService(supabaseServiceFromClient(client)),
+    rpcCalls,
+  };
+};
+
+describe("SegmentService sequences", () => {
+  it("opens two segments in sequence order and keeps capturedAt as the boundary", async () => {
+    const { service, rpcCalls } = createSequencedService(null);
+    const firstAt = "2026-01-01T12:00:00.000Z";
+    const secondAt = "2026-01-01T12:00:02.000Z";
+
+    await service.onFocusChange("desk-pc", telemetry(firstAt, "Chrome"), 1);
+    await service.onFocusChange("desk-pc", telemetry(secondAt, "Code"), 2);
+
+    const opens = rpcCalls.filter((call) => call.name === "close_and_open_segment");
+    expect(opens.map((call) => call.args)).toEqual([
+      {
+        p_agent_id: "desk-pc",
+        p_captured_at: firstAt,
+        p_app_name: "Chrome",
+        p_window_title: "title",
+        p_sequence: 1,
+      },
+      {
+        p_agent_id: "desk-pc",
+        p_captured_at: secondAt,
+        p_app_name: "Code",
+        p_window_title: "title",
+        p_sequence: 2,
+      },
+    ]);
+  });
+
+  it("does not open a second segment for a duplicate sequence", async () => {
+    const { service, rpcCalls } = createSequencedService(null);
+
+    await service.onFocusChange("desk-pc", telemetry("2026-01-01T12:00:00.000Z", "Chrome"), 5);
+    await service.onFocusChange("desk-pc", telemetry("2026-01-01T12:00:02.000Z", "Code"), 5);
+
+    const opens = rpcCalls.filter((call) => call.name === "close_and_open_segment");
+    expect(opens).toHaveLength(1);
+    expect(opens[0]?.args.p_app_name).toBe("Chrome");
+    expect(opens[0]?.args.p_sequence).toBe(5);
+  });
+
+  it("does not apply a late sequence over a newer open segment", async () => {
+    const { service, rpcCalls } = createSequencedService(null);
+
+    await service.onFocusChange("desk-pc", telemetry("2026-01-01T12:00:02.000Z", "Code"), 2);
+    await service.onFocusChange("desk-pc", telemetry("2026-01-01T12:00:00.000Z", "Chrome"), 1);
+
+    const opens = rpcCalls.filter((call) => call.name === "close_and_open_segment");
+    expect(opens).toHaveLength(1);
+    expect(opens[0]?.args.p_app_name).toBe("Code");
+    expect(opens[0]?.args.p_sequence).toBe(2);
+  });
+
+  it("ignores a sequence the database already applied", async () => {
+    const { service, rpcCalls } = createSequencedService(7);
+
+    await service.onFocusChange("desk-pc", telemetry("2026-01-01T12:00:00.000Z", "Chrome"), 7);
+    await service.onFocusChange("desk-pc", telemetry("2026-01-01T12:00:02.000Z", "Code"), 8);
+
+    const opens = rpcCalls.filter((call) => call.name === "close_and_open_segment");
+    expect(opens.map((call) => call.args.p_sequence)).toEqual([8]);
+  });
+
+  it("closes a session lock when the applied-sequence read fails", async () => {
+    const rpcCalls: { name: string; args: Record<string, unknown> }[] = [];
+    const rpc = vi.fn(async (name: string, args: Record<string, unknown> = {}) => {
+      rpcCalls.push({ name, args });
+      return { data: true, error: null };
+    });
+    const client = {
+      rpc,
+      from: vi.fn((table: string) => {
+        if (table === "agent_heartbeats") {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+              }),
+            }),
+            upsert: vi.fn().mockResolvedValue({ error: null }),
+          };
+        }
+        if (table === "window_segments") {
+          return { select: openSegmentSelect() };
+        }
+        if (table === "agent_event_sequences") {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                order: vi.fn().mockReturnValue({
+                  limit: vi.fn().mockReturnValue({
+                    maybeSingle: vi.fn().mockResolvedValue({
+                      data: null,
+                      error: { message: "connection reset" },
+                    }),
+                  }),
+                }),
+              }),
+            }),
+          };
+        }
+        throw new Error(`unexpected table: ${table}`);
+      }),
+    };
+    const service = new SegmentService(supabaseServiceFromClient(client));
+    const capturedAt = "2026-01-01T12:00:04.000Z";
+
+    await service.closeForSessionLock("desk-pc", capturedAt, 4);
+
+    const closes = rpcCalls.filter((call) => call.name === "close_open_segment");
+    expect(closes).toHaveLength(1);
+    expect(closes[0]?.args).toMatchObject({
+      p_agent_id: "desk-pc",
+      p_close_reason: "lock",
+      p_sequence: 4,
+    });
+  });
+
+  it("closes a session lock once with close_reason lock", async () => {
+    const { service, rpcCalls } = createSequencedService(null);
+    const capturedAt = "2026-01-01T12:00:04.000Z";
+
+    await service.closeForSessionLock("desk-pc", capturedAt, 4);
+    await service.closeForSessionLock("desk-pc", capturedAt, 4);
+
+    const closes = rpcCalls.filter((call) => call.name === "close_open_segment");
+    expect(closes).toHaveLength(1);
+    expect(closes[0]?.args).toMatchObject({
+      p_agent_id: "desk-pc",
+      p_ended_at: capturedAt,
+      p_close_reason: "lock",
+      p_sequence: 4,
+    });
+  });
+
+  it("does not repeat a host tick for a sequence already applied", async () => {
+    const { service, rpcCalls } = createSequencedService(null);
+
+    await service.onHostTick("desk-pc", "2026-01-01T12:00:00.000Z", { sequence: 3, idleMs: 0 });
+    await service.onHostTick("desk-pc", "2026-01-01T12:00:02.000Z", { sequence: 3, idleMs: 0 });
+
+    expect(rpcCalls.filter((call) => call.name === "claim_agent_sequence")).toHaveLength(1);
+    expect(rpcCalls.filter((call) => call.name === "close_open_segment")).toHaveLength(0);
   });
 });

@@ -1,4 +1,9 @@
-import { type HostPayload, hostPayloadSchema, type TelemetryPayload } from "@pryladova/shared";
+import {
+  type AgentWsInbound,
+  type HostPayload,
+  hostPayloadSchema,
+  type TelemetryPayload,
+} from "@pryladova/shared";
 import { loadConfig } from "./config.js";
 import { initHostMetrics, readHostMetrics } from "./host-metrics.js";
 import { agentLog } from "./logger.js";
@@ -11,7 +16,9 @@ import {
   sanitizeSnapshot,
   shouldOmitHostMedia,
 } from "./privacy.js";
-import { type AgentWsClient, type AgentWsConnectResult, connectAgentWs } from "./ws-client.js";
+import { defaultRetryQueuePath, openRetryQueue, replayPending } from "./retry-queue.js";
+import { initSessionLock } from "./session-lock.js";
+import { type AgentWsConnectResult, connectAgentWs } from "./ws-client.js";
 
 type HostPayloadPost = Omit<HostPayload, "cpuPercent"> & { cpuPercent?: number };
 
@@ -174,6 +181,7 @@ const connectWithRetry = async (
 
 const run = async (): Promise<void> => {
   const config = loadConfig();
+  const queue = await openRetryQueue(defaultRetryQueuePath());
   await initHostMetrics();
   agentLog.info(
     `pid=${process.pid} agentId=${config.agentId} profile=${config.profile} api=${config.apiUrl}`,
@@ -184,10 +192,70 @@ const run = async (): Promise<void> => {
   let cachedThumbnail: string | null = null;
   let tickInFlight = false;
   let shuttingDown = false;
+  let sessionLocked = false;
   let reconnecting = false;
   let pollTimer: ReturnType<typeof setInterval> | undefined;
   let connection!: AgentWsConnectResult;
   let reconnectAgent!: () => Promise<void>;
+  let releaseSessionLock = (): void => {};
+
+  const sendPoll = (poll: AgentWsInbound): Promise<void> => {
+    const client = connection?.client;
+    if (!client?.isOpen()) {
+      return Promise.reject(new Error("Agent WebSocket is not open"));
+    }
+    if (poll.type === "update") {
+      return client.sendUpdate(poll.host, poll.sequence, poll.telemetry);
+    }
+    if (poll.type === "session_lock") {
+      return client.sendSessionLock(poll.capturedAt, poll.sequence);
+    }
+    return client.sendShutdown(poll.capturedAt, poll.sequence);
+  };
+
+  const noteReplay = (poll: AgentWsInbound): void => {
+    if (poll.type === "shutdown") {
+      lastKey = "";
+      return;
+    }
+    if (poll.type === "update" && poll.telemetry) {
+      lastKey = snapshotKey(poll.telemetry);
+    }
+  };
+
+  const replayUnsent = async (): Promise<void> => {
+    if (!connection?.client?.isOpen()) {
+      return;
+    }
+    await replayPending(queue, sendPoll, noteReplay);
+  };
+
+  const sendOrQueue = async (poll: AgentWsInbound): Promise<void> => {
+    if (!connection?.client?.isOpen()) {
+      queue.enqueue(poll);
+      if (!reconnecting) {
+        throw new Error("Agent WebSocket is not open");
+      }
+      return;
+    }
+    try {
+      await sendPoll(poll);
+    } catch (error: unknown) {
+      queue.enqueue(poll);
+      throw error;
+    }
+  };
+
+  // One sender so a session lock cannot overtake an earlier poll.
+  let outbound: Promise<void> = Promise.resolve();
+  const runOutbound = (task: () => Promise<void>): Promise<void> => {
+    const run = outbound.then(task);
+    outbound = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  };
 
   const shutdown = (): void => {
     if (shuttingDown) {
@@ -197,35 +265,53 @@ const run = async (): Promise<void> => {
     if (pollTimer) {
       clearInterval(pollTimer);
     }
-    void (async (): Promise<void> => {
-      try {
-        if (connection?.client) {
-          await connection.client.sendShutdown(new Date().toISOString());
-        }
-      } catch (error: unknown) {
+    releaseSessionLock();
+    void runOutbound(async () => {
+      await replayUnsent();
+      const poll: AgentWsInbound = {
+        type: "shutdown",
+        agentId: config.agentId,
+        capturedAt: new Date().toISOString(),
+        sequence: queue.nextSequence(),
+      };
+      await sendOrQueue(poll);
+    })
+      .catch((error: unknown) => {
         const message = error instanceof Error ? error.message : String(error);
         agentLog.error(`shutdown send failed: ${message}`);
-      }
-      connection?.client?.close();
-      process.exit(0);
-    })();
+      })
+      .finally(() => {
+        connection?.client?.close();
+        queue.close();
+        process.exit(0);
+      });
   };
 
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
 
-  const tick = async (client: AgentWsClient): Promise<void> => {
-    const capturedAt = new Date().toISOString();
-    const foreground = await readActiveWindow();
-    const hostResult = await buildHostPayload(
-      lastTrackKey,
-      cachedThumbnail,
-      foreground,
-      blockedApps,
-      capturedAt,
-    );
+  const tick = async (): Promise<void> => {
+    await runOutbound(async () => {
+      await replayUnsent();
+      if (sessionLocked) {
+        lastKey = "";
+        return;
+      }
 
-    if (hostResult.host.cpuPercent !== undefined) {
+      const capturedAt = new Date().toISOString();
+      const foreground = await readActiveWindow();
+      const hostResult = await buildHostPayload(
+        lastTrackKey,
+        cachedThumbnail,
+        foreground,
+        blockedApps,
+        capturedAt,
+      );
+
+      if (hostResult.host.cpuPercent === undefined) {
+        return;
+      }
+
       let telemetry: TelemetryPayload | undefined;
       if (foreground) {
         const payload = buildTelemetryPayload(foreground, blockedApps, capturedAt);
@@ -237,24 +323,27 @@ const run = async (): Promise<void> => {
         }
       }
 
-      client.sendUpdate(hostPayloadSchema.parse(hostResult.host), telemetry);
+      const poll: AgentWsInbound = {
+        type: "update",
+        agentId: config.agentId,
+        sequence: queue.nextSequence(),
+        host: hostPayloadSchema.parse(hostResult.host),
+        ...(telemetry ? { telemetry } : {}),
+      };
+      await sendOrQueue(poll);
       lastTrackKey = hostResult.lastTrackKey;
       cachedThumbnail = hostResult.cachedThumbnail;
-    }
-
-    if (!foreground) {
-      return;
-    }
+    });
   };
 
   const runTick = async (): Promise<void> => {
-    if (tickInFlight || shuttingDown || reconnecting || !connection?.client) {
+    if (tickInFlight || shuttingDown) {
       return;
     }
 
     tickInFlight = true;
     try {
-      await tick(connection.client);
+      await tick();
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       agentLog.error(`ws update send failed: ${message}`);
@@ -291,7 +380,6 @@ const run = async (): Promise<void> => {
         config.agentId,
         onUnexpectedClose,
       );
-      lastKey = "";
       watchHubBoundReject(connection.hubBoundReject);
     } finally {
       reconnecting = false;
@@ -308,6 +396,36 @@ const run = async (): Promise<void> => {
     onUnexpectedClose,
   );
   watchHubBoundReject(connection.hubBoundReject);
+
+  releaseSessionLock = await initSessionLock({
+    onLock: () => {
+      if (shuttingDown) {
+        return;
+      }
+      sessionLocked = true;
+      lastKey = "";
+      void runOutbound(async () => {
+        await replayUnsent();
+        lastKey = "";
+        const poll: AgentWsInbound = {
+          type: "session_lock",
+          agentId: config.agentId,
+          capturedAt: new Date().toISOString(),
+          sequence: queue.nextSequence(),
+        };
+        await sendOrQueue(poll);
+      }).catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        agentLog.error(`session lock send failed: ${message}`);
+        if (!reconnecting) {
+          void reconnectAgent();
+        }
+      });
+    },
+    onUnlock: () => {
+      sessionLocked = false;
+    },
+  });
 
   await runTick();
   pollTimer = setInterval(() => {

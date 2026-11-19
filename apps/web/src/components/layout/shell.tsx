@@ -1,18 +1,19 @@
 import { Moon, RotateCcw, Sun } from "lucide-react";
 import type { ReactNode } from "react";
+import { useDisplayedRelease } from "@/hooks/use-api-release";
 import { headerIconButtonClassName } from "@/lib/header-chrome";
-import { formatReleaseShort, readAppRelease } from "@/lib/release";
+import { formatReleaseShort } from "@/lib/release";
 import type { Theme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 
 export const ReleaseTag = () => {
-  const release = readAppRelease();
+  const { release, title } = useDisplayedRelease();
   const short = formatReleaseShort(release);
 
   return (
     <p
       className="pb-6 text-center font-sans text-micro text-muted-foreground/50 tabular-nums"
-      title={`Web build ${release}`}
+      title={title}
     >
       {short}
     </p>

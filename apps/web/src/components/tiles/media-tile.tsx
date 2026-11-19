@@ -58,9 +58,11 @@ const MediaArt = ({
 
 export const MediaTile = ({
   host,
+  dimmed = false,
   className,
 }: {
   host: HostPayload | null;
+  dimmed?: boolean;
   className?: string;
 }) => {
   const media = host?.media ?? null;
@@ -71,7 +73,12 @@ export const MediaTile = ({
   const artist = media ? (media.artist ?? "Unknown artist") : null;
 
   return (
-    <Card size="sm" className={cn(bentoTileCardClassName, className)} data-testid="media-tile">
+    <Card
+      size="sm"
+      className={cn(bentoTileCardClassName, dimmed && "opacity-50 transition-opacity", className)}
+      data-testid="media-tile"
+      data-host-metrics-stale={dimmed ? "" : undefined}
+    >
       <BentoTileHeader
         testId="media-tile-header"
         icon={<Music2 className={bentoTileLucideIconClassName} aria-hidden="true" />}

@@ -15,13 +15,19 @@ import {
   normalizeClassificationCacheTitle,
   parseClassificationCacheRow,
 } from "./classification-cache.logic.js";
-import {
-  resetE2eClassificationGate,
-  waitForE2eClassificationRelease,
-} from "./e2e-classification.gate.js";
-import { e2eClassificationStub } from "./e2e-classification.stub.js";
 
 const CACHE_MAX_ENTRIES = 256;
+
+export type ClassificationPrepareResult =
+  | { outcome: "skip" }
+  | { outcome: "hit"; classification: WindowClassification }
+  | {
+      outcome: "miss";
+      appName: string;
+      windowTitle: string;
+      cacheKey: string;
+      cacheTitle: string;
+    };
 
 const escapePromptField = (value: string): string =>
   value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
@@ -34,7 +40,7 @@ export class ClassificationService {
   private schemaMissingLogged = false;
 
   constructor(
-    private readonly configService: ConfigService,
+    protected readonly configService: ConfigService,
     private readonly settingsService: SettingsService,
     private readonly supabaseService: SupabaseService,
   ) {}
@@ -47,17 +53,19 @@ export class ClassificationService {
     if (!this.configService.config.runtime.isTest) {
       return;
     }
-    this.cache.clear();
-    resetE2eClassificationGate();
+    this.clearMemoryCacheForE2e();
   }
 
-  async classify(appName: string, windowTitle: string): Promise<WindowClassification | null> {
+  protected prepareClassificationInputs(
+    appName: string,
+    windowTitle: string,
+  ): ClassificationPrepareResult {
     if (!this.settingsService.isClassificationEnabled()) {
-      return null;
+      return { outcome: "skip" };
     }
 
     if (isRedactedTelemetry(appName, windowTitle)) {
-      return null;
+      return { outcome: "skip" };
     }
 
     const cacheTitle = normalizeClassificationCacheTitle(appName, windowTitle);
@@ -67,25 +75,38 @@ export class ClassificationService {
       this.logger.log(
         `classification cache hit memory category=${memoryCached.category} workRelated=${memoryCached.workRelated}`,
       );
-      return memoryCached;
+      return { outcome: "hit", classification: memoryCached };
     }
 
-    // The dev database is shared. A cached row would skip the gate and show a real name.
-    if (this.configService.config.runtime.e2eClassificationEnabled) {
-      try {
-        await waitForE2eClassificationRelease();
-      } catch {
-        // E2e harness abort: release latch was reset while classify was waiting.
-        return null;
-      }
-      const stub = e2eClassificationStub(appName, windowTitle);
-      this.writeMemoryCache(cacheKey, stub);
-      return stub;
+    return { outcome: "miss", appName, windowTitle, cacheKey, cacheTitle };
+  }
+
+  async classify(appName: string, windowTitle: string): Promise<WindowClassification | null> {
+    const prepared = this.prepareClassificationInputs(appName, windowTitle);
+    if (prepared.outcome === "skip") {
+      return null;
+    }
+    if (prepared.outcome === "hit") {
+      return prepared.classification;
     }
 
+    return this.classifyAfterMemoryMiss(
+      prepared.appName,
+      prepared.windowTitle,
+      prepared.cacheKey,
+      prepared.cacheTitle,
+    );
+  }
+
+  protected async classifyAfterMemoryMiss(
+    appName: string,
+    windowTitle: string,
+    cacheKey: string,
+    cacheTitle: string,
+  ): Promise<WindowClassification | null> {
     const dbCached = await this.readDbCache(appName, cacheTitle);
     if (dbCached) {
-      this.writeMemoryCache(cacheKey, dbCached);
+      this.storeMemoryCacheHit(cacheKey, dbCached);
       this.logger.log(
         `classification cache hit db category=${dbCached.category} workRelated=${dbCached.workRelated}`,
       );
@@ -120,7 +141,7 @@ For workRelated: use "yes" only when clearly work/dev; "no" when clearly persona
       });
 
       const elapsedMs = Math.round(performance.now() - started);
-      this.writeMemoryCache(cacheKey, object);
+      this.storeMemoryCacheHit(cacheKey, object);
       void this.writeDbCache(appName, cacheTitle, object);
       this.logger.log(
         `classification gemini ${elapsedMs}ms model=${config.geminiModel} category=${object.category} workRelated=${object.workRelated}`,
@@ -134,6 +155,10 @@ For workRelated: use "yes" only when clearly work/dev; "no" when clearly persona
     }
   }
 
+  protected clearMemoryCacheForE2e(): void {
+    this.cache.clear();
+  }
+
   private readMemoryCache(key: string): WindowClassification | undefined {
     const value = this.cache.get(key);
     if (value === undefined) {
@@ -144,7 +169,7 @@ For workRelated: use "yes" only when clearly work/dev; "no" when clearly persona
     return value;
   }
 
-  private writeMemoryCache(key: string, value: WindowClassification): void {
+  protected storeMemoryCacheHit(key: string, value: WindowClassification): void {
     if (this.cache.has(key)) {
       this.cache.delete(key);
     }

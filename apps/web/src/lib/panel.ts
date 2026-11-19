@@ -107,6 +107,22 @@ export const getAgentLastSeenMs = (panel: PanelState): number | null => {
   return Math.max(...timestamps);
 };
 
+export const getWindowTelemetrySeenMs = (telemetry: TelemetryState): number =>
+  Math.max(Date.parse(telemetry.receivedAt), Date.parse(telemetry.capturedAt));
+
+/** Window telemetry is still arriving but the host snapshot timestamp has not caught up. */
+export const isHostMetricsStale = (telemetry: TelemetryState | null, nowMs: number): boolean => {
+  if (!telemetry?.host?.capturedAt) {
+    return false;
+  }
+
+  const hintMs = readAgentHintAfterMs();
+  const windowSeenMs = getWindowTelemetrySeenMs(telemetry);
+  const hostCapturedMs = Date.parse(telemetry.host.capturedAt);
+
+  return nowMs - windowSeenMs < hintMs && windowSeenMs - hostCapturedMs >= hintMs;
+};
+
 export const isAgentStale = (panel: PanelState, nowMs = Date.now()): boolean => {
   const lastSeenMs = getAgentLastSeenMs(panel);
   if (lastSeenMs === null) {

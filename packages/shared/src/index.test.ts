@@ -69,29 +69,67 @@ describe("settingsSchema", () => {
 });
 
 describe("agentWsInboundSchema", () => {
-  it("parses update and shutdown messages with agentId", () => {
+  const host = {
+    idleMs: 0,
+    cpuPercent: 1,
+    ramPercent: 2,
+    uptimeSec: 3,
+    media: null,
+    capturedAt: "2026-01-01T12:00:00.000Z",
+  };
+
+  it("parses update, shutdown, and session lock with a sequence", () => {
     expect(
       agentWsInboundSchema.parse({
         type: "update",
         agentId: "desk-pc",
-        host: {
-          idleMs: 0,
-          cpuPercent: 1,
-          ramPercent: 2,
-          uptimeSec: 3,
-          media: null,
-          capturedAt: "2026-01-01T12:00:00.000Z",
-        },
-      }).type,
-    ).toBe("update");
+        host,
+        sequence: 1,
+      }),
+    ).toMatchObject({ type: "update", sequence: 1 });
 
     expect(
       agentWsInboundSchema.parse({
         type: "shutdown",
         agentId: "desk-pc",
         capturedAt: "2026-01-01T12:00:00.000Z",
-      }).type,
-    ).toBe("shutdown");
+        sequence: 2,
+      }),
+    ).toMatchObject({ type: "shutdown", sequence: 2 });
+
+    expect(
+      agentWsInboundSchema.parse({
+        type: "session_lock",
+        agentId: "desk-pc",
+        capturedAt: "2026-01-01T12:00:00.000Z",
+        sequence: 3,
+      }),
+    ).toMatchObject({ type: "session_lock", sequence: 3 });
+  });
+
+  it("rejects a missing or non-positive sequence", () => {
+    expect(() =>
+      agentWsInboundSchema.parse({
+        type: "update",
+        agentId: "desk-pc",
+        host,
+      }),
+    ).toThrow();
+    expect(() =>
+      agentWsInboundSchema.parse({
+        type: "shutdown",
+        agentId: "desk-pc",
+        capturedAt: "2026-01-01T12:00:00.000Z",
+        sequence: 0,
+      }),
+    ).toThrow();
+    expect(() =>
+      agentWsInboundSchema.parse({
+        type: "session_lock",
+        agentId: "desk-pc",
+        capturedAt: "2026-01-01T12:00:00.000Z",
+      }),
+    ).toThrow();
   });
 });
 

@@ -112,6 +112,40 @@ describe("sanitizeSnapshot", () => {
     expect(result.appName).toBe(SECURE_APP_NAME);
   });
 
+  it("matches blocklist via window title when process tokens do not", () => {
+    const blocked = createBlockedAppsSet([]);
+    const result = sanitizeSnapshot(
+      snapshot("1Password", "msedgewebview2", "C:\\Program Files\\webview\\msedgewebview2.exe"),
+      blocked,
+    );
+    expect(result).toEqual({
+      appName: SECURE_APP_NAME,
+      windowTitle: SECURE_WINDOW_TITLE,
+    });
+  });
+
+  it("matches blocklist via owner display name when executable path does not", () => {
+    const blocked = createBlockedAppsSet([]);
+    const result = sanitizeSnapshot(
+      snapshot("Vault", "Bitwarden", "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"),
+      blocked,
+    );
+    expect(result).toEqual({
+      appName: SECURE_APP_NAME,
+      windowTitle: SECURE_WINDOW_TITLE,
+    });
+  });
+
+  it("redacts different blocked apps to the same secure payload", () => {
+    const blocked = createBlockedAppsSet([]);
+    const secure = {
+      appName: SECURE_APP_NAME,
+      windowTitle: SECURE_WINDOW_TITLE,
+    };
+    expect(sanitizeSnapshot(snapshot("Secrets", "1Password"), blocked)).toEqual(secure);
+    expect(sanitizeSnapshot(snapshot("Vault", "Bitwarden"), blocked)).toEqual(secure);
+  });
+
   it("detects blocklisted foreground for host media omission", () => {
     const blocked = createBlockedAppsSet([]);
     const window = snapshot("Secrets", "1Password");
